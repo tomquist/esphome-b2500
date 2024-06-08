@@ -1,0 +1,2383 @@
+{%- set name = name or 'b2500' %}
+{%- set friendly_name = friendly_name or name %}
+{%- set mqtt = mqtt or {} %}
+{%- set mqtt_topic = mqtt.topic or 'b2500' %}
+{%- set mqtt_enable_set = mqtt.enable_set or False %}
+{%- set mqtt_broker = mqtt.broker %}
+{%- set mqtt_port = mqtt.port or 1883 %}
+{%- set mqtt_user = mqtt.username %}
+{%- set mqtt_password = mqtt.password %}
+{%- set mqtt_discovery = mqtt.discovery or False %}
+{%- set wifi = wifi or {} %}
+{%- set wifi_ssid = wifi.ssid %}
+{%- set wifi_password = wifi.password %}
+{%- set board = board or 'esp32-c3-devkitm-1' %}
+{%- set enable_auto_restart = enable_auto_restart or False %}
+{%- set auto_restart = auto_restart or {} %}
+{%- set auto_restart_after_error_count = auto_restart.restart_after_error_count or 8 %}
+{%- set manual_ip = manual_ip or {} %}
+{%- set enable_manual_ip = enable_manual_ip or False %}
+{%- set timezone = timezone or 'Europe/Berlin' %}
+{%- set enable_cmd13 = enable_cmd13 or False %}
+{%- set enable_powerzero = enable_powerzero or False %}
+{%- set enable_enforce_dod = enable_enforce_dod or False %}
+{%- set enable_cellquery = enable_cellquery or False %}
+{%- set enable_cmd30 = enable_cmd30 or False %}
+{%- set enable_esp_temperature = enable_esp_temperature or False %}
+{%- set enable_powermeter = enable_powermeter or False %}
+{%- set powermeter_tx_pin = powermeter.tx_pin or 'GPIO6' %}
+{%- set powermeter_rx_pin = powermeter.rx_pin or 'GPIO7' %}
+{%- set powermeter_baud_rate = powermeter.baud_rate or 9600 %}
+{%- set powermeter_stop_bits = powermeter.stop_bits or 1 %}
+{%- set enable_set_wifi = enable_set_wifi or False %}
+{%- set set_wifi_ssid = set_wifi.ssid or '' %}
+{%- set set_wifi_password = set_wifi.password or '' %}
+{%- set powerzero = powerzero or {} %}
+{%- set powerzero_grid_power_topic = powerzero.grid_power_topic or 'tibber-esp/sensor/power/state' %}
+{%- set powerzero_limit_cmd_topic = powerzero.limit_cmd_topic or 'openDTU/XXXXXXXXXXXX/cmd/limit_persistent_relative' %}
+{%- set powerzero_limit_state_topic = powerzero.limit_state_topic or 'openDTU/XXXXXXXXXXXX/state/limit_relative' %}
+{%- set storages = storages or [] %}
+{%- set enable_web_server = enable_web_server or False %}
+{%- set web_server_port = web_server.port or 80 %}
+{%- set web_server_ota = web_server.ota or False %}
+{%- set web_server_js_include = web_server.js_include or './v2/www.js' %}
+{%- set enable_ota = enable_ota %}
+{%- set ota = ota or {} %}
+{%- set ota_password = ota.password or '' %}
+{%- set ota_enable_unprotected_writes = ota.enable_unprotected_writes or False %}
+{%- set fallback_hotspot = fallback_hotspot or {} %}
+{%- set fallback_hotspot_ssid = fallback_hotspot.ssid or '' %}
+{%- macro isV2(deviceNr) %}({%- for storage in storages -%}
+            {%- if storage.version >= 2 %}ble_device_nr=={{ loop.index }}{% else %}false{% endif %}
+            {%- if not loop.last %} || {% endif -%}
+            {%- endfor %}){% endmacro %}
+{% macro yaml_string(value) %}{% set escaped_value = value | replace('\\', '\\\\') | replace('"', '\\"') %}{{ escaped_value }}{% endmacro %}
+
+{%- set _ = '' -%}
+esphome:
+  name: "{{ yaml_string(name) }}"
+  friendly_name: "{{ yaml_string(friendly_name) }}"
+  on_boot:
+    priority: -100
+    then:
+{%- if enable_powerzero %}
+      - switch.turn_on: b2500_npw_enabled
+{%- endif %}
+{%- if enable_enforce_dod %}
+      - switch.turn_on: b2500_esp32_enforce_dod_enabled
+{%- endif %}
+{%- if enable_cellquery %}
+      - switch.turn_on: b2500_esp32_cellquery_enabled
+{%- endif %}
+{%- if enable_cmd30 %}
+      - switch.turn_on: b2500_esp32_cmd30_query_enabled
+{%- endif %}
+{%- for storage in storages %}
+{%- if storage.version == 1 %}
+      #- switch.turn_off: b2500_out1_active_{{ loop.index }}
+      #- switch.turn_off: b2500_out2_active_{{ loop.index }}
+      #- switch.turn_off: b2500_pv2_passthrough_enabled_{{ loop.index }}
+{%- endif %}
+{%- endfor %}
+      - delay: 100ms
+
+esp32:
+  board: {{ board or 'esp32-c3-devkitm-1' }}
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_FREERTOS_UNICORE: y
+      COMPILER_OPTIMIZATION_SIZE: y
+    advanced:
+      ignore_efuse_mac_crc: false
+
+# Enable logging
+logger:
+  level: INFO
+  on_message:
+    level: WARN
+    then:
+      lambda: |-
+        if (strstr(message, "BT_BTC") != NULL) {
+          id(mqtt_client).publish("{{ mqtt_topic }}/debug","B_T_C FOUND: restart ESP32");
+{%- if enable_auto_restart %}
+          id(controller_restart).press();
+{%- endif %}
+        }
+        if (strstr(message, "btc_transfer_context") != NULL) {
+          id(mqtt_client).publish("{{ mqtt_topic }}/debug","B_T_C FOUND: restart ESP32");
+{%- if enable_auto_restart %}
+          id(controller_restart).press();
+{%- endif %}
+        }
+        if (strstr(message, "mode: single") != NULL) {
+          id(mqtt_client).publish("{{ mqtt_topic }}/debug","single mode: restart ESP32");
+{%- if enable_auto_restart %}
+          id(controller_restart).press();
+{%- endif %}
+        }
+        if (strstr(message, "handle") != NULL) {
+          id(b2500_internal_error_count)++;
+          char mvalue[48];
+          snprintf(mvalue, 48,"handle error counter: %i",id(b2500_internal_error_count));
+          id(mqtt_client).publish("{{ mqtt_topic }}/debug",mvalue);
+{%- if enable_auto_restart %}
+          if(id(b2500_internal_error_count) > {{ auto_restart_after_error_count }}) {
+            id(b2500_internal_error_count) = 0;
+            id(mqtt_client).publish("{{ mqtt_topic }}/debug","handle error counter: RESET");
+            id(controller_restart).press();
+          }
+{%- endif %}
+        }
+
+{%- if enable_ota %}
+ota:
+  password: {{ ota_password }}
+{%- if ota_enable_unprotected_writes %}
+  unprotected_writes: True # This is mandatory if you want to flash the partition table or bootloader on a Shelly!
+{%- endif %}
+{%- endif %}
+
+wifi:
+  ssid: {{ wifi_ssid }}
+  password: {{ wifi_password }}
+  reboot_timeout: 0s
+  fast_connect: True
+{%- if enable_manual_ip %}
+  manual_ip:
+    static_ip: {{ manual_ip.ip }}
+    gateway: {{ manual_ip.gateway }}
+    subnet: {{ manual_ip.subnet or '255.255.255.0' }}
+    dns1: {{ manual_ip.dns or manual_ip.gateway }}
+{%- endif %}
+  on_connect:
+    - esp32_ble_tracker.start_scan:
+        continuous: true
+  on_disconnect:
+    - esp32_ble_tracker.stop_scan:
+
+{%- if enable_fallback_hotspot %}
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "{{ fallback_hotspot_ssid }}"
+{%- endif %}
+
+{%- if enable_web_server %}
+web_server:
+  port: {{ web_server_port }}
+  ota: {% if web_server_ota %}true{% else %}false{% endif %}
+  js_include: {{ web_server_js_include }}
+  js_url: ""
+  version: 2
+{%- endif %}
+
+{%- if enable_fallback_hotspot %}
+captive_portal:
+{%- endif %}
+
+mqtt:
+  id: mqtt_client
+  broker: {{ mqtt_broker }}
+  port: {{ mqtt_port }}
+{%- if mqtt_user %}
+  username: {{ mqtt_user }}
+{%- endif %}
+{%- if mqtt_password %}
+  password: {{ mqtt_password }}
+{%- endif %}
+  discovery: {% if mqtt_discovery %}True{% else %}False{% endif %}
+  reboot_timeout: 0s
+  topic_prefix: {{ mqtt_topic }}
+  log_topic: {{ mqtt_topic }}/debug
+
+
+interval:
+  - interval: 5s
+    startup_delay: 20s
+    then:
+      - script.stop: ble_process
+      - script.execute: ble_process
+      - script.wait: ble_process
+{%- if enable_cellquery %}
+      - delay: 1500ms
+      - script.stop: ble_process_cmd0F
+      - script.execute: ble_process_cmd0F
+      - script.wait: ble_process_cmd0F
+{%- endif %}
+{%- if enable_cmd13 %}
+      - delay: 1500ms
+      - script.stop: ble_process_cmd13
+      - script.execute: ble_process_cmd13
+      - script.wait: ble_process_cmd13
+{%- endif %}
+{%- if enable_cmd30 %}
+  - interval: 1min
+    startup_delay: 30s
+    then:
+      - script.stop: ble_process_cmd30
+      - script.execute: ble_process_cmd30
+      - script.wait: ble_process
+{%- endif %}
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: {{ timezone }}
+
+globals:
+{%- for storage in storages %}
+  - id: b2500_ble_connected_{{ loop.index }}
+    type: bool
+    initial_value: '0'
+  - id: b2500_ble_initialized_{{ loop.index }}
+    type: bool
+    initial_value: '0'
+{%- if storage.version >= 2 %}
+  - id: b2500_tmp_timers_{{ loop.index }}
+    type: char[22]
+    initial_value: "{0x0,0x0,0x0,0x0,0x0,0x0,0x0, 0x0,0x0,0x0,0x0,0x0,0x0,0x0, 0x0,0x0,0x0,0x0,0x0,0x0,0x0 }"
+{%- endif %}
+{%- if enable_cmd30 %}
+  - id: b2500_cmd30_xor_last_{{ loop.index }}
+    type: int
+    initial_value: '0'
+{%- endif %}
+{%- endfor %}
+  - id: b2500_internal_console_dbg
+    type: bool
+    initial_value: '0'
+  - id: b2500_internal_console_hexdump
+    type: bool
+    initial_value: '1'
+  - id: b2500_internal_error_count
+    type: int
+    initial_value: '0'
+
+esp32_ble:
+  id: ble
+
+esp32_ble_tracker:
+  scan_parameters:
+    window: 300ms
+    continuous: false
+
+ble_client:
+{%- for storage in storages %}
+  - mac_address: {{ storage.mac_address | default('!secret hm2500_' ~ loop.index ~ '_mac') }}
+    id: b2500_ble_client_{{ loop.index }}
+    on_connect:
+      then:
+        - globals.set:
+            id: b2500_ble_connected_{{ loop.index }}
+            value: '1'
+        - binary_sensor.template.publish:
+            id: b2500_device_ble_ok_{{ loop.index }}
+            state: ON
+        - lambda: id(b2500_device_type_{{ loop.index }}).publish_state("not connected");
+        - lambda: id(b2500_device_id_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_ble_mac_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_wifi_ssid_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_fc41d_fw_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_scene_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_region_{{ loop.index }}).publish_state("");
+{%- if storage.version == 1 %}
+        - delay: 500ms
+        - script.execute: 
+            id: b2500_script_send_command
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x02
+            ble_cmd_parm: 0x00
+        - script.wait: b2500_script_send_command
+        - delay: 500ms
+        - script.execute: 
+            id: ble_set_time
+            ble_device_nr: {{ loop.index }}
+        - script.wait: ble_set_time
+{%- endif %}
+    on_disconnect:
+      then:
+        - binary_sensor.template.publish:
+            id: b2500_device_ble_ok_{{ loop.index }}
+            state: OFF
+        - globals.set:
+            id: b2500_ble_connected_{{ loop.index }}
+            value: '0'
+        - globals.set:
+            id: b2500_ble_initialized_{{ loop.index }}
+            value: '0'
+        - lambda: id(b2500_device_type_{{ loop.index }}).publish_state("not connected");
+        - lambda: id(b2500_device_id_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_ble_mac_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_wifi_ssid_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_fc41d_fw_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_scene_{{ loop.index }}).publish_state("");
+        - lambda: id(b2500_device_region_{{ loop.index }}).publish_state("");
+        - sensor.template.publish:
+            id: b2500_device_fw_version_{{ loop.index }}
+            state: 0
+{%- endfor %}
+
+button:
+  - platform: restart
+    id: controller_restart
+    name: "Restart Controller"
+{%- for storage in storages %}
+  - platform: template
+    id: b2500_button_reboot_{{ loop.index }}
+    name: "{{ yaml_string(storage.name) }}: Reboot B2500"
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/reboot/set
+    on_press:
+      then:
+        - script.execute: 
+            id: b2500_script_send_command
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x25
+            ble_cmd_parm: 0x01
+        - script.wait: b2500_script_send_command
+
+  - platform: template
+    id: b2500_button_factory_settings_{{ loop.index }}
+    name: "{{ loop.index }}: Reset to Factory Settings"
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/factory_settings/set
+    disabled_by_default: True
+    on_press:
+      then:
+        - script.execute: 
+            id: b2500_script_send_command
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x26
+            ble_cmd_parm: 0x01
+        - script.wait: b2500_script_send_command
+
+{%- if enable_set_wifi %}
+  - platform: template
+    id: b2500_button_set_wifi{{ loop.index }}
+    name: "{{ yaml_string(storage.name) }}: Set Wifi SSID / Password"
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/wifi/set
+    disabled_by_default: True
+    on_press:
+      then:
+        - script.execute:
+            id: b2500_script_send_string_command
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x05
+            ble_cmd_parm: "{{ yaml_string(set_wifi_ssid) }}<.,.>{{ yaml_string(set_wifi_password) }}"
+        - script.wait: b2500_script_send_string_command
+{%- endif %}
+{%- if storage.version >= 2 %}
+{%- if enable_experimental_commands %}
+  - platform: template
+    id: b2500_experimental_get_wifi_info_{{ loop.index }}
+    name: "{{ yaml_string(storage.name) }}: Experimental Get SSID / Signal"
+    disabled_by_default: True
+    on_press:
+      then:
+        - script.execute:  
+            id: b2500_script_send_command
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x09 
+            ble_cmd_parm: 0x01 
+        - script.wait: b2500_script_send_command
+  - platform: template
+    id: b2500_button_experimental_fc41d_qblenotify_{{ loop.index }}
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/experimental/notify/set
+    name: "{{ yaml_string(storage.name) }}: Experimental Enable FC41D QBLENOTIFY - ON"
+    disabled_by_default: True
+    on_press:
+      then:
+        - script.execute:
+            id: b2500_script_send_command
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x01
+            ble_cmd_parm: 0x01
+        - script.wait: b2500_script_send_command
+{%- endif %}
+{%- endif %}
+{%- if enable_cmd30 %}
+  - platform: template
+    id: b2500_button_experimental_cmd30_{{ loop.index }}
+    name: "{{ yaml_string(storage.name) }}: Experimental Send CMD30"
+    disabled_by_default: True
+    on_press:
+      then:
+        - script.stop: ble_runtime_query30
+        - script.execute: 
+            id: ble_runtime_query30
+            ble_device_nr: {{ loop.index }}
+        - script.wait: ble_runtime_query30
+{%- endif %}
+{%- if enable_experimental_commands %}
+  - platform: template
+    id: b2500_button_experimental_cmd1e_{{ loop.index }}
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/experimental/cmd1e/set
+    name: "{{ yaml_string(storage.name) }}: Experimental Send CMD1E"
+    disabled_by_default: True
+    on_press:
+      then:
+        - script.execute:
+            id: b2500_script_send_command
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x1e
+            ble_cmd_parm: 0x01
+        - script.wait: b2500_script_send_command
+  - platform: template
+    id: b2500_button_experimental_cmd11_{{ loop.index }}
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/experimental/cmd11/set
+    name: "{{ yaml_string(storage.name) }}: Experimental Send CMD11"
+    disabled_by_default: True
+    on_press:
+      then:
+        - script.execute:
+            id: b2500_script_send_command
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x11
+            ble_cmd_parm: 0x01
+        - script.wait: b2500_script_send_command
+{%- endif %}
+{%- if enable_set_mqtt %}
+  - platform: template
+    id: b2500_button_set_mqtt_{{ loop.index }}
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/mqtt/set
+    name: "{{ yaml_string(storage.name) }}: Set MQTT to {{ mqtt_broker }}"
+    disabled_by_default: True
+    on_press:
+      then:
+        - script.execute:
+            id: b2500_script_send_string_command
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x20
+            ble_cmd_parm: "0<.,.>{{ yaml_string(mqtt_broker) }}<.,.>{{ yaml_string(mqtt_port) }}<.,.>{{ yaml_string(mqtt_user) }}<.,.>{{ yaml_string(mqtt_password) }}<.,.>"
+            #              0|1 = security off/on
+            #                    HOST               PORT     USER      PASSWD
+        - script.wait: b2500_script_send_string_command
+{%- endif %}
+{%- endfor %}
+
+number:
+{%- for storage in storages %}
+{%- if storage.version == 1 %}
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Discharge Threshold"
+    id: b2500_battery_discharge_threshold_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/battery/discharge_threshold
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/battery/discharge_threshold/set
+    optimistic: True
+    min_value: 0
+    max_value: 999
+    step: 1
+    restore_value: True
+    on_value:
+      - script.execute:
+          id: b2500_script_set_discharge_treshold
+          ble_device_nr: {{ loop.index }}
+          discharge: !lambda return x;
+{%- endif %}
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Depth of Discharge"
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/battery/dod
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/battery/dod/set
+    id: b2500_battery_dod_{{ loop.index }}
+    optimistic: True
+    min_value: 0
+    max_value: 100
+    step: 1
+    restore_value: True
+    on_value:
+      - script.execute:
+          id: b2500_script_set_dod
+          ble_device_nr: {{ loop.index }}
+          dod: !lambda return x;
+{%- if storage.version >= 2 %}
+  - platform: template
+    id: b2500_timer3_power_{{ loop.index }}
+    name: "{{ yaml_string(storage.name) }}: Timer 3 Output Power"
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/timer/3/power
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/timer/3/power/set
+    optimistic: True
+    min_value: 50
+    max_value: 400
+    step: 1
+    restore_value: True
+    on_value:
+      - script.execute:
+          id: b2500_script_set_timer_power
+          ble_device_nr: {{ loop.index }}
+          timer: 3
+          power: !lambda return x; 
+{%- endif %}
+{%- endfor %}
+
+{%- if enable_powerzero %}
+  ### power zero
+  - platform: template
+    name: "MQTT: opendtu set limit"
+    id: b2500_mqtt_opendtu_limit
+    internal: False
+    state_topic: {{ powerzero_limit_cmd_topic }}
+    command_topic: {{ powerzero_limit_state_topic }}
+    optimistic: True
+    min_value: 1
+    max_value: 100
+    step: 1
+    restore_value: True
+
+  - platform: template
+    name: "MQTT: opendtu set limit max"
+    id: b2500_mqtt_opendtu_limit_max
+    state_topic: {{ mqtt_topic }}/npw/max_limit
+    command_topic: {{ mqtt_topic }}/npw/max_limit/set
+    internal: False
+    optimistic: True
+    min_value: 1
+    max_value: 100
+    step: 1
+    restore_value: True
+{%- endif %}
+
+
+switch:
+{%- for storage in storages %}
+  - platform: ble_client
+    ble_client_id: b2500_ble_client_{{ loop.index }}
+    name: "{{ yaml_string(storage.name) }}: Bluetooth Enabled"
+    id: b2500_bluetooth_enabled_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/bluetooth/enabled
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/bluetooth/enabled/set
+    icon: mdi:bluetooth-connect
+{%- set storage_loop = loop %}
+{%- if storage.version == 1 %}
+{%- for _ in range(2) %}
+  - platform: template
+    id: b2500_out{{ loop.index }}_active_{{ storage_loop.index }}
+    name: "{{ yaml_string(storage.name) }}: Out {{ loop.index }} - Active"
+    state_topic: {{ mqtt_topic }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled
+    command_topic: {{ mqtt_topic }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled/set
+    optimistic: True
+    assumed_state: True
+    on_turn_on:
+      then:
+        - switch.turn_on: b2500_out{{ loop.index }}_active_{{ storage_loop.index }}
+        - script.execute: 
+            id: b2500_script_set_powerout
+            ble_device_nr: {{ storage_loop.index }}
+    on_turn_off:
+      then:
+        - switch.turn_off: b2500_out{{ loop.index }}_active_{{ storage_loop.index }}
+        - script.execute: 
+            id: b2500_script_set_powerout
+            ble_device_nr: {{ storage_loop.index }}
+{%- endfor %}
+{%- elif storage.version >= 2 %}
+{%- for _ in range(3) %}
+  - platform: template
+    id: b2500_timer{{ loop.index }}_enabled_{{ storage_loop.index }}
+    name: "{{ yaml_string(storage.name) }}: Timer {{ loop.index }} Enabled"
+    state_topic: {{ mqtt_topic }}/{{ storage_loop.index }}/timer/{{ loop.index }}/enabled
+    command_topic: {{ mqtt_topic }}/{{ storage_loop.index }}/timer/{{ loop.index }}/enabled/set
+    optimistic: True
+    assumed_state: True
+    on_turn_on:
+      then:
+        - script.execute:
+            id: b2500_script_set_timer_enable
+            ble_device_nr: {{ storage_loop.index }}
+            timer: {{ loop.index }}
+            enable: 1
+    on_turn_off:
+      then:
+        - script.execute:
+            id: b2500_script_set_timer_enable
+            ble_device_nr: {{ storage_loop.index }}
+            timer: {{ loop.index }}
+            enable: 0
+{%- endfor %}
+{%- endif %}
+{%- endfor %}
+
+{%- for storage in storages %}
+{%- if storage.version == 1 %}
+  - platform: template
+    id: b2500_pv2_passthrough_enabled_{{ loop.index }}
+    name: "{{ yaml_string(storage.name) }}:: PV2 Passtrough Enabled"
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/pv2/passtrough
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/pv2/passtrough/set
+    optimistic: True
+    assumed_state: True
+    on_turn_on:
+      then:
+        - script.execute: 
+            id: b2500_script_set_passthrough_enabled
+            ble_device_nr: {{ loop.index }}
+            switch_cmd: 0
+    on_turn_off:
+      then:
+        - script.execute: 
+            id: b2500_script_set_passthrough_enabled
+            ble_device_nr: {{ loop.index }}
+            switch_cmd: 1
+{%- elif storage.version >= 2 %}
+  - platform: template
+    id: b2500_device_loadfirst_{{ loop.index }}
+    name: "{{ yaml_string(storage.name) }}: LoadFirst"
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/loadfirst
+    command_topic: {{ mqtt_topic }}/{{ loop.index }}/device/loadfirst/set
+    optimistic: True
+    assumed_state: True
+    on_turn_on:
+      then:
+        - script.execute:
+            id: ble_set_loadfirst
+            ble_device_nr: {{ loop.index }}
+            switch_cmd: 1
+    on_turn_off:
+      then:
+        - script.execute:
+            id: ble_set_loadfirst
+            ble_device_nr: {{ loop.index }}
+            switch_cmd: 0
+{%- endif %}
+{%- endfor %}
+
+{%- if enable_hexdump %}
+  - platform: template
+    id: b2500_hexdump
+    name: "Hexdump"
+    optimistic: True
+    disabled_by_default: True
+    icon: mdi:hexadecimal
+{%- endif %}
+
+{%- if enable_powerzero %}
+  - platform: template
+    id: b2500_npw_enabled
+    name: "PowerZero Enabled"
+    optimistic: True
+    command_topic: {{ mqtt_topic }}/npw/enabled/set
+    state_topic: {{ mqtt_topic }}/npw/enabled
+    #restore_mode: RESTORE_DEFAULT_ON
+    #assumed_state: True
+{%- endif %}
+{%- if enable_enforce_dod %}
+  - platform: template
+    id: b2500_esp32_enforce_dod_enabled
+    name: "Enforce DOD Enabled"
+    optimistic: True
+    command_topic: {{ mqtt_topic }}/esp32/enforce_dod/enabled/set
+    state_topic: {{ mqtt_topic }}/esp32/enforce_dod/enabled
+    #restore_mode: RESTORE_DEFAULT_ON
+    #assumed_state: True
+{%- endif %}
+{%- if enable_cellquery %}
+  - platform: template
+    id: b2500_esp32_cellquery_enabled
+    name: "Cell Query Enabled"
+    optimistic: True
+    command_topic: {{ mqtt_topic }}/esp32/cellquery/enabled/set
+    state_topic: {{ mqtt_topic }}/esp32/cellquery/enabled
+    #restore_mode: RESTORE_DEFAULT_ON
+    #assumed_state: True
+    icon: mdi:fuel-cell
+{%- endif %}
+{%- if enable_timer_query %}
+  - platform: template
+    id: b2500_esp32_timer_query_enabled
+    name: "Timer Query Enabled (cmd13)"
+    optimistic: True
+    #restore_mode: RESTORE_DEFAULT_ON
+    #assumed_state: True
+{%- endif %}
+{%- if enable_cmd30 %}
+  - platform: template
+    id: b2500_esp32_cmd30_query_enabled
+    name: "Unknown Query Enabled (cmd30)"
+    optimistic: True
+    #restore_mode: RESTORE_DEFAULT_ON
+    #assumed_state: True
+{%- endif %}
+
+text_sensor:
+{%- for storage in storages %}
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Device Type"
+    id: b2500_device_type_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/type
+    icon: mdi:devices
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Device ID"
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/id
+    id: b2500_device_id_{{ loop.index }}
+    icon: mdi:identifier
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: MAC"
+    id: b2500_device_ble_mac_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/ble_mac
+    icon: mdi:network
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Wifi SSID"
+    id: b2500_device_wifi_ssid_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/wifi_ssid
+    icon: mdi:wifi
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: FC41D-Firmware"
+    id: b2500_device_fc41d_fw_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/fc41d_fw
+    icon: mdi:chip
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Scene"
+    id: b2500_device_scene_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/scene
+    icon: mdi:theme-light-dark
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Region"
+    id: b2500_device_region_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/region
+    icon: mdi:earth
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Last Response"
+    id: b2500_device_last_response_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/last_response
+    icon: mdi:update
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Device Mode"
+    id: b2500_device_mode_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/mode
+    icon: mdi:cogs
+{%- endfor %}
+
+binary_sensor:
+{%- for storage in storages %}
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: PV 1 - Active"
+    id: b2500_pv1_active_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/pv1/active
+    icon: mdi:solar-power
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: PV 2 - Active"
+    id: b2500_pv2_active_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/pv2/active
+    icon: mdi:solar-power
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: PV 1 - Transparent"
+    id: b2500_pv1_transparent_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/pv1/transparent
+    icon: mdi:transit-connection-variant
+
+  - platform: template    
+    name: "{{ yaml_string(storage.name) }}: PV 2 - Transparent"
+    id: b2500_pv2_transparent_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/pv2/transparent
+    icon: mdi:transit-connection-variant
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Wifi Connected"
+    id: b2500_device_wifi_ok_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/wifi_ok
+    icon: mdi:wifi
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: MQTT Connected"
+    id: b2500_device_mqtt_ok_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/mqtt_ok
+    icon: mdi:cloud
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: BLE Connected"
+    id: b2500_device_ble_ok_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/ble_ok
+    icon: mdi:bluetooth
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Out 1 - Aktiv"
+    id: b2500_power1_active_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/power1/active
+    icon: mdi:power-plug-battery
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Out 2 - Aktiv"
+    id: b2500_power2_active_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/power2/active
+    icon: mdi:power-plug-battery
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Extension 1 connected"
+    id: b2500_extern1_connected_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/extern1/connected
+    icon: mdi:battery-plus
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Extension 2 connected"
+    id: b2500_extern2_connected_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/extern2/connected
+    icon: mdi:battery-plus
+{%- endfor %}
+
+{%- if enable_powermeter %}
+uart:
+  id: uart_bus
+  tx_pin: {{ powermeter_tx_pin }}
+  rx_pin: {{ powermeter_rx_pin }}
+  baud_rate: {{ powermeter_baud_rate }}
+  stop_bits: {{ powermeter_stop_bits }}
+{%- endif %}
+
+sensor:
+{%- if enable_esp_temperature %}
+  - platform: ntc
+    sensor: temp_resistance_reading
+    name: "Temperature"
+    state_topic: {{ mqtt_topic }}/esp32/temperature
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    icon: "mdi:thermometer"
+    calibration:
+      b_constant: 3350
+      reference_resistance: 10kOhm
+      reference_temperature: 298.15K
+  - platform: resistance
+    id: temp_resistance_reading
+    sensor: temp_analog_reading
+    configuration: DOWNSTREAM
+    resistor: 10kOhm
+{%- endif %}
+{%- if enable_powermeter %}
+  - platform: adc
+    id: temp_analog_reading
+    pin: GPIO3
+    attenuation: 11db
+  - platform: bl0942
+    uart_id: uart_bus
+    voltage:
+      name: 'Voltage'
+    current:
+      name: 'Current'
+    power:
+      name: 'Power'
+    frequency:
+      name: "Frequency"
+      accuracy_decimals: 2
+    update_interval: 5s
+{%- endif %}
+  - platform: uptime
+    name: Uptime Sensor
+    filters:
+      - lambda: return x / 3600.0;
+    unit_of_measurement: "hours"
+    accuracy_decimals: 2
+    state_topic: {{ mqtt_topic }}/esp32/uptime
+  
+{%- for storage in storages %}
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: In 1 - Power"
+    id: b2500_in1_power_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/pv1/power
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+    icon: mdi:solar-power
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: In 2 - Power"
+    id: b2500_in2_power_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/pv2/power
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+    icon: mdi:solar-power
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Total Power In"
+    id: b2500_total_power_in_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/pv/power
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Out 1 - Power"
+    id: b2500_out1_power_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/power1/power
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Out 2 - Power"
+    id: b2500_out2_power_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/power2/power
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Total Power Out"
+    id: b2500_total_power_out_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/power/power
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Battery Level"
+    id: b2500_battery_remaining_percent_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/battery/remaining_percent
+    accuracy_decimals: 0
+    unit_of_measurement: '%'
+{%- if enable_enforce_dod %}
+    on_raw_value:
+      - then:
+        - lambda: "id(ble_enforce_dod).execute({{ loop.index }},x);"
+{%- endif %}
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Battery Capacity"
+    id: b2500_battery_remaining_capacity_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/battery/remaining_capacity
+    accuracy_decimals: 0
+    unit_of_measurement: Wh
+    device_class: energy
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Device Firmware Version"
+    id: b2500_device_fw_version_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/fw_version
+    accuracy_decimals: 2
+    icon: mdi:chip
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Temperature 1"
+    id: b2500_device_temperature1_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/temp1
+    accuracy_decimals: 0
+    unit_of_measurement: '°C'
+    device_class: temperature
+    icon: mdi:thermometer
+
+  - platform: template
+    name: "{{ yaml_string(storage.name) }}: Temperature 2"
+    id: b2500_device_temperature2_{{ loop.index }}
+    state_topic: {{ mqtt_topic }}/{{ loop.index }}/device/temp2
+    accuracy_decimals: 0
+    unit_of_measurement: '°C'
+    device_class: temperature
+    icon: mdi:thermometer
+{%- endfor %}
+
+  - platform: template
+    name: "Total Power In"
+    id: b2500_total_in_power
+    state_topic: {{ mqtt_topic }}/S/pv/power
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+
+  - platform: template
+    name: "Total Power Out"
+    id: b2500_total_out_power
+    state_topic: {{ mqtt_topic }}/S/power/power
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+
+{%- for storage in storages %}
+  - platform: ble_client
+    ble_client_id: b2500_ble_client_{{ loop.index }}
+    internal: True
+    type: characteristic
+    name: "{{ yaml_string(storage.name) }}: Bluetooth Low Energy Client"
+    id: infoX2{{ loop.index }}
+    service_uuid: 'ff00'
+    characteristic_uuid: 'ff02'
+    notify: True
+    lambda: |-
+      std::vector<char> tData;
+      for (auto b : x) { tData.push_back(b); }
+      id(ble_notify_parse).execute({{ loop.index }},tData);
+      return (float)x[0];
+{%- endfor %}
+
+{%- if enable_powerzero %}
+### power zero - mqtt grid power sensor ( any who publish the grid power to mqtt )
+  - platform: mqtt_subscribe
+    name: "MQTT: Grid Power"
+    id: mqtt_grid_power
+    topic: {{ powerzero_grid_power_topic}}
+    on_value:
+      then:    
+        - script.execute: power_zero
+{%- endif %}
+
+script:
+
+# ble communication
+#
+# NOTE: this is a copy of the V1 Changes ... everthing 'til 1.38 belongs to V1 ... and dont neccessary are included/used in V2-FW 
+#       I started with V1.60 on V2, so some commands maybe included earlier into V2-FW ...
+#
+#
+# action ( 00f1 )
+#
+# head    = 0x73
+# length  = len(paket)
+# cntl    = 0x23
+# cmd     = 0x02  set Region      1Byte   (0x00 = EU / 0x01 = China / 0x02 = Non-EU / 0xff = not SET)
+#         = 0x03  runtimeInfo     1Byte   (0x01)
+#         = 0x04  DeviceInfo      1Byte   (0x01)
+#         = 0x0B  DOD             1Byte   (0-100)
+#         = 0x0C  Entladeschwelle 2Byte   (0-999)
+#         = 0x0D  PV2-Passthrough  1Byte   (0x00 on / 0x01 off)
+#         = 0x0E  PowerOut        1Byte   (0x00 1-2 off / 0x01 1 on / 0x02 2 on / 0x03 1-2 on)
+#
+#         = 0x05  Wifi-Config     xByte   ( ssid<.,.>pwd )
+#         = 0x08  Wifi-State      1Byte   (0x01)  ????
+#
+#         following mqtt parts not implemented - outdated or not implemented in fw <= 1.34
+#         have a look at 0x20/0x21 in 1.34
+#         q&d c&p - more details will be added, maybe ...
+#         = 0x14  set AWS MQTT    xByte   ( url<.,.>Port ) ....
+#         = 0x60  set MQTT Certs  xByte   ( 0x00 = client.key / 0x01 = client.crt / 0x02 = ca.crt + cert len  )
+#         = 0x61  trans MQTT Certs xByte  ( jeweils 128bytes des certs  )
+#         = 0x62  end MQTT Certs  xByte   (   )
+#
+#         testing / notes
+#         = 0x01  Debug ?!?! ( BLE-Serial ) 1Byte   (0x00 = off / 0x01 = on) - enables QBLEGATTSNOTIFY notify 1 / 81 ( entspricht ~ runtimeinfo )
+#         = 0x14  not for mqtt ... set localtime ??? for auth/certs/challenge requests ????? ( query/set wifi depends ????)
+#
+#         new 1.31
+#         = 0x0F  new in fw 131 1Byte   ( 0x01 ) - soc_temp1_temp2_14-cell-voltage(s)
+#         = 0x30 found in logs ...      ( 0x01 ) - ???? unknown answers since fw 131
+#
+#         new 1.34
+#         = 0x09  SSID / SignalStrength ( 0x01 )
+#         = 0x20  mqtt related - set server/port ? - see new in 1.37
+#         = 0x21  mqtt related - set keys ?        
+#         = 0x23  get FC41D Version     ( 0x01 )
+#         = 0x24  undocumented*
+#         = 0x25  Reboot                ( 0x01 )
+#         = 0x26  Factory Settings      ( 0x01 )
+#
+#         new 1.37
+#         = 0x20  set own MQTT
+#                 0|1<.,.>HOST<.,.>PORT<.,.>USER<.,.>PASSWD<.,.>"
+#                 0   = no ssl
+#                 1   = encryption
+#                 note: leaving user/passwd empty works ...
+#
+#         unknown ...
+#         = 0x1e  unknown - error related ?!?!? (0x30)
+#
+#
+#         #### V2 #####
+#         ( see note in top of doc )
+#
+#         new 1.60
+#         = 0x11  ???
+#         = 0x12  set timers
+#         = 0x13  get timers
+#
+#
+# data    = xx xx xx xx xx xx .... / depends on cmd
+# crc     = xor len(paket) - 1 
+#
+#
+# responses ( ff02 ):
+#
+# head    = 0x73
+# length  = len(paket)
+# cntl    = 0x23
+# cmd     = cmd
+# data    = xx xx xx xx xx ....
+#
+#
+#
+################ maybe direct for arm
+# send ( ff01 )
+#
+# head1    = 0xAA
+# head2(?) = 0x55 ( not length ?!?!? )
+# cmd      = 1x / 2x / 3x ( flash - 30 "open"/ 31 - write / 32 "close" ) / 5x
+# data     = xx xx xx xx xx ....
+# crc      = xor len(paket) -1 
+#
+################ maybe direct for bms
+# send/receive ( ff06 ) 
+#
+# head    = 0xAA
+# len     = 0x05/0x03
+# data    = xx xx xxx ( xx xx )
+# crc     = x1 + x2 + ... + xn
+#
+#
+#   f.ex hw-reset 
+#
+#  -> aa 05 01 00 01 01 00 08
+#  <- aa 01 00 01
+#
+#  -> aa 05 01 00 01 00 00 07
+#  <- aa 01 00 01
+#
+
+  - id: b2500_script_send_command
+    mode: queued
+    parameters:
+      ble_device_nr: int
+      ble_cmd: int
+      ble_cmd_parm: int
+    then:
+      - logger.log:
+          level: INFO
+          format: "ble command send: %i [%i] %i"
+          args: [ 'ble_device_nr','ble_cmd','ble_cmd_parm' ]
+{%- for storage in storages %}
+      - if:
+          condition:
+            lambda: 'return (ble_device_nr == {{ loop.index }});'
+          then:
+            - ble_client.ble_write:
+                id: b2500_ble_client_{{ loop.index }}
+                service_uuid: 0000ff00-0000-1000-8000-00805f9b34fb
+                characteristic_uuid: 0000ff01-0000-1000-8000-00805f9b34fb
+                value: !lambda |-
+                  std::vector<unsigned char> rdat{{ loop.index }}{ 0x73,0x06,0x23,(unsigned char)ble_cmd};
+
+                  if (ble_cmd == 0x0C) {
+                    rdat{{ loop.index }}.push_back((uint8_t)((ble_cmd_parm >> 0) & 0xFF));
+                    rdat{{ loop.index }}.push_back((uint8_t)((ble_cmd_parm >> 8) & 0xFF));
+                  } else {
+                    rdat{{ loop.index }}.push_back((unsigned char)ble_cmd_parm);
+                  }
+
+                  int rlen = rdat{{ loop.index }}.size();
+                  rdat{{ loop.index }}.at(1) = rlen+1;
+                  int rxor = 0;
+                  for (int i=0;i<rlen;i++) {
+                    rxor = rxor ^ rdat{{ loop.index }}[i];
+                  }
+                  rdat{{ loop.index }}.push_back(rxor);
+
+                  if (id(b2500_internal_console_dbg)) {
+                    for (auto b : rdat{{ loop.index }}) {
+                      ESP_LOGD("COMMAND", "%x - %i - %c", b,b,b);
+                    }
+                  }
+
+                  return rdat{{ loop.index }};
+{%- endfor %}
+
+  - id: b2500_script_send_string_command
+    parameters:
+      ble_device_nr: int
+      ble_cmd: int
+      ble_cmd_parm: string
+    then:
+      - logger.log:
+          format: "ble command send string: %i [%i]"
+          args: [ 'ble_device_nr','ble_cmd']
+{%- for storage in storages %}
+      - if:
+          condition:
+            lambda: 'return (ble_device_nr == {{ loop.index }});'
+          then:
+            - ble_client.ble_write:
+                id: b2500_ble_client_{{ loop.index }}
+                service_uuid: 0000ff00-0000-1000-8000-00805f9b34fb
+                characteristic_uuid: 0000ff01-0000-1000-8000-00805f9b34fb
+                value: !lambda |-
+                  std::vector<unsigned char> rdat{{ loop.index }}{ 0x73,0x06,0x23,(unsigned char)ble_cmd};
+
+                  if ( ble_cmd == 0x24) { rdat{{ loop.index }}.push_back(0xaa); }
+
+                  for (auto b : ble_cmd_parm) {
+                    rdat{{ loop.index }}.push_back((unsigned char)b);
+                  }
+                    
+                  int rlen = rdat{{ loop.index }}.size();
+                  rdat{{ loop.index }}.at(1) = rlen+1;
+                  int rxor = 0;
+                  for (int i=0;i<rlen;i++) {
+                    rxor = rxor ^ rdat{{ loop.index }}[i];
+                  }
+                  rdat{{ loop.index }}.push_back(rxor);
+            
+                  if (id(b2500_internal_console_dbg)) {
+                    for (auto b : rdat{{ loop.index }}) {
+                      ESP_LOGD("COMMAND", "%x - %i - %c", b,b,b);
+                    }
+                  }
+
+                  return rdat{{ loop.index }};
+{%- endfor %}
+
+  - id: ble_set_time
+    parameters:
+      ble_device_nr: int
+    then:
+{%- for storage in storages %}
+      - if:
+          condition:
+            lambda: 'return (ble_device_nr == {{ loop.index }});'
+          then:
+{%- if storage.version == 1 %}
+            - ble_client.ble_write:
+                id: b2500_ble_client_{{ loop.index }}
+                service_uuid: 0000ff00-0000-1000-8000-00805f9b34fb
+                characteristic_uuid: 0000ff01-0000-1000-8000-00805f9b34fb
+                value: !lambda |-
+                  std::vector<unsigned char> rdat{{ loop.index }}{ 0x73,0x0d,0x23,0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x00 };
+
+                  auto time = id(sntp_time).now();
+                  rdat{{ loop.index }}.at(4) = time.year - 1900;
+                  rdat{{ loop.index }}.at(5) = time.month;
+                  rdat{{ loop.index }}.at(6) = time.day_of_month;
+                  rdat{{ loop.index }}.at(7) = time.hour;
+                  rdat{{ loop.index }}.at(8) = time.minute;
+                  rdat{{ loop.index }}.at(9) = time.second;
+
+                  int rlen = rdat{{ loop.index }}.size();
+                  rdat{{ loop.index }}.at(1) = rlen+1;
+                  int rxor = 0;
+                  for (int i=0;i<rlen;i++) {
+                    rxor = rxor ^ rdat{{ loop.index }}[i];
+                  }
+                  rdat{{ loop.index }}.push_back(rxor);
+
+                  if (id(b2500_internal_console_dbg)) {
+                    for (auto b : rdat{{ loop.index }}) {
+                      ESP_LOGD("COMMAND", "%x - %i - %c", b,b,b);
+                    }
+                  }
+
+                  return rdat{{ loop.index }};
+            - globals.set: 
+                id: b2500_ble_initialized_{{ loop.index }}
+                value: '1'
+{%- else %}
+            - delay: 100ms
+{%- endif %}
+{%- endfor %}
+
+  - id: ble_command_raw_01
+    parameters:
+      ble_device_nr: int
+      ble_cmd_parm: char[]
+    then:
+      - logger.log:
+          level: INFO
+          format: "ble command send (raw): %i"
+          args: [ 'ble_device_nr']
+{%- for storage in storages %}
+      - if:
+          condition:
+            lambda: 'return (ble_device_nr == {{ loop.index }});'
+          then:
+{%- if storage.version >= 2 %}
+            - ble_client.ble_write:
+                id: b2500_ble_client_{{ loop.index }}
+                service_uuid: 0000ff00-0000-1000-8000-00805f9b34fb
+                characteristic_uuid: 0000ff01-0000-1000-8000-00805f9b34fb
+                value: !lambda |-
+                  std::vector<unsigned char> rdat{{ loop.index }};
+
+                  for (auto b : ble_cmd_parm) {
+                    rdat{{ loop.index }}.push_back((unsigned char)b);
+                  }
+
+                  int rlen = rdat{{ loop.index }}.size();
+                  rdat{{ loop.index }}.at(1) = rlen+1;
+                  int rxor = 0;
+                  for (int i=0;i<rlen;i++) {
+                    rxor = rxor ^ rdat{{ loop.index }}[i];
+                  }
+                  rdat{{ loop.index }}.push_back(rxor);
+
+                  if (id(b2500_internal_console_dbg)) {
+                    for (auto b : rdat{{ loop.index }}) {
+                      ESP_LOGD("COMMAND raw", "%x - %i - %c", b,b,b);
+                    }
+                  }
+
+                  return rdat{{ loop.index }};
+{%- else %}
+            - delay: 100ms
+{%- endif %}
+{%- endfor %}
+
+
+  - id: ble_command_raw_06
+    parameters:
+      ble_device_nr: int
+      ble_cmd_parm: char[]
+    then:
+      - logger.log:
+          format: "ble command parse (raw): %i"
+          args: [ 'ble_device_nr']
+{%- for storage in storages %}
+      - if:
+          condition:
+            lambda: 'return (ble_device_nr == {{ loop.index }});'
+          then:
+            - ble_client.ble_write:
+                id: b2500_ble_client_{{ loop.index }}
+                service_uuid: 0000ff00-0000-1000-8000-00805f9b34fb
+                characteristic_uuid: 0000ff06-0000-1000-8000-00805f9b34fb
+                value: !lambda |-
+                  std::vector<unsigned char> rdat{{ loop.index }};
+
+                  for (auto b : ble_cmd_parm) {
+                    rdat{{ loop.index }}.push_back((unsigned char)b);
+                  }
+
+                  /*                    
+                  int rlen = rdat{{ loop.index }}.size();
+                  rdat{{ loop.index }}.at(1) = rlen+1;
+                  int rxor = 0;
+                  for (int i=0;i<rlen;i++) {
+                    rxor = rxor ^ rdat{{ loop.index }}[i];
+                  }
+                  rdat{{ loop.index }}.push_back(rxor);
+                  */
+
+                  if (id(b2500_internal_console_dbg)) {
+                    for (auto b : rdat{{ loop.index }}) {
+                      ESP_LOGD("COMMAND raw", "%x - %i - %c", b,b,b);
+                    }
+                  }
+
+                  return rdat{{ loop.index }};
+{%- endfor %}
+
+  - id: ble_process
+    then:
+{%- for storage in storages %}
+{%- if loop.index0 > 0 %}
+      - delay: 250ms
+{%- endif %}
+      - if:
+          condition:
+            - lambda: 'return (id(b2500_ble_connected_{{ loop.index }}) && id(b2500_ble_initialized_{{ loop.index }}));'
+          then:
+              ### query runtimeInfo only if deviceInfo is available
+            - if:
+                condition:
+                  - lambda: 'return (id(b2500_device_ble_mac_{{ loop.index }}).state != "");'
+                then:
+                  - script.execute: 
+                      id: ble_runtime_query
+                      ble_device_nr: {{ loop.index }}
+                  - script.wait: ble_runtime_query
+
+                  ### query FC41D_FW if empty and FW > 133
+                  - if:
+                      condition:
+                        - lambda: 'return (id(b2500_device_fc41d_fw_{{ loop.index }}).state == "" && id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 133 );'
+                      then:
+                        - script.execute: 
+                            id: b2500_script_send_command
+                            ble_device_nr: {{ loop.index }}
+                            ble_cmd: 0x23
+                            ble_cmd_parm: 0x01
+                        - script.wait: b2500_script_send_command
+                    ### query SSID if empty, wifi connected and FW > 133
+                  - if:
+                      condition:
+                        - lambda: 'return (id(b2500_device_wifi_ssid_{{ loop.index }}).state == "" && id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 133 && id(b2500_device_wifi_ok_{{ loop.index }}) );'
+                      then:
+                        - script.execute: 
+                            id: b2500_script_send_command
+                            ble_device_nr: {{ loop.index }}
+                            ble_cmd: 0x09
+                            ble_cmd_parm: 0x01
+                        - script.wait: b2500_script_send_command
+{%- if storage.version >= 2 %}
+                  ### query runtime info last
+                  - script.stop: ble_runtime_query
+                  - script.execute: 
+                      id: ble_runtime_query
+                      ble_device_nr: {{ loop.index }}
+                  - script.wait: ble_runtime_query
+{%- endif %}
+
+                else:
+                  ### query deviceinfo if empty
+                  - if:
+                      condition:
+                        - lambda: 'return (id(b2500_device_ble_mac_{{ loop.index }}).state == "");'
+                      then:
+                        - script.execute: 
+                            id: b2500_script_send_command
+                            ble_device_nr: {{ loop.index }}
+                            ble_cmd: 0x04
+                            ble_cmd_parm: 0x01
+                        - script.wait: b2500_script_send_command
+{%- endfor %}
+{%- if enable_cellquery %}
+  - id: ble_process_cmd0F
+    then:
+{%- for storage in storages %}
+{%- if loop.index0 > 0 %}
+      - delay: 250ms
+{%- endif %}
+      - if:
+          condition:
+            - lambda: 'return (id(b2500_ble_connected_{{ loop.index }}) && id(b2500_ble_initialized_{{ loop.index }}) && id(b2500_esp32_cellquery_enabled).state);'
+          then:
+            - if:
+                condition:
+{%- if storage.version >= 2 %}
+                  ### query cmd0F if firmware > 1.55
+                  - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 155 && id(b2500_device_id_{{ loop.index }}).state != "");'
+{%- else %}
+                  ### query cmd0F if firmware > 1.30
+                  - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 130 && id(b2500_device_id_{{ loop.index }}).state != "");'
+{%- endif %}
+                then:
+                  - script.stop: ble_runtime_query0F
+                  - script.execute: 
+                      id: ble_runtime_query0F
+                      ble_device_nr: 1
+                  - script.wait: ble_runtime_query0F
+            - if:
+                condition:
+                  - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 130 && id(b2500_device_id_{{ loop.index }}).state != "");'
+                then:
+                  - script.execute: 
+                      id: ble_runtime_query0F
+                      ble_device_nr: {{ loop.index }}
+                  - script.wait: ble_runtime_query0F
+{%- endfor %}
+{%- endif %}
+
+  - id: ble_process_cmd13
+    then:
+{%- for storage in storages %}
+{%- if loop.index0 > 0 %}
+      - delay: 250ms
+{%- endif %}
+{%- if storage.version >= 2 %}
+      - if:
+          condition:
+            - lambda: 'return (id(b2500_ble_connected_{{ loop.index }}) && id(b2500_ble_initialized_{{ loop.index }}) && id(b2500_esp32_cellquery_enabled).state);'
+          then:
+            ### query cmd0F if firmware > 1.55
+            - if:
+                condition:
+                  - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 155 && id(b2500_device_id_{{ loop.index }}).state != "");'
+                then:
+                  - script.stop: ble_runtime_query13
+                  - script.execute: 
+                      id: ble_runtime_query13
+                      ble_device_nr: 1
+                  - script.wait: ble_runtime_query13
+{%- endif %}
+{%- endfor %}
+
+{%- if enable_cmd30 %}
+  - id: ble_process_cmd30
+    then:
+{%- for storage in storages %}
+{%- if loop.index0 > 0 %}
+      - delay: 250ms
+{%- endif %}
+{%- if storage.version == 1 %}
+      - if:
+          condition:
+            - lambda: 'return (id(b2500_ble_connected_{{ loop.index }}) && id(b2500_ble_initialized_{{ loop.index }}) && id(b2500_esp32_cmd30_query_enabled).state);'
+          then:
+            ### query cmd30 if firmware > 1.30
+            - if:
+                condition:
+                  - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 130 && id(b2500_device_id_{{ loop.index }}).state != "");'
+                then:
+                  - script.execute: 
+                      id: ble_runtime_query30
+                      ble_device_nr: {{ loop.index }}
+                  - script.wait: ble_runtime_query30
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+
+  - id: ble_runtime_query
+    parameters:
+      ble_device_nr: int
+    then:
+      - logger.log: 
+          format: "runtime query: %i"
+          args: [ 'ble_device_nr' ]      
+      - script.execute: 
+          id: b2500_script_send_command
+          ble_device_nr: !lambda return ble_device_nr;
+          ble_cmd: 0x03
+          ble_cmd_parm: 0x01
+      - script.wait: b2500_script_send_command
+
+{%- if enable_cmd30 %}
+  - id: ble_runtime_query30
+    parameters:
+      ble_device_nr: int
+    then:
+      - logger.log: 
+          format: "runtime query 30 (errorlog ?): %i"
+          args: [ 'ble_device_nr' ]      
+      - script.execute: 
+          id: b2500_script_send_command
+          ble_device_nr: !lambda return ble_device_nr;
+          ble_cmd: 0x30
+          ble_cmd_parm: 0x01
+      - script.wait: b2500_script_send_command
+{%- endif %}
+
+  - id: ble_runtime_query0F
+    parameters:
+      ble_device_nr: int
+    then:
+      - logger.log: 
+          format: "runtime query 0F (cellinfos): %i"
+          args: [ 'ble_device_nr' ]      
+      - script.execute: 
+          id: b2500_script_send_command
+          ble_device_nr: !lambda return ble_device_nr;
+          ble_cmd: 0x0F
+          ble_cmd_parm: 0x01
+      - script.wait: b2500_script_send_command
+
+  - id: ble_runtime_query13
+    parameters:
+      ble_device_nr: int
+    then:
+      - logger.log:
+          format: "runtime query 13 (timer): %i"
+          args: [ 'ble_device_nr' ]
+      - script.execute:
+          id: b2500_script_send_command
+          ble_device_nr: !lambda return ble_device_nr;
+          ble_cmd: 0x13
+          ble_cmd_parm: 0x00
+      - script.wait: b2500_script_send_command
+
+  - id: b2500_script_set_powerout
+    parameters:
+      ble_device_nr: int
+    then:
+      - lambda: |-
+          int ble_cmd_t = 0x00;
+{%- for storage in storages %}
+{%- if storage.version == 1 %}
+          if ( ble_device_nr == {{ loop.index }} ) {
+            if ( ! id(b2500_out1_active_{{ loop.index }}).state &&  ! id(b2500_out2_active_{{ loop.index }}).state ) { ble_cmd_t = 0x00; }
+            if ( id(b2500_out1_active_{{ loop.index }}).state  && ! id(b2500_out2_active_{{ loop.index }}).state ) { ble_cmd_t = 0x01; }
+            if ( ! id(b2500_out1_active_{{ loop.index }}).state && id(b2500_out2_active_{{ loop.index }}).state ) { ble_cmd_t = 0x02; }
+            if ( id(b2500_out1_active_{{ loop.index }}).state && id(b2500_out2_active_{{ loop.index }}).state ) { ble_cmd_t = 0x03; }
+          }
+{%- endif %}
+{%- endfor %}
+          id(b2500_script_send_command).execute(ble_device_nr,0x0E,ble_cmd_t);
+
+          if (ble_cmd_t == 0x00) { ESP_LOGD("set_power_out", "Device %i - %s", ble_device_nr,"1 OFF / 2 OFF"); }
+          if (ble_cmd_t == 0x01) { ESP_LOGD("set_power_out", "Device %i - %s", ble_device_nr,"1 ON / 2 OFF"); }
+          if (ble_cmd_t == 0x02) { ESP_LOGD("set_power_out", "Device %i - %s", ble_device_nr,"1 OFF / 2 ON"); }
+          if (ble_cmd_t == 0x03) { ESP_LOGD("set_power_out", "Device %i - %s", ble_device_nr,"1 ON / 2 ON"); }
+
+  - id: ble_set_loadfirst
+    parameters:
+      ble_device_nr: int
+      switch_cmd: bool
+    then:
+      - logger.log:
+          format: "Loadfirst %i : %i"
+          args: [ble_device_nr,switch_cmd]
+      - script.execute:
+          id: b2500_script_send_command
+          ble_device_nr: !lambda return ble_device_nr;
+          ble_cmd: 0x0D
+          ble_cmd_parm: !lambda return switch_cmd;
+
+
+  - id: ble_set_simultan
+    parameters:
+      ble_device_nr: int
+      switch_cmd: bool
+    then:
+      - logger.log: 
+          format: "Simultan %i : %i"
+          args: [ble_device_nr,switch_cmd]
+      - script.execute:
+          id: b2500_script_send_command
+          ble_device_nr: !lambda return ble_device_nr;
+          ble_cmd: 0x0D
+          ble_cmd_parm: !lambda return switch_cmd;
+
+  - id: b2500_script_set_passthrough_enabled
+    parameters:
+      ble_device_nr: int
+      switch_cmd: bool
+    then:
+      - logger.log: 
+          format: "PV2 Passthrough %i : %i"
+          args: [ble_device_nr,switch_cmd]
+      - script.execute: 
+          id: b2500_script_send_command
+          ble_device_nr: !lambda return ble_device_nr;
+          ble_cmd: 0x0D
+          ble_cmd_parm: !lambda return switch_cmd;
+
+  - id: b2500_script_set_dod
+    parameters:
+      ble_device_nr: int
+      dod: int
+    then:
+      - logger.log: 
+          format: "set DOD: %i"
+          args: [ 'dod' ]
+      - if:
+          condition:
+            lambda: 'return ( dod <= 100 && dod >= 10);'
+          then:
+            - script.execute: 
+                id: b2500_script_send_command
+                ble_device_nr: !lambda return ble_device_nr;
+                ble_cmd: 0x0B
+                ble_cmd_parm: !lambda return dod;
+
+  - id: b2500_script_set_discharge_treshold
+    parameters:
+      ble_device_nr: int
+      discharge: int
+    then:
+      - logger.log: 
+          format: "set discharge level: %i"
+          args: [ 'discharge' ]
+      - if:
+          condition:
+            lambda: 'return ( discharge <= 999 && discharge >= 0);'
+          then:
+            - script.execute: 
+                id: b2500_script_send_command
+                ble_device_nr: !lambda return ble_device_nr;
+                ble_cmd: 0x0C
+                ble_cmd_parm: !lambda return discharge;
+
+  ### power control with timer3 ( for tests )
+  - id: b2500_script_set_timer_power
+    parameters:
+      ble_device_nr: int
+      timer: int
+      power: int
+    then:
+      - logger.log:
+          level: INFO
+          format: "set Timer Power (Device: %i - Timer: %i ): %i"
+          args: [ 'ble_device_nr','timer','power' ]
+      - lambda: !
+          std::vector<char> rdat1 { 0x73, 0x1a, 0x23, 0x12 };
+          // 73 1a 23 12  T1 S1 S2 E1 E2 V1 V2    XOR
+          //              00 00 00 00 00 64 00
+          //              00 00 00 00 00 00 00
+          //              00 00 00 00 00 00 00    ??
+
+          {%- for storage in storages %}
+          {%- if storage.version >= 2 %}
+          if (ble_device_nr=={{ loop.index }}) {
+            for (int i=0;i<21;i++) {
+                rdat1.push_back((unsigned char)id(b2500_tmp_timers_{{ loop.index }}])[i]);              
+            }
+          }
+          {%- endif %}
+          {%- endfor %}
+          rdat1.at(4) = 0;
+          rdat1.at(11) = 0;
+          rdat1.at(18) = 1;
+          rdat1.at(19) = 0;
+          rdat1.at(20) = 0;
+          rdat1.at(21) = 24;
+          rdat1.at(22) = 0;
+          rdat1.at(23) = (power >> 0) & 0xFF;
+          rdat1.at(24) = (power >> 8) & 0xFF;
+          id(ble_command_raw_01).execute(ble_device_nr,rdat1);
+
+  - id: b2500_script_set_timer_enable
+    parameters:
+      ble_device_nr: int
+      timer: int
+      enable: int
+    then:
+      - logger.log:
+          level: INFO
+          format: "set Timer Enable (Device: %i - Timer: %i ): %i"
+          args: [ 'ble_device_nr','timer','enable' ]
+      - lambda: !
+          std::vector<char> rdat1 { 0x73, 0x1a, 0x23, 0x12 };
+          // 73 1a 23 12  T1 S1 S2 E1 E2 V1 V2    XOR
+          //              00 00 00 00 00 64 00
+          //              00 00 00 00 00 00 00
+          //              00 00 00 00 00 00 00    ??
+
+          {%- for storage in storages %}
+          {%- if storage.version >= 2 %}
+          if (ble_device_nr=={{ loop.index }}) {
+            for (int i=0;i<21;i++) {
+                rdat1.push_back((unsigned char)id(b2500_tmp_timers_{{ loop.index }})[i]);
+            }
+          }
+          {%- endif %}
+          {%- endfor %}
+          if ( timer == 0 ) { rdat1.at(4) = 0; rdat1.at(11) = 0; rdat1.at(18) = 0; }
+          if ( timer == 1 ) { rdat1.at(4) = enable; rdat1.at(18) = 0; }
+          if ( timer == 2 ) { rdat1.at(11) = enable; rdat1.at(18) = 0; }
+          if ( timer == 3 ) { rdat1.at(4) = 0; rdat1.at(11) = 0; rdat1.at(18) = enable; }
+          id(ble_command_raw_01).execute(ble_device_nr,rdat1);
+
+  - id: ble_notify_parse
+    parameters:
+      ble_device_nr: int
+      x: char[]
+    then:
+      - logger.log: 
+          level: INFO
+          format: "runtime parse: %i"
+          args: [ 'ble_device_nr' ]
+      - lambda: |-
+          ESP_LOGD("notify_parse", "Device: %i", ble_device_nr);
+          if (id(b2500_internal_console_dbg)) {
+            ESP_LOGD("parse", "x[3] = %i", x[3]);
+              for (auto b : x) {
+                ESP_LOGD("data", "%.2x \t %i \t %c", b,b,b);
+              }
+          }
+
+{%- if enable_hexdump %}
+          if (id(b2500_hexdump).state == true) {
+            ESP_LOG_BUFFER_HEXDUMP("hexdump", &x[0], x.size(), ESP_LOG_ERROR);
+          }
+{%- endif %}
+
+          // reset error counter
+          id(b2500_internal_error_count) = 0;
+
+          auto strTime = id(sntp_time).now().strftime("%d.%m.%Y %H:%M:%S");
+{%- for storage in storages %}
+          if (ble_device_nr=={{ loop.index }}) { id(b2500_device_last_response_{{ loop.index }}).publish_state(strTime); }
+{%- endfor %}
+
+          if ((std::count (x.begin(), x.end(), '_') == 16) || (std::count (x.begin(), x.begin() + 10, '_') == 3)) 
+          {   
+            ESP_LOGD("main", "Data: cmd 0x0F");
+            int pos = 0;
+            int soc = 0;
+            int t1 = 0;
+            int t2 = 0;
+            float cv = 0.0; 
+            float cmin = std::numeric_limits<float>::max();
+            float cmax = std::numeric_limits<float>::min();
+            float ct = 0.0;
+            int found = -1;
+            char delimiter = '_';
+            std::string xstr; 
+            std::vector<float> cellV;
+        
+            xstr.assign(x.begin(), x.end());                                // copy values from vector into string xstr, deep copy
+            xstr = xstr + delimiter;                                        // append delimiter to xstr 
+            found = xstr.find(delimiter);                                   // search for position of the first delimiter
+            while (found != -1)                                             // loop until no more delimiter found
+            { 
+              if(pos == 0) soc = atoi( xstr.substr(0, found).c_str());                                                                         // pos 0 don't care
+              if(pos == 1) t1 = atoi( xstr.substr(0, found).c_str());       // pos 1 get int value of temperature sensor 1
+              if(pos == 2) t2 = atoi( xstr.substr(0, found).c_str());       // pos 2 get int value of temperature sensor 2
+              if((pos >= 3) && (pos <= 16))                                 // pos 3-16 parse pos for the 14 cell voltages
+              {                                                             
+                ct = atof( xstr.substr(0, found).c_str());                  // get float value of pos x
+                cellV.push_back(ct);
+                //ESP_LOGD("cell voltage", ct.c_str());
+                cv += ct;                                                   // add actual value to var cv
+                if(ct > cmax) cmax = ct;                                    // check for higher value as stored in cmax
+                if(ct < cmin) cmin = ct;                                    // check for lower value as stored in cmin
+              }
+              xstr.erase(xstr.begin(), xstr.begin() + found + 1);           // remove parsed string part
+              found = xstr.find(delimiter);                                 // find next delimiter
+              pos++;                                                        // increment pos
+            }
+
+            /* calculate SoC from cell voltages
+                 cell empty = 3.0 Volt  =  0% SoC
+                 cell full  = 3.5 Volt  = 100% SoC
+            */
+
+            // float soccalc =  (cv/14000 - 3.0) * 200;
+            float lowlimit  = 3.0;                                           // low voltage limit
+            float highlimit = 3.5;                                           // high voltage limit
+                                                                    
+            float soccalc =  100*((cv/14000) 
+                              - highlimit)/(highlimit - lowlimit) + 100;     // equation of line with two points (0,lowlimit) (100,highlimit)
+
+
+            ESP_LOGI("cellVoltage","soc: %i, temp1: %i, temp2: %i",soc,t1,t2);
+            ESP_LOGI("cellVoltage","cell01: %.f, cell 02: %.f, cell 03: %.f, cell 04: %.f", cellV[0], cellV[1], cellV[2], cellV[3]);
+            ESP_LOGI("cellVoltage","cell05: %.f, cell 06: %.f, cell 07: %.f, cell 08: %.f", cellV[4], cellV[5], cellV[6], cellV[7]);
+            ESP_LOGI("cellVoltage","cell09: %.f, cell 10: %.f, cell 11: %.f, cell 12: %.f", cellV[8], cellV[9], cellV[10], cellV[11]);
+            ESP_LOGI("cellVoltage","cell13: %.f, cell 14: %.f", cellV[12], cellV[13]);
+
+
+            char mtopic[48];
+            for (int i=0; i<14; i++) {
+              snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/%02d/voltage",ble_device_nr,i+1);
+              //ESP_LOGD("cellVoltageX","%s : %f", mtopic, cellV[i]);
+              id(mqtt_client).publish(mtopic,to_string(cellV[i]/1000));
+            }
+
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/voltage",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(cv/1000));
+
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/cmin",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(cmin/1000));
+
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/cmax",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(cmax/1000));
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/cavg",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(cv/14000));
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/cdiff",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string((cmax-cmin)/1000));
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/soccalc",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(soccalc));
+
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/temp1",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(t1));
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/temp2",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(t2));
+
+           /*
+            id(bcsoc).publish_state(soc);                                    // SOC from device (%)
+            id(bcsoccalc).publish_state(soccalc);                            // SOC calculated from cell voltages (%)       
+            id(bctemp1).publish_state(t1);                                   // Temperature 1 (°C)
+            id(bctemp2).publish_state(t2);                                   // Temperature 2 (°C)
+            id(bccvsum).publish_state(cv/1000);                              // sum of cellvoltages = battery Voltage(V)
+            id(bccvmin).publish_state(cmin/1000);                            // lowest cellvoltage (V)
+            id(bccvmax).publish_state(cmax/1000);                            // highest cellvoltage (V)
+            id(bccvdiff).publish_state((cmax-cmin)/1000); 
+            id(bccvavg).publish_state(cv/14000);                             // avarage cellvoltage (V)
+            */
+
+          }   
+
+          else if (x[3] == 0x03) {
+            ESP_LOGD("main", "Data: runtimeInfo ");
+
+            //sensor
+            // pv_level 1 und 2
+            /*
+              [6][7]  PV-Eingangsleistung 1 (2Byte)
+              [8][9]  PV-Eingangsleistung 2 (2Byte)
+                      x[Y] | x[Z] << 8;
+            */
+            int pvPower1 = x[6] | x[7] << 8;
+            int pvPower2 = x[8] | x[9] << 8;
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_in1_power_{{ loop.index }}).publish_state(pvPower1); id(b2500_in2_power_{{ loop.index }}).publish_state(pvPower2); id(b2500_total_power_in_{{ loop.index }}).publish_state(pvPower1 + pvPower2);} 
+{%- endfor %}
+            id(b2500_total_in_power).publish_state({%- for storage in storages %}
+                {%- if loop.index0 > 0 %} + {% endif -%}
+                id(b2500_total_power_in_{{ loop.index }}).state
+              {%- endfor %});
+
+
+            // Batterie Stand in %
+            /*
+              [10][11]  Verbleibende Batteriekapazität in Prozent (2Byte)
+                        x[Y] | x[Z] << 8;
+            */
+            int batRemain = x[10] | x[11] << 8 ;
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_battery_remaining_percent_{{ loop.index }}).publish_state(batRemain / 10); }
+{%- endfor %}
+
+            // Entladen bei weniger als ??? Watt PV Eingang
+            /*
+              [19][20]  Entladeschwelle(2Byte)
+                        x[Y] | x[Z] << 8;
+            */
+            int disCharge = x[19] | x[20] << 8;
+            {%- for storage in storages %}
+              {%- if storage.version == 1 %}
+            if (ble_device_nr=={{ loop.index }}) { 
+              if (id(b2500_battery_discharge_threshold_{{ loop.index }}).state != disCharge ) { id(b2500_battery_discharge_threshold_{{ loop.index }}).publish_state(disCharge); }
+            }
+              {%- endif %}
+            {%- endfor %}
+
+            // Füllstand des Akkus in Wh
+            /*
+              [22][23]  Gesamtkapazität der Batterie (1Byte)
+                        x[Y] | x[Z] << 8;
+            */
+            int batCapacity = x[22] | x[23] << 8;
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_battery_remaining_capacity_{{ loop.index }}).publish_state(batCapacity); }
+{%- endfor %}
+
+            // Ausgangsleistung in Watt
+            /*
+              [24][25]  Ausgangsleistung 1(1Byte)
+              [26][27]  Ausgangsleistung 2(1Byte)
+                        x[Y] | x[Z] << 8;
+            */
+            int powerOut1 = x[24] | x[25] << 8;
+            int powerOut2 = x[26] | x[27] << 8;
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_out1_power_{{ loop.index }}).publish_state(powerOut1); id(b2500_out2_power_{{ loop.index }}).publish_state(powerOut2); id(b2500_total_power_out_{{ loop.index }}).publish_state(powerOut1 + powerOut2); }
+{%- endfor %}
+            id(b2500_total_out_power).publish_state({%- for storage in storages %}
+                {%- if loop.index0 > 0 %} + {% endif -%}
+                id(b2500_total_power_out_{{ loop.index }}).state
+              {%- endfor %});
+
+            // Geräte Version ( Firmware ? )
+            /*
+              [12]  B2500 Geräteversion (1Byte)
+                    0-255 ( ~ anzeige als /100 )
+            */
+            float dev_version = x[12];
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_device_fw_version_{{ loop.index }}).publish_state(dev_version / 100); }
+{%- endfor %}
+
+            // Temperature Sensors 
+            /*
+              [33]  Temp 1
+              [35]  Temp 2
+                    
+            */
+            int dev_temp1 = x[33];
+            int dev_temp2 = x[35];
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_device_temperature1_{{ loop.index }}).publish_state(dev_temp1); id(b2500_device_temperature2_{{ loop.index }}).publish_state(dev_temp2);}
+{%- endfor %}
+
+            // 
+            /*
+              [18]  Dod (1Byte)
+                    0-100 Prozentualer Anteil der Entladeleistung an der Nennleistung
+            */
+            int dod_level = x[18];
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { 
+              if (id(b2500_battery_dod_{{ loop.index }}).state != dod_level) { id(b2500_battery_dod_{{ loop.index }}).publish_state(dod_level); }
+            }
+{%- endfor %}
+
+            // binary sensor / bool
+            // pv 1 und 2 in
+            /*
+                [x4]  PV IN 1 Zustand (1Byte) 
+                [x5]  PV IN 2 Zustand (1Byte) 
+                      0x00 （off）
+                      0x01 （Aufladung）
+                      0x02 （transparent für Wechselrichter）
+            */
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { 
+              if( x[4] == 0x00 ) { id(b2500_pv1_active_{{ loop.index }}).publish_state(false);id(b2500_pv1_transparent_{{ loop.index }}).publish_state(false); }
+              if( x[4] == 0x01 ) { id(b2500_pv1_active_{{ loop.index }}).publish_state(true); id(b2500_pv1_transparent_{{ loop.index }}).publish_state(false); }
+              if( x[4] == 0x02 ) { id(b2500_pv1_active_{{ loop.index }}).publish_state(true); id(b2500_pv1_transparent_{{ loop.index }}).publish_state(true); }
+              if( x[5] == 0x00 ) { id(b2500_pv2_active_{{ loop.index }}).publish_state(false);id(b2500_pv2_transparent_{{ loop.index }}).publish_state(false); }
+              if( x[5] == 0x01 ) { id(b2500_pv2_active_{{ loop.index }}).publish_state(true); id(b2500_pv2_transparent_{{ loop.index }}).publish_state(false); }
+              if( x[5] == 0x02 ) { id(b2500_pv2_active_{{ loop.index }}).publish_state(true); id(b2500_pv2_transparent_{{ loop.index }}).publish_state(true); }        
+            }
+{%- endfor %}
+
+            // pv 2 durchleiten
+            /*
+                [13]  Einstellung des Ladevorgangs (1Byte)
+                      0x00 （PV1 Aufladung PV2 Durchleitung）
+                      0x01 （Volles Laden und Entladen）
+            */
+{%- for storage in storages %}
+{%- if storage.version == 1 %}
+            if (ble_device_nr=={{ loop.index }}) { 
+              if( x[13] == 0x00 ) { id(b2500_pv2_passthrough_enabled_{{ loop.index }}).turn_on(); }
+              if( x[13] == 0x01 ) { id(b2500_pv2_passthrough_enabled_{{ loop.index }}).turn_off(); }
+            }
+{%- endif %}
+{%- endfor %}
+
+            // Entlademodus 
+            /*
+                [13]  Einstellung des Ladevorgangs (1Byte)
+                      0x00 （Simultanes Laden/Entladen）
+                      0x01 （Erst Laden, dann Entladen）
+            */
+
+{%- for storage in storages %}
+{%- if storage.version >= 2 %}
+            if (ble_device_nr=={{ loop.index }}) { 
+              if( x[13] == 0x00 ) { id(b2500_device_loadfirst_{{ loop.index }}).turn_off(); }
+              if( x[13] == 0x01 ) { id(b2500_device_loadfirst_{{ loop.index }}).turn_on(); }
+            }
+{%- endif %}
+{%- endfor %}
+
+            // RESERVED ( wifi / mqtt )
+            /*
+                [15]  Reserve(1Byte)
+                      0x00 wifi funktioniert nicht
+                      0x01 wifi ok, mqtt nicht verbunden
+                      0x02 wifi ok, mqtt connect ok
+                      NEW:
+                      maybe wifi / mqtt
+                      00 = false / false
+                      01 = true / false
+                      02 = false / true
+                      03 = true / true
+                      -------
+                      first part means not wifi connected ?!?!? 
+                      00 = ??? / mqtt not connected
+                      01 = ??? / mqtt not connected
+                      02 = ??? / mqtt connected
+                      03 = ??? / mqtt connected                      
+            */
+            // wifi and mqtt
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) {             
+              if( x[15] == 0x00 ) { id(b2500_device_wifi_ok_{{ loop.index }}).publish_state(false); id(b2500_device_mqtt_ok_{{ loop.index }}).publish_state(false); }
+              if( x[15] == 0x01 ) { id(b2500_device_wifi_ok_{{ loop.index }}).publish_state(true);  id(b2500_device_mqtt_ok_{{ loop.index }}).publish_state(false); }
+              if( x[15] == 0x02 ) { id(b2500_device_wifi_ok_{{ loop.index }}).publish_state(false);  id(b2500_device_mqtt_ok_{{ loop.index }}).publish_state(true);  }
+              if( x[15] == 0x03 ) { id(b2500_device_wifi_ok_{{ loop.index }}).publish_state(true);  id(b2500_device_mqtt_ok_{{ loop.index }}).publish_state(true);  }
+            }
+{%- endfor %}
+
+            // power 1 und 2 enabled/disabled
+            /*
+                [14]  Entlade-Modus / Enabled (1Byte)
+                      0x00 OUT1&OUT2 Sperren
+                      0x01 nur OUT1 Freigabe
+                      0x02 nur OUT2 Freigabe
+                      0x03 OUT1&OUT2 Freigabe        
+            */
+{%- for storage in storages %}
+{%- if storage.version == 1 %}
+            static int power{{ loop.index }}_old = 0;  
+            if (ble_device_nr=={{ loop.index }}) { 
+              //ESP_LOGD("POWER{{ loop.index }}_OUT", "old: %i, new: %i", power{{ loop.index }}_old,x[14]);
+              if ( x[14] != power{{ loop.index }}_old ) {
+                if( x[14] == 0x00 ) { id(b2500_out1_active_{{ loop.index }}).turn_off(); id(b2500_out2_active_{{ loop.index }}).turn_off();}
+                if( x[14] == 0x01 ) { id(b2500_out1_active_{{ loop.index }}).turn_on();  id(b2500_out2_active_{{ loop.index }}).turn_off();}
+                if( x[14] == 0x02 ) { id(b2500_out1_active_{{ loop.index }}).turn_off(); id(b2500_out2_active_{{ loop.index }}).turn_on(); }
+                if( x[14] == 0x03 ) { id(b2500_out1_active_{{ loop.index }}).turn_on();  id(b2500_out2_active_{{ loop.index }}).turn_on(); }
+                power{{ loop.index }}_old = x[14];
+              }
+            }
+{%- endif %}
+{%- endfor %}
+
+            // power 1 und 2 active
+            /*
+                [16]  Ausgang Port 1 Status (1Byte)
+                [17]  Ausgang Port 2 Status (1Byte)
+                      0x00（Aus）
+                      0x01（Entladung）
+            */
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) {
+              if( x[16] == 0x00 ) { id(b2500_power1_active_{{ loop.index }}).publish_state(false);}
+              if( x[16] == 0x01 ) { id(b2500_power1_active_{{ loop.index }}).publish_state(true); }
+              if( x[17] == 0x00 ) { id(b2500_power2_active_{{ loop.index }}).publish_state(false);}
+              if( x[17] == 0x01 ) { id(b2500_power2_active_{{ loop.index }}).publish_state(true); }
+            }
+{%- endfor %}
+            // zusatzakku 1 und 2
+            /*
+                [28]  Ist Netzgerät 1 angeschlossen (1Byte)
+                [29]  Ist Netzgerät 2 angeschlossen (1Byte)
+                      0x00（Kein Akkupack angeschlossen）
+                      0x01（Verbinden Sie das Netzteil）        
+            */
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) {            
+              if( x[28] == 0x00 ) { id(b2500_extern1_connected_{{ loop.index }}).publish_state(false);}
+              if( x[28] == 0x01 ) { id(b2500_extern1_connected_{{ loop.index }}).publish_state(true); }
+              if( x[29] == 0x00 ) { id(b2500_extern2_connected_{{ loop.index }}).publish_state(false);}
+              if( x[29] == 0x01 ) { id(b2500_extern2_connected_{{ loop.index }}).publish_state(true); }
+            }
+{%- endfor %}
+
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { 
+              if( x[21] == 0x00 ) { id(b2500_device_scene_{{ loop.index }}).publish_state("Tag"); }
+              if( x[21] == 0x01 ) { id(b2500_device_scene_{{ loop.index }}).publish_state("Nacht"); }
+              if( x[21] == 0x02 ) { id(b2500_device_scene_{{ loop.index }}).publish_state("Morgens/Abends"); }
+            }
+{%- endfor %}
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { 
+              if( x[30] == 0x00 ) { id(b2500_device_region_{{ loop.index }}).publish_state("EU"); }
+              if( x[30] == 0x01 ) { id(b2500_device_region_{{ loop.index }}).publish_state("China"); }
+              if( x[30] == 0x02 ) { id(b2500_device_region_{{ loop.index }}).publish_state("non-EU"); }
+              if( x[30] == 0xff ) { id(b2500_device_region_{{ loop.index }}).publish_state("not SET"); }
+            }
+{%- endfor %}
+
+            // internal mode description
+            /*
+                txt_A80_1 / txt_A80_2
+                0x00 OFF
+                0x01 CHARGE
+                0x02 DISCHARGE 
+                0x03 FLOW 
+                0x04 PT2 
+                0x05 TRANS
+            */
+      
+
+{%- for storage in storages %}
+{%- if storage.version >= 2 %}
+            if (ble_device_nr=={{ loop.index }}) { 
+              if ( id(b2500_pv1_transparent_{{ loop.index }}).state == true  && id(b2500_pv2_transparent_{{ loop.index }}).state == true ) { id(b2500_device_mode_{{ loop.index }}).publish_state("trans"); } 
+              else { 
+                if ( id(b2500_pv1_transparent_{{ loop.index }}).state == false && id(b2500_pv2_transparent_{{ loop.index }}).state == true ) { id(b2500_device_mode_{{ loop.index }}).publish_state("pt2"); } 
+                else {
+                  if ( id(b2500_total_power_in_{{ loop.index }}).state == 0 && id(b2500_total_power_out_{{ loop.index }}).state == 0) { id(b2500_device_mode_{{ loop.index }}).publish_state("off"); }
+                  if ( id(b2500_total_power_in_{{ loop.index }}).state > 0  && id(b2500_total_power_out_{{ loop.index }}).state == 0) { id(b2500_device_mode_{{ loop.index }}).publish_state("charge"); }
+                  if ( id(b2500_total_power_in_{{ loop.index }}).state == 0 && id(b2500_total_power_out_{{ loop.index }}).state > 0)  { id(b2500_device_mode_{{ loop.index }}).publish_state("discharge"); }
+                  if ( id(b2500_total_power_in_{{ loop.index }}).state > 0  && id(b2500_total_power_out_{{ loop.index }}).state > 0)  { id(b2500_device_mode_{{ loop.index }}).publish_state("flow"); }
+                }
+              }
+            }
+{%- endif %}
+{%- endfor %}
+          }
+          else if (x[3] == 0x04) {
+            ESP_LOGD("main", "Data: deviceInfo ");
+            //for (auto b : x) {
+            //  ESP_LOGD("data", "%i", b);
+            //}
+            //  's<#?type=<5>,id=<24>,mac=<12>t'
+            // ESP_LOGD("data", "%s", vType);
+            int data_len = x.size();
+
+            unsigned char vType[8];
+            for (int i=9;i<14;i++) {
+              vType[i-9] = x[i];
+            }
+            vType[5] = 0x00;
+        
+            unsigned char vID[32];
+            for (int i=18;i<42;i++) {
+              vID[i-18] = x[i];
+            }
+            vID[24]=0x00;
+        
+            unsigned char vMac[16];
+            for (int i=47;i<59;i++) {
+              vMac[i-47] = x[i];
+            }
+            vMac[12] = 0x00;
+
+            ESP_LOGD("deviceInfo", "%i: %s [%s] %s", data_len,vType,vMac,vID);
+            std::string sType(reinterpret_cast<char*>(vType));
+            std::string sID(reinterpret_cast<char*>(vID));
+            std::string sMac(reinterpret_cast<char*>(vMac));
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_device_type_{{ loop.index }}).publish_state(sType); id(b2500_device_id_{{ loop.index }}).publish_state(sID); id(b2500_device_ble_mac_{{ loop.index }}).publish_state(sMac); }
+{%- endfor %}
+          }
+          // get wifi info - "admin mode ?!?" only
+          else if (x[3] == 0x08) {
+            ESP_LOGD("main", "Data: wifiInfo ");
+            int data_len = x.size();
+            unsigned char vSSID[32];
+
+            for (int i=4;i<data_len-1;i++) {
+              vSSID[i-4] = x[i];
+            }
+            vSSID[data_len-5] = 0x00;
+            ESP_LOGD("deviceInfo", "%i: %s", data_len,vSSID);
+            std::string sSSID(reinterpret_cast<char*>(vSSID));
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_device_wifi_ssid_{{ loop.index }}).publish_state(sSSID); }
+{%- endfor %}
+
+            for (auto b : x) {
+              ESP_LOGD("data", "%x \t %i \t %x", b,b,b);
+            }
+          }
+          else if (x[3] == 0x09) {
+            ESP_LOGD("main", "Data: Signalstrength/SSID");
+            int data_len = x.size();
+            unsigned int vSignal;
+            unsigned char vSSID[32];
+
+            vSignal = int(x[4]);
+
+            for (int i=6;i<data_len;i++) {
+              vSSID[i-6] = char(x[i]);
+            }
+            vSSID[data_len-6] = 0x00;
+            ESP_LOGI("Signal/SSID", "%i: %s", vSignal,vSSID);
+            std::string sSSID(reinterpret_cast<char*>(vSSID));
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_device_wifi_ssid_{{ loop.index }}).publish_state(sSSID); }
+{%- endfor %}
+          }          
+          else if (x[3] == 0x23) {          
+            ESP_LOGD("main", "Data: fc41d FW ");            
+            int data_len = x.size();
+            unsigned char vFC41D_FW[16];
+
+            for (int i=4;i<data_len-2;i++) {
+              vFC41D_FW[i-4] = char(x[i]);
+            }
+            vFC41D_FW[data_len-6] = 0x00;
+            ESP_LOGI("FC41D FW", "%i: %s", data_len,vFC41D_FW);
+            std::string sFC41D_FW(reinterpret_cast<char*>(vFC41D_FW));
+{%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) { id(b2500_device_fc41d_fw_{{ loop.index }}).publish_state(sFC41D_FW); }
+{%- endfor %}
+          }
+          else if (x[3] == 0x30) {
+            ESP_LOGD("main", "Data: cmd 0x30");
+            int data_len = x.size();
+            ESP_LOGD("data 30 - raw" , "Device %i",ble_device_nr);
+            ESP_LOGD("data 30 - raw" , "0x%.2x 0x%.2x 0x%.2x 0x%.2x", x[0], x[1], x[2], x[3]);
+            for(int i=4;i<data_len-1;i++) {
+              float data1 = x[i+1] | x[i+2] << 8 | x[i+3] << 10 | x[i+4] << 18;
+              float data2 = x[i+5] | x[i+6] << 8 | x[i+7] << 10 | x[i+8] << 18;
+              //ESP_LOGD("data 30 - raw" , "0x%.2x - 0x%.2x 0x%.2x 0x%.2x 0x%.2x - 0x%.2x 0x%.2x 0x%.2x 0x%.2x", x[i], x[i+1], x[i+2], x[i+3], x[i+4],x[i+5],x[i+6],x[i+7],x[i+8]);
+              ESP_LOGD("data 30 - raw" , "0x%.2x - %.f - %.f", x[i], data1,data2);
+              i += 8;
+            }
+{%- for storage in storages %}
+            //if (ble_device_nr=={{ loop.index }}) { id(ble_{{ loop.index }}_wait_process) = 0; }
+{%- endfor %}
+          }
+          else if (x[3] == 0x13 && {{ isV2('ble_device_nr') }}) {
+            ESP_LOGI("main", "Data: cmd 0x13 (timer) - Device: %i",ble_device_nr );
+            int data_len = x.size();
+            ESP_LOGI("timer" , "1: %i: %02i:%02i - %02i:%02i ( %3i W )", x[5], x[6],x[7],x[8],x[9],(x[11] << 8) | x[10]);
+            ESP_LOGI("timer" , "2: %i: %02i:%02i - %02i:%02i ( %3i W )", x[12], x[13],x[14],x[15],x[16],(x[18] << 8) | x[17]);
+            ESP_LOGI("timer" , "3: %i: %02i:%02i - %02i:%02i ( %3i W )", x[19], x[20],x[21],x[22],x[23],(x[25] << 8) | x[24]);
+            {%- for storage in storages %}
+            {%- if storage.version >= 2 %}
+            if (ble_device_nr=={{ loop.index }}) {
+              for (int i=5;i<26;i++) {
+                id(b2500_tmp_timers_{{ loop.index }})[i-5] = x[i];
+              }
+            }
+            {%- endif %}
+            {%- endfor %}
+
+            char mtopic[48]; 
+            char mvalue[48]; 
+            int mpower = 0;
+            #
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/1/enabled",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(x[5]));
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/1/value",ble_device_nr);
+            snprintf(mvalue, 48,"%02i:%02i - %02i:%02i ( %3i W )",x[6],x[7],x[8],x[9],(x[11] << 8) | x[10]);
+            id(mqtt_client).publish(mtopic,to_string(mvalue));
+            mpower = x[11] << 8 | x[10] ;
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/1/power",ble_device_nr);        
+            id(mqtt_client).publish(mtopic,to_string(mpower));
+            #
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/2/enabled",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(x[12]));
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/2/value",ble_device_nr);
+            snprintf(mvalue, 48,"%02i:%02i - %02i:%02i ( %3i W )",x[13],x[14],x[15],x[16],(x[18] << 8) | x[17]);
+            id(mqtt_client).publish(mtopic,to_string(mvalue));
+            mpower = x[18] << 8 | x[17] ;
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/2/power",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(mpower));
+            #
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/3/enabled",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(x[19]));
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/3/value",ble_device_nr);
+            snprintf(mvalue, 48,"%02i:%02i - %02i:%02i ( %3i W )",x[20],x[21],x[22],x[23],(x[25] << 8) | x[24]);
+            id(mqtt_client).publish(mtopic,to_string(mvalue));
+            mpower = x[25] << 8 | x[24] ;
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/3/power",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(mpower));
+          }
+          else if (x[3] == 0x01) {
+            ESP_LOGD("main", "Data: cmd 0x01");
+            ESP_LOG_BUFFER_HEXDUMP("hexdump", &x[0], x.size(), ESP_LOG_ERROR);
+          }
+          else if (x[3] == 0x81) {
+            ESP_LOGD("main", "Data: cmd 0x81");
+            ESP_LOG_BUFFER_HEXDUMP("hexdump", &x[0], x.size(), ESP_LOG_ERROR);
+          }
+          else {
+            /*int data_len = x.size();
+            for(int i=0;i<data_len;i++) {
+              int d1 = x[i];
+              ESP_LOGD("unknown" , "%x \t %i \t %c" , d1, d1, char(d1));
+            }*/
+            ESP_LOG_BUFFER_HEXDUMP("hexdump", &x[0], x.size(), ESP_LOG_ERROR);
+          }
+
+{%- if enable_powerzero %}
+  - id: power_zero
+    then:
+    ###   Nulleinspeisung - Powerzero by neromatrix
+    ###                   - mqtt only adaption by noone2k
+    ###   first attempt, use at your own risk !
+    ###   Ver. 0.01m
+    - lambda: |- 
+          if(id(b2500_npw_enabled).state) 
+          {
+            int ptu_min_value =     5;
+            int ptu_max_value =     id(b2500_mqtt_opendtu_limit_max).state; // 50; // <- nax rel value -> id(npw2500_zeropower_max_powerlimit_rel).state;
+            int ptu_limit =         0;
+            int ptu_max_power =     600; // max:2 (x:4*2 for 4port using 2port)
+            int grid_to_ptu_ratio = ptu_max_power/100;
+            int grid_min_value =    20;
+            static int ptu_old_limit = 0;
+            /*
+              <- actual power mqtt -> prev. int(id(npw2500_grid_power).state);
+              keep over grid_min_value
+            */ 
+            int grid_value = int(id(mqtt_grid_power).state) - grid_min_value;;
+
+            ptu_limit = grid_value / grid_to_ptu_ratio + ptu_old_limit;
+            
+            if(ptu_limit > ptu_max_value) ptu_limit = ptu_max_value;
+            if(ptu_limit < ptu_min_value) ptu_limit = ptu_min_value;
+
+            // change only if diff more than +/-1%
+            if ( ptu_limit - ptu_old_limit > 1 || ptu_old_limit - ptu_limit > 1 ) {
+              ESP_LOGD("npw2500","PowerZero PTU old limit  %d, PTU new limit %d, Grid value %d " ,ptu_old_limit, ptu_limit, grid_value);
+              ptu_old_limit = ptu_limit;  
+              //char mtopic[64];
+              //snprintf(mtopic, 64,"openDTU/116482876939/cmd/limit_persistent_relative");
+              //id(mqtt_client).publish(mtopic,to_string(ptu_limit));
+              id(b2500_mqtt_opendtu_limit).publish_state(ptu_limit);
+             }
+          }
+{%- endif %}
+{%- if enable_enforce_dod %}
+  - id: ble_enforce_dod
+    parameters:
+      ble_device_nr: int
+      x: int
+    then:
+    - lambda: |-
+        if (id(b2500_esp32_enforce_dod_enabled).state) {
+          int dod_level = 0;
+{%- for storage in storages %}
+          if (ble_device_nr == {{ loop.index }}) { dod_level = id(b2500_battery_dod_{{ loop.index }}).state; }
+{%- endfor %}
+          // test: works good  +1 for dod ... else 100 - dod_level
+          int res = 101 - dod_level;
+          if (x <= res ) {
+            ESP_LOGD("enforce_dod","++++ ble_device_nr = %d, batterie_level = %d, dod_level = %d, res = %d" ,ble_device_nr,x,dod_level,res);
+{%- for storage in storages %}
+            if (ble_device_nr == {{ loop.index }}) {
+              if (id(b2500_out1_active_{{ loop.index }}).state || id(b2500_out2_active_{{ loop.index }}).state ) {
+                //id(b2500_script_send_command).execute(ble_device_nr,0x0E,0x00);                
+                //id(b2500_out1_active_{{ loop.index }}).turn_off();
+                //id(b2500_out2_active_{{ loop.index }}).turn_off();
+                id(b2500_out1_active_{{ loop.index }}).publish_state(false);
+                id(b2500_out2_active_{{ loop.index }}).publish_state(false);
+              }
+            }
+{%- endfor %}
+            //id(b2500_script_set_powerout).execute(ble_device_nr);
+          } 
+        }
+{%- endif %}

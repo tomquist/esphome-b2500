@@ -1,0 +1,70 @@
+name: Build ESPHome Firmware
+run-name: >
+  B2500 [${{
+    github.event.client_payload.identifier &&
+    github.event.client_payload.identifier || 'N/A' }}]
+
+on:
+  repository_dispatch:
+    types:
+      - build_esphome
+
+jobs:
+  build_esphome:
+    runs-on: ubuntu-latest
+    env:
+      ENCRYPTED_ZIP_PASSWORD: ${{ github.event.client_payload.password }}
+      ENCRYPTED_CONFIG: ${{ github.event.client_payload.config }}
+      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install nunjucks
+
+      - name: Decrypt the ZIP password
+        id: decrypt_password
+        run: |
+          echo "${{ env.PRIVATE_KEY }}" > private_key.pem
+          echo "${{ env.ENCRYPTED_ZIP_PASSWORD }}" > encrypted_password.txt
+          DECRYPTED_PASSWORD=$(openssl rsautl -decrypt -inkey private_key.pem -in <(base64 -d encrypted_password.txt) -oaep)
+          echo "PASSWORD=$DECRYPTED_PASSWORD" >> $GITHUB_ENV
+          echo "::add-mask::$DECRYPTED_PASSWORD"
+
+      - name: Render ESPHome configuration
+        id: generate_config
+        run: |
+          node render.js
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+
+      - name: Install ESPHome
+        run: |
+          python -m pip install --upgrade pip
+          pip install esphome
+
+      - name: Build firmware
+        id: esphome-build
+        uses: esphome/build-action@v2
+        with:
+          yaml_file: device.yaml
+
+      - name: Zip the firmware with a password
+        run: |
+          zip -P "$PASSWORD" firmware.zip ${{ steps.esphome-build.outputs.name }}/*
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: esphome-firmware-${{ github.event.client_payload.identifier }}
+          path: firmware.zip
+
