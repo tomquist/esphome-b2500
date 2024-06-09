@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/esphome-b2500/static/css/main.e6c13ad2.css",
+    "main.js": "/esphome-b2500/static/js/main.302a4279.js",
+    "static/js/510.2a1c45f2.chunk.js": "/esphome-b2500/static/js/510.2a1c45f2.chunk.js",
+    "index.html": "/esphome-b2500/index.html",
+    "main.e6c13ad2.css.map": "/esphome-b2500/static/css/main.e6c13ad2.css.map",
+    "main.302a4279.js.map": "/esphome-b2500/static/js/main.302a4279.js.map",
+    "510.2a1c45f2.chunk.js.map": "/esphome-b2500/static/js/510.2a1c45f2.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e6c13ad2.css",
+    "static/js/main.302a4279.js"
+  ]
+}
