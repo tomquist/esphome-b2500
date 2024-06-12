@@ -334,7 +334,7 @@ button:
 
   - platform: template
     id: b2500_button_factory_settings_{{ loop.index }}
-    name: "{{ loop.index }}: Reset to Factory Settings"
+    name: "{{ yaml_string(storage.name) }}: Reset to Factory Settings"
     command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/factory_settings/set"
     disabled_by_default: True
     on_press:
@@ -595,7 +595,7 @@ switch:
 {%- if storage.version == 1 %}
   - platform: template
     id: b2500_pv2_passthrough_enabled_{{ loop.index }}
-    name: "{{ yaml_string(storage.name) }}:: PV2 Passtrough Enabled"
+    name: "{{ yaml_string(storage.name) }}: PV2 Passtrough Enabled"
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/passtrough"
     command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/passtrough/set"
     optimistic: True
@@ -705,7 +705,7 @@ text_sensor:
     id: b2500_device_id_{{ loop.index }}
     icon: mdi:identifier
   - platform: template
-    name: "{{ yaml_string(storage.name) }}: MAC"
+    name: "{{ yaml_string(storage.name) }}: MAC Address"
     id: b2500_device_ble_mac_{{ loop.index }}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/ble_mac"
     icon: mdi:network
