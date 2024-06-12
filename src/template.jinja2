@@ -18,7 +18,6 @@
 {%- set manual_ip = manual_ip or {} %}
 {%- set enable_manual_ip = enable_manual_ip or False %}
 {%- set timezone = timezone or 'Europe/Berlin' %}
-{%- set enable_cmd13 = enable_cmd13 or False %}
 {%- set enable_powerzero = enable_powerzero or False %}
 {%- set enable_enforce_dod = enable_enforce_dod or False %}
 {%- set enable_cellquery = enable_cellquery or False %}
@@ -203,8 +202,6 @@ interval:
       - script.stop: ble_process_cmd0F
       - script.execute: ble_process_cmd0F
       - script.wait: ble_process_cmd0F
-{%- endif %}
-{%- if enable_cmd13 %}
       - delay: 1500ms
       - script.stop: ble_process_cmd13
       - script.execute: ble_process_cmd13

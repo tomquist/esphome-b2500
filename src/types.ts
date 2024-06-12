@@ -76,7 +76,6 @@ export interface FormValues {
     enable_enforce_dod: boolean;
     enable_cellquery: boolean;
     enable_experimental_commands: boolean;
-    enable_cmd13: boolean;
     enable_cmd30: boolean;
     enable_esp_temperature: boolean;
     enable_set_mqtt: boolean;

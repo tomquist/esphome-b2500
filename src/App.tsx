@@ -66,7 +66,6 @@ const defaultFormValues: FormValues = {
     restart_after_error_count: 8,
   },
   enable_cellquery: false,
-  enable_cmd13: false,
   enable_cmd30: false,
   enable_esp_temperature: false,
   enable_powermeter: false,

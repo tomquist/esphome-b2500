@@ -370,11 +370,6 @@ const ConfigForm: React.FC<ConfigFormProps> = ({ formValues, onFormChange }) => 
           )}
           <BooleanField value={formValues}
             onChange={handleInputChange}
-            prop="enable_cmd13"
-            label="Enable CMD13"
-          />
-          <BooleanField value={formValues}
-            onChange={handleInputChange}
             prop="enable_cmd30" label="Enable CMD30" />
           <BooleanField
             value={formValues}
