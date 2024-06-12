@@ -837,12 +837,12 @@ sensor:
     sensor: temp_analog_reading
     configuration: DOWNSTREAM
     resistor: 10kOhm
-{%- endif %}
-{%- if enable_powermeter %}
   - platform: adc
     id: temp_analog_reading
     pin: GPIO3
     attenuation: 11db
+{%- endif %}
+{%- if enable_powermeter %}
   - platform: bl0942
     uart_id: uart_bus
     voltage:
