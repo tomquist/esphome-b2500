@@ -1448,6 +1448,7 @@ script:
 {%- endfor %}
 {%- endif %}
 
+{%- if enable_cellquery %}
   - id: ble_process_cmd13
     then:
 {%- for storage in storages %}
@@ -1471,6 +1472,7 @@ script:
                   - script.wait: ble_runtime_query13
 {%- endif %}
 {%- endfor %}
+{%- endif %}
 
 {%- if enable_cmd30 %}
   - id: ble_process_cmd30
