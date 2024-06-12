@@ -2369,6 +2369,7 @@ script:
           if (x <= res ) {
             ESP_LOGD("enforce_dod","++++ ble_device_nr = %d, batterie_level = %d, dod_level = %d, res = %d" ,ble_device_nr,x,dod_level,res);
 {%- for storage in storages %}
+{%- if storage.version == 1 %}
             if (ble_device_nr == {{ loop.index }}) {
               if (id(b2500_out1_active_{{ loop.index }}).state || id(b2500_out2_active_{{ loop.index }}).state ) {
                 //id(b2500_script_send_command).execute(ble_device_nr,0x0E,0x00);                
@@ -2378,6 +2379,7 @@ script:
                 id(b2500_out2_active_{{ loop.index }}).publish_state(false);
               }
             }
+{%- endif %}
 {%- endfor %}
             //id(b2500_script_set_powerout).execute(ble_device_nr);
           } 
