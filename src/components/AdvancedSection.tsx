@@ -155,6 +155,13 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
                 onChange={handleWebServerChange}
                 fullWidth
                 margin="normal"
+                helperText={
+                  <>
+                    Note that the file must be in the same directory as the
+                    config file. If you intend to use the automatic build
+                    system, this must be set to <code>./v2/www.js</code>.
+                  </>
+                }
               />
             </Grid>
           </Grid>
