@@ -47,7 +47,7 @@ const StorageForm: React.FC<StorageFormProps> = ({
       hexOnly
         .match(/.{1,2}/g)
         ?.join(':')
-        .substr(0, 17) || ''
+        .slice(0, 17) ?? ''
     );
   };
 
@@ -76,67 +76,80 @@ const StorageForm: React.FC<StorageFormProps> = ({
   return (
     <Box mt={2}>
       <Typography variant="h6">Storages</Typography>
-      {storages.map((storage, index) => (
-        <Box key={index} mb={2} border={1} borderRadius={5} padding={2}>
-          <Typography variant="subtitle1">{index + 1}. Storage</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={4}>
-              <TextField
-                label="Name"
-                value={storage.name}
-                onChange={(e) =>
-                  handleStorageChange(index, 'name', e.target.value)
-                }
-                fullWidth
-                margin="normal"
-              />
+      {storages.map((storage, index) => {
+        let nameValid = storage.name.trim() === '';
+        let versionValid =
+          !storage.version || storage.version < 1 || storage.version > 2;
+        let macValid = !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(
+          storage.mac_address
+        );
+        return (
+          <Box key={index} mb={2} border={1} borderRadius={5} padding={2}>
+            <Typography variant="subtitle1">{index + 1}. Storage</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={4}>
+                <TextField
+                  label="Name"
+                  value={storage.name}
+                  onChange={(e) =>
+                    handleStorageChange(index, 'name', e.target.value)
+                  }
+                  fullWidth
+                  margin="normal"
+                  required
+                  error={nameValid}
+                  helperText={nameValid ? 'Name is required' : ''}
+                />
+              </Grid>
+              <Grid item xs={4}>
+                <TextField
+                  label="Version"
+                  type="number"
+                  value={storage.version}
+                  onChange={(e) =>
+                    handleStorageChange(
+                      index,
+                      'version',
+                      parseInt(e.target.value, 10)
+                    )
+                  }
+                  fullWidth
+                  margin="normal"
+                  inputProps={{ min: 1, max: 2 }}
+                  required
+                  error={versionValid}
+                  helperText={'Version must be 1 or 2'}
+                />
+              </Grid>
+              <Grid item xs={4}>
+                <TextField
+                  label="MAC Address"
+                  value={storage.mac_address}
+                  onChange={(e) =>
+                    handleMacAddressChange(index, e.target.value)
+                  }
+                  onKeyDown={handleMacAddressKeyDown(index)}
+                  fullWidth
+                  margin="normal"
+                  error={macValid}
+                  required
+                  helperText="You can find the MAC address in the PowerZero app by pressing on the device name on the top left corner of the screen."
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => handleRemoveStorage(index)}
+                  disabled={storages.length <= minStorages}
+                >
+                  Remove
+                </Button>
+              </Grid>
             </Grid>
-            <Grid item xs={4}>
-              <TextField
-                label="Version"
-                type="number"
-                value={storage.version}
-                onChange={(e) =>
-                  handleStorageChange(
-                    index,
-                    'version',
-                    parseInt(e.target.value, 10)
-                  )
-                }
-                fullWidth
-                margin="normal"
-                inputProps={{ min: 1, max: 2 }}
-              />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                label="MAC Address"
-                value={storage.mac_address}
-                onChange={(e) => handleMacAddressChange(index, e.target.value)}
-                onKeyDown={handleMacAddressKeyDown(index)}
-                fullWidth
-                margin="normal"
-                error={
-                  !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(
-                    storage.mac_address
-                  )
-                }
-                helperText="You can find the MAC address in the PowerZero app by pressing on the device name on the top left corner of the screen."
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <Button
-                variant="contained"
-                color="secondary"
-                onClick={() => handleRemoveStorage(index)}
-                disabled={storages.length <= minStorages}
-              >
-                Remove
-              </Button>
-            </Grid>
-          </Grid>
-        </Box>
-      ))}
+          </Box>
+        );
+      })}
       {storages.length < maxStorages && (
         <Button variant="contained" color="primary" onClick={handleAddStorage}>
           Add Storage

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   CssBaseline,
@@ -8,6 +8,7 @@ import {
   Paper,
   Typography,
   Button,
+  Tooltip,
 } from '@mui/material';
 import { FileCopy, Download, Build } from '@mui/icons-material';
 import nunjucks from 'nunjucks';
@@ -18,7 +19,12 @@ import { useDebounce } from './hooks/useDebounce';
 import SyntaxHighlighterComponent from './components/SyntaxHighlighterComponent';
 import ConfigForm from './components/ConfigForm';
 import BuildModal from './components/BuildModal';
-import { defaultFormValues, mergeDeep, newIssueLink } from './utils';
+import {
+  defaultFormValues,
+  mergeDeep,
+  newIssueLink,
+  validateConfig,
+} from './utils';
 
 nunjucks.configure({ autoescape: false });
 
@@ -49,26 +55,31 @@ const App: React.FC = () => {
     localStorage.setItem('formValues', JSON.stringify(debouncedFormValues));
   }, [debouncedFormValues]);
 
-  const handleFormChange = useCallback((newFormValues: FormValues) => {
+  const handleFormChange = React.useCallback((newFormValues: FormValues) => {
     setFormValues(newFormValues);
   }, []);
 
-  const handleDownload = () => {
+  const handleDownload = React.useCallback(() => {
     const blob = new Blob([config], { type: 'text/yaml;charset=utf-8' });
     FileSaver.saveAs(blob, 'config.yaml');
-  };
+  }, [config]);
 
-  const handleCopy = () => {
+  const handleCopy = React.useCallback(() => {
     navigator.clipboard.writeText(config);
-  };
+  }, [config]);
 
-  const openModal = () => {
+  const openModal = React.useCallback(() => {
     setIsModalOpen(true);
-  };
+  }, [setIsModalOpen]);
 
-  const closeModal = () => {
+  const closeModal = React.useCallback(() => {
     setIsModalOpen(false);
-  };
+  }, [setIsModalOpen]);
+
+  const errors = React.useMemo(
+    () => (debouncedFormValues ? validateConfig(debouncedFormValues) : []),
+    [debouncedFormValues]
+  );
 
   return (
     <ThemeProvider theme={theme}>
@@ -124,14 +135,25 @@ const App: React.FC = () => {
                 >
                   Download YAML
                 </Button>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  startIcon={<Build />}
-                  onClick={openModal}
+                <Tooltip
+                  title={
+                    errors.length > 0
+                      ? `Please fix the errors before building the image: ${errors.join(
+                          ', '
+                        )}`
+                      : undefined
+                  }
                 >
-                  Build Image
-                </Button>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    startIcon={<Build />}
+                    onClick={openModal}
+                    disabled={errors.length > 0}
+                  >
+                    Build Image
+                  </Button>
+                </Tooltip>
               </Box>
               <Typography variant="h6" gutterBottom>
                 Generated YAML Config

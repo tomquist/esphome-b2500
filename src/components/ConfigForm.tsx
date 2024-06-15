@@ -81,6 +81,11 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
     [formValues, onFormChange]
   );
 
+  let nameInvalid =
+    formValues.name.length > 31 || !/^[a-z0-9-]+$/.test(formValues.name);
+  let friendlyNameInvalid =
+    formValues.friendly_name.length > 63 ||
+    formValues.friendly_name.trim() === '';
   return (
     <Paper elevation={3} sx={{ padding: 2 }}>
       <Typography variant="h6">General Settings</Typography>
@@ -92,9 +97,8 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
         fullWidth
         margin="normal"
         helperText="This is the name of the node. It should always be unique in your ESPHome network. May only contain lowercase characters, digits and hyphens, and can be at most 31 characters long."
-        error={
-          formValues.name.length > 31 || !/^[a-z0-9-]+$/.test(formValues.name)
-        }
+        error={nameInvalid}
+        required
       />
       <TextField
         label="Friendly Name"
@@ -103,7 +107,9 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
         onChange={handleInputChange}
         fullWidth
         margin="normal"
+        required
         helperText="This is the name sent to the frontend. It is used by Home Assistant as the integration name, device name, and is automatically prefixed to entities where necessary."
+        error={friendlyNameInvalid}
       />
       <TextField
         label="Board"
@@ -112,6 +118,8 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
         onChange={handleInputChange}
         fullWidth
         margin="normal"
+        required
+        error={formValues.board.trim() === ''}
         helperText={
           <span>
             The PlatformIO board ID. Choose the appropriate board from this{' '}
@@ -130,11 +138,12 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
       <Divider sx={{ my: 2 }} />
 
       <MqttSection
-        formValues={formValues}
+        mqtt={formValues.mqtt}
+        enable_set_mqtt={formValues.enable_set_mqtt}
         handleMQTTInputChange={handleMQTTInputChange}
       />
       <WifiSection
-        formValues={formValues}
+        wifi={formValues.wifi}
         handleWifiInputChange={handleWifiInputChange}
       />
       <AdvancedSection

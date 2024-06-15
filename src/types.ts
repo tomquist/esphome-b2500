@@ -1,7 +1,7 @@
 // src/types.ts
 export interface MQTTSettings {
   topic: string;
-  broker?: string;
+  broker: string;
   port: number;
   username: string;
   password: string;

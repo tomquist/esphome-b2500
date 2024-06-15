@@ -121,6 +121,113 @@ export const redactSecrets = (config: FormValues) => {
   return redactedConfig;
 };
 
+export const validateConfig = (config: FormValues) => {
+  const errors = [];
+  if (config.storages.length === 0) {
+    errors.push('At least one storage is required');
+  }
+  for (const storage of config.storages) {
+    if (storage.name.trim() === '') {
+      errors.push('Storage name is required');
+    }
+    if (storage.version < 1 || storage.version > 2) {
+      errors.push('Storage version is invalid');
+    }
+    if (storage.mac_address.trim() === '') {
+      errors.push('Storage MAC address is required');
+    }
+    if (
+      !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(storage.mac_address)
+    ) {
+      errors.push('Storage MAC address is invalid');
+    }
+  }
+  if (config.wifi.ssid.trim() === '') {
+    errors.push('WiFi SSID is required');
+  }
+  if (config.wifi.password.trim() === '') {
+    errors.push('WiFi password is required');
+  }
+  if (config.mqtt.topic.trim() === '') {
+    errors.push('MQTT topic is required');
+  }
+  if (config.mqtt.broker.trim() === '') {
+    errors.push('MQTT broker is required');
+  }
+  if (config.mqtt.port <= 0 || config.mqtt.port > 65535) {
+    errors.push('MQTT port is invalid');
+  }
+  if (config.auto_restart.restart_after_error_count < 0) {
+    errors.push('Auto restart count is invalid');
+  }
+  if (config.enable_powermeter) {
+    if (config.powermeter.baud_rate < 0) {
+      errors.push('Powermeter baud rate is invalid');
+    }
+    if (
+      config.powermeter.stop_bits !== 1 &&
+      config.powermeter.stop_bits !== 2
+    ) {
+      errors.push('Powermeter stop bits is invalid');
+    }
+    if (config.powermeter.tx_pin.trim() === '') {
+      errors.push('Powermeter TX pin is required');
+    }
+    if (config.powermeter.rx_pin.trim() === '') {
+      errors.push('Powermeter RX pin is required');
+    }
+  }
+  if (config.enable_manual_ip) {
+    if (config.manual_ip.ip.trim() === '') {
+      errors.push('Manual IP address is required');
+    }
+    if (config.manual_ip.gateway.trim() === '') {
+      errors.push('Manual gateway is required');
+    }
+    if (config.manual_ip.subnet.trim() === '') {
+      errors.push('Manual subnet is required');
+    }
+    if (config.manual_ip.dns.trim() === '') {
+      errors.push('Manual DNS is required');
+    }
+  }
+  if (config.enable_web_server) {
+    if (config.web_server.port <= 0 || config.web_server.port > 65535) {
+      errors.push('Web server port is invalid');
+    }
+  }
+  if (config.enable_ota) {
+    if (config.ota.password.trim() === '') {
+      errors.push('OTA password is required');
+    }
+  }
+  if (config.enable_fallback_hotspot) {
+    if (config.fallback_hotspot.ssid.trim() === '') {
+      errors.push('Fallback hotspot SSID is required');
+    }
+  }
+  if (config.enable_set_wifi) {
+    if (config.set_wifi.ssid.trim() === '') {
+      errors.push('Set WiFi SSID is required');
+    }
+    if (config.set_wifi.password.trim() === '') {
+      errors.push('Set WiFi password is required');
+    }
+  }
+  if (config.enable_powerzero) {
+    if (config.powerzero.grid_power_topic.trim() === '') {
+      errors.push('Powerzero grid power topic is required');
+    }
+    if (config.powerzero.limit_cmd_topic.trim() === '') {
+      errors.push('Powerzero limit command topic is required');
+    }
+    if (config.powerzero.limit_state_topic.trim() === '') {
+      errors.push('Powerzero limit state topic is required');
+    }
+  }
+  return errors;
+};
+
 export const newIssueLink = ({
   config,
   build,
