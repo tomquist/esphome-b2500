@@ -16,7 +16,7 @@ export const defaultFormValues: FormValues = {
     ssid: 'MyWifi',
     password: 'MyPassword',
   },
-  board: 'esp32-c3-devkitm-1',
+  board: 'esp32dev',
   enable_auto_restart: true,
   auto_restart: {
     restart_after_error_count: 8,

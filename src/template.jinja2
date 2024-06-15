@@ -11,7 +11,7 @@
 {%- set wifi = wifi or {} %}
 {%- set wifi_ssid = wifi.ssid %}
 {%- set wifi_password = wifi.password %}
-{%- set board = board or 'esp32-c3-devkitm-1' %}
+{%- set board = board or 'esp32dev' %}
 {%- set enable_auto_restart = enable_auto_restart or False %}
 {%- set auto_restart = auto_restart or {} %}
 {%- set auto_restart_after_error_count = auto_restart.restart_after_error_count or 8 %}
@@ -81,7 +81,7 @@ esphome:
       - delay: 100ms
 
 esp32:
-  board: "{{ yaml_string(board or 'esp32-c3-devkitm-1') }}"
+  board: "{{ yaml_string(board or 'esp32dev') }}"
   framework:
     type: esp-idf
     sdkconfig_options:
