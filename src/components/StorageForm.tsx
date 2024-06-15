@@ -10,8 +10,17 @@ interface StorageFormProps {
   minStorages: number;
 }
 
-const StorageForm: React.FC<StorageFormProps> = ({ storages, onChange, maxStorages, minStorages }) => {
-  const handleStorageChange = (index: number, key: string, value: string | number) => {
+const StorageForm: React.FC<StorageFormProps> = ({
+  storages,
+  onChange,
+  maxStorages,
+  minStorages,
+}) => {
+  const handleStorageChange = (
+    index: number,
+    key: string,
+    value: string | number
+  ) => {
     const newStorages = [...storages];
     newStorages[index] = { ...newStorages[index], [key]: value };
     onChange(newStorages);
@@ -19,7 +28,7 @@ const StorageForm: React.FC<StorageFormProps> = ({ storages, onChange, maxStorag
 
   const handleAddStorage = () => {
     if (storages.length < maxStorages) {
-      onChange([...storages, { name: "", version: 1, mac_address: '' }]);
+      onChange([...storages, { name: '', version: 1, mac_address: '' }]);
     }
   };
 
@@ -34,7 +43,12 @@ const StorageForm: React.FC<StorageFormProps> = ({ storages, onChange, maxStorag
     // Remove all non-hex characters
     const hexOnly = value.replace(/[^a-fA-F0-9]/g, '');
     // Insert colons after every two hex digits
-    return hexOnly.match(/.{1,2}/g)?.join(':').substr(0, 17) || '';
+    return (
+      hexOnly
+        .match(/.{1,2}/g)
+        ?.join(':')
+        .substr(0, 17) || ''
+    );
   };
 
   const handleMacAddressChange = (index: number, value: string) => {
@@ -42,20 +56,22 @@ const StorageForm: React.FC<StorageFormProps> = ({ storages, onChange, maxStorag
     handleStorageChange(index, 'mac_address', formattedValue);
   };
 
-  const handleMacAddressKeyDown = (index: number) => (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      const target = e.target as HTMLInputElement;
-      const value = target.value;
-      const selectionStart = target.selectionStart || 0;
+  const handleMacAddressKeyDown =
+    (index: number) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Backspace') {
+        const target = e.target as HTMLInputElement;
+        const value = target.value;
+        const selectionStart = target.selectionStart || 0;
 
-      // If the cursor is right after a colon and Backspace is pressed, remove the colon and the previous character
-      if (selectionStart > 0 && value[selectionStart - 1] === ':') {
-        e.preventDefault();
-        const newValue = value.slice(0, selectionStart - 2) + value.slice(selectionStart);
-        handleMacAddressChange(index, newValue);
+        // If the cursor is right after a colon and Backspace is pressed, remove the colon and the previous character
+        if (selectionStart > 0 && value[selectionStart - 1] === ':') {
+          e.preventDefault();
+          const newValue =
+            value.slice(0, selectionStart - 2) + value.slice(selectionStart);
+          handleMacAddressChange(index, newValue);
+        }
       }
-    }
-  };
+    };
 
   return (
     <Box mt={2}>
@@ -68,7 +84,9 @@ const StorageForm: React.FC<StorageFormProps> = ({ storages, onChange, maxStorag
               <TextField
                 label="Name"
                 value={storage.name}
-                onChange={(e) => handleStorageChange(index, 'name', e.target.value)}
+                onChange={(e) =>
+                  handleStorageChange(index, 'name', e.target.value)
+                }
                 fullWidth
                 margin="normal"
               />
@@ -78,7 +96,13 @@ const StorageForm: React.FC<StorageFormProps> = ({ storages, onChange, maxStorag
                 label="Version"
                 type="number"
                 value={storage.version}
-                onChange={(e) => handleStorageChange(index, 'version', parseInt(e.target.value, 10))}
+                onChange={(e) =>
+                  handleStorageChange(
+                    index,
+                    'version',
+                    parseInt(e.target.value, 10)
+                  )
+                }
                 fullWidth
                 margin="normal"
                 inputProps={{ min: 1, max: 2 }}

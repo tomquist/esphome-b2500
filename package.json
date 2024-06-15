@@ -17,8 +17,8 @@
     "@types/react-dom": "^18.3.0",
     "axios": "^1.7.2",
     "buffer": "^6.0.3",
-    "crypto-browserify": "^3.12.0",
     "crypto": "npm:crypto-browserify",
+    "crypto-browserify": "^3.12.0",
     "file-saver": "^2.0.5",
     "nunjucks": "^3.2.4",
     "process": "^0.11.10",
@@ -27,8 +27,8 @@
     "react-hook-form": "^7.51.5",
     "react-scripts": "5.0.1",
     "react-syntax-highlighter": "^15.5.0",
-    "stream-browserify": "^3.0.0",
     "stream": "npm:stream-browserify",
+    "stream-browserify": "^3.0.0",
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4"
   },
@@ -38,13 +38,22 @@
     "test": "react-app-rewired test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix"
   },
   "eslintConfig": {
     "extends": [
       "react-app",
-      "react-app/jest"
-    ]
+      "react-app/jest",
+      "plugin:prettier/recommended"
+    ],
+    "plugins": [
+      "prettier"
+    ],
+    "rules": {
+      "prettier/prettier": "error"
+    }
   },
   "browserslist": {
     "production": [
@@ -59,12 +68,18 @@
     ]
   },
   "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
     "@types/file-saver": "^2.0.7",
     "@types/mustache": "^4.2.5",
     "@types/nunjucks": "^3.2.6",
     "@types/react-syntax-highlighter": "^15.5.13",
     "customize-cra": "^1.0.0",
+    "eslint": "^8.28.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-react": "^7.31.8",
     "gh-pages": "^6.1.1",
+    "prettier": "^3.3.2",
     "raw-loader": "^4.0.2",
     "react-app-rewired": "^2.2.1"
   }

@@ -7,7 +7,9 @@ interface SyntaxHighlighterComponentProps {
   config: string;
 }
 
-const SyntaxHighlighterComponent: React.FC<SyntaxHighlighterComponentProps> = ({ config }) => {
+const SyntaxHighlighterComponent: React.FC<SyntaxHighlighterComponentProps> = ({
+  config,
+}) => {
   return (
     <SyntaxHighlighter language="yaml" style={vs}>
       {config}
