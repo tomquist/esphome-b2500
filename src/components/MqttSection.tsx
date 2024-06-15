@@ -22,6 +22,7 @@ const MqttSection: React.FC<MqttSectionProps> = ({ formValues, handleMQTTInputCh
                 onChange={handleMQTTInputChange}
                 fullWidth
                 margin="normal"
+                error={formValues.mqtt.topic.length === 0}
             />
             <TextField
                 label="Broker"
@@ -40,6 +41,7 @@ const MqttSection: React.FC<MqttSectionProps> = ({ formValues, handleMQTTInputCh
                 onChange={handleMQTTInputChange}
                 fullWidth
                 margin="normal"
+                error={formValues.mqtt.port < 1 || formValues.mqtt.port > 65535}
             />
             <TextField
                 label="Username"

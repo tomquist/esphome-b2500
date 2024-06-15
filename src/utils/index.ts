@@ -111,8 +111,46 @@ export const getAllSecrets = (debouncedFormValues: FormValues) => {
     return secrets;
 };
 
+export const redactSecrets = (config: FormValues) => {
+    const redactedConfig = { ...config };
+    redactedConfig.mqtt.password = '***';
+    redactedConfig.wifi.password = '***';
+    redactedConfig.set_wifi.password = '***';
+    redactedConfig.ota.password = '***';
+    for (const storage of redactedConfig.storages) {
+        storage.mac_address = '***';
+    }
+    return redactedConfig;
+}
+
+export const newIssueLink = (config: FormValues) => {
+    const redactedConfig = redactSecrets(config);
+    const body = `<!-- Please describe the issue you are experiencing and provide as much context as possible. -->\n
+**Describe the issue**\n
+<!-- Please describe the issue you are experiencing and provide as much context as possible. -->\n
+**Steps to reproduce**\n
+<!-- If applicable, provide steps to reproduce the issue. -->\n
+**Expected behavior**\n
+<!-- What should happen? -->\n
+**Actual behavior**\n
+<!-- What happens instead? -->\n
+**Additional context**\n
+<!-- Add any other context about the problem here. -->\n
+**Screenshots**\n
+<!-- If applicable, add screenshots to help explain your problem. -->\n
+**Device information**\n
+- ESP Board: [e.g. ESP32-C3]\n
+- B2500 Brand: [e.g. Marstek]\n
+- B2500 Version: [e.g. v1, v2, v3]\n
+
+**Configuration**\n
+\`\`\`json\n${JSON.stringify(redactedConfig, null, 2)}\n\`\`\`\n
+`;
+        return `https://github.com/tomquist/esphome-b2500/issues/new?body=${encodeURIComponent(body)}`;
+}
+
 export const generatePassword = () => {
-    return Math.random().toString(36).slice(-8);
+    return crypto.randomBytes(16).toString('base64').slice(0, 16);
 };
 
 export const aesEncrypt = ({ password, input }: { password: string; input: Buffer }) => {
@@ -122,3 +160,25 @@ export const aesEncrypt = ({ password, input }: { password: string; input: Buffe
     const encrypted = Buffer.concat([cipher.update(input), cipher.final()]);
     return Buffer.concat([iv, encrypted]);
 };
+
+export const generateRandomIdentifier = () => {
+    const adjectives = [
+        'tiny', 'fluffy', 'happy', 'sad', 'angry', 'brave', 'quick', 'lazy', 'bright', 'dark',
+        'funky', 'wobbly', 'jumpy', 'sparkly', 'grumpy', 'cheerful', 'sneaky', 'silly', 'noisy', 'sleepy',
+        'bouncy', 'zany', 'quirky', 'clumsy', 'jazzy', 'wiggly', 'perky', 'giggly', 'bizarre', 'nutty'
+    ];
+
+    const animals = [
+        'cat', 'dog', 'rabbit', 'lion', 'tiger', 'bear', 'fox', 'wolf', 'mouse', 'horse',
+        'unicorn', 'dragon', 'penguin', 'flamingo', 'octopus', 'giraffe', 'koala', 'panda', 'squirrel',
+        'hedgehog', 'dolphin', 'kangaroo', 'lemur', 'meerkat', 'narwhal', 'platypus', 'quokka', 'sloth', 'toucan'
+    ];
+
+    const randomAdjective1 = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const randomAdjective2 = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
+    const randomNumber = Math.floor(Math.random() * 1000);  // Adding a random number between 0 and 999
+
+    return `${randomAdjective1}-${randomAdjective2}-${randomAnimal}-${randomNumber}`;
+};
+

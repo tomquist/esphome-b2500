@@ -1,20 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Dialog,
     DialogActions,
     DialogContent,
     DialogContentText,
     DialogTitle,
-    TextField,
     Button,
-    InputAdornment,
-    IconButton,
     CircularProgress,
+    Link, Box,
 } from '@mui/material';
 import { ContentCopy } from '@mui/icons-material';
 import axios from 'axios';
 import crypto from 'crypto';
-import { getAllSecrets, aesEncrypt } from '../utils';
+import {getAllSecrets, aesEncrypt, generateRandomIdentifier, generatePassword, newIssueLink} from '../utils';
 
 const publicKey = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvvRsA62G+HxFVteRvo9R
@@ -27,39 +25,21 @@ qQIDAQAB
 -----END PUBLIC KEY-----`;
 
 interface BuildModalProps {
-    isModalOpen: boolean;
     closeModal: () => void;
-    identifier: string;
-    setIdentifier: (value: string) => void;
-    password: string;
-    setPassword: (value: string) => void;
-    passwordError: string;
-    setPasswordError: (value: string) => void;
-    isLoading: boolean;
-    setIsLoading: (value: boolean) => void;
     debouncedFormValues: any;
 }
 
 const BuildModal: React.FC<BuildModalProps> = ({
-                                                   isModalOpen,
                                                    closeModal,
-                                                   identifier,
-                                                   setIdentifier,
-                                                   password,
-                                                   setPassword,
-                                                   passwordError,
-                                                   setPasswordError,
-                                                   isLoading,
-                                                   setIsLoading,
                                                    debouncedFormValues,
                                                }) => {
+    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
+    const [identifier] = useState(() => generateRandomIdentifier());
+    const [password] = useState(() => generatePassword());
+    const [isLoading, setIsLoading] = useState(false);
+
     const handleBuild = async () => {
         if (!debouncedFormValues) return;
-        if (password.length < 8) {
-            setPasswordError('Password must be at least 8 characters long.');
-            return;
-        }
-
         setIsLoading(true);
 
         const encryptedPassword = crypto.publicEncrypt({
@@ -93,14 +73,12 @@ const BuildModal: React.FC<BuildModalProps> = ({
                 }
             );
             navigator.clipboard.writeText(password);
-            alert('Password copied to clipboard. Waiting for build to finish...');
-            window.open('https://github.com/tomquist/esphome-b2500/actions/workflows/build-esphome.yml', '_blank');
+            setIsInstructionsModalOpen(true);
         } catch (error) {
             console.error('Error triggering build:', error);
             alert('Failed to trigger build. Check the console for more details.');
         } finally {
             setIsLoading(false);
-            closeModal();
         }
     };
 
@@ -109,67 +87,78 @@ const BuildModal: React.FC<BuildModalProps> = ({
         alert('Password copied to clipboard');
     };
 
-    return (
-        <Dialog open={isModalOpen} onClose={closeModal} disableEscapeKeyDown={isLoading}>
-            <DialogTitle>Enter Build Identifier</DialogTitle>
-            <DialogContent>
-                <DialogContentText>
-                    This allows you to directly build the firmware image on GitHub Actions.
-                    Once you submit, the build will start and create a password-encrypted zip file with the firmware.
-                    Once the build is complete, you can download the zip file from the "Artifacts" section of your build.
+    const handleCloseInstructionsModal = () => {
+        setIsInstructionsModalOpen(false);
+        closeModal();
+    };
 
-                    Please enter a unique name for this build. This will help you identify your build process.
-                </DialogContentText>
-                <TextField
-                    autoFocus
-                    margin="dense"
-                    label="Identifier"
-                    type="text"
-                    fullWidth
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    disabled={isLoading}
-                />
-                <DialogContentText>
-                    Generated Password for Zipped Firmware:
-                </DialogContentText>
-                <TextField
-                    margin="dense"
-                    label="Password"
-                    type="text"
-                    fullWidth
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (e.target.value.length >= 8) {
-                            setPasswordError('');
-                        } else {
-                            setPasswordError('Password must be at least 8 characters long.');
-                        }
-                    }}
-                    error={!!passwordError}
-                    helperText={passwordError}
-                    InputProps={{
-                        endAdornment: (
-                            <InputAdornment position="end">
-                                <IconButton onClick={handlePasswordCopy}>
-                                    <ContentCopy />
-                                </IconButton>
-                            </InputAdornment>
-                        ),
-                    }}
-                    disabled={isLoading}
-                />
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={closeModal} color="primary" disabled={isLoading}>
-                    Cancel
-                </Button>
-                <Button onClick={handleBuild} color="primary" disabled={isLoading || password.length < 8 || identifier.trim().length === 0}>
-                    {isLoading ? <CircularProgress size={24} /> : 'Submit'}
-                </Button>
-            </DialogActions>
-        </Dialog>
+    return (
+        <>
+            <Dialog open={true} onClose={closeModal} disableEscapeKeyDown={isLoading}>
+                <DialogTitle>Build Image</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        <p>
+                            This allows you to directly build the firmware image on GitHub Actions.
+                        </p>
+                        <p>
+                            Once you press "Start Build", we'll <strong>encrypt</strong> your configuration and send it over to GitHub to build the ESPHome image.
+                            Once the build is complete, you can download a password protected Zip-file from the "Artifacts" section of your build.
+                        </p>
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={closeModal} color="primary" disabled={isLoading}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleBuild} color="primary" disabled={isLoading || password.length < 8 || identifier.trim().length === 0}>
+                        {isLoading ? <CircularProgress size={24} /> : 'Start Build'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={isInstructionsModalOpen} onClose={handleCloseInstructionsModal}>
+                <DialogTitle>Next Steps</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Your build has been started now. Here's what you need to do next:
+                        <ol>
+                            <li>
+                                Open the list of builds: <Link href="https://github.com/tomquist/esphome-b2500/actions"
+                                                               target="_blank" rel="noopener">Build List</Link>
+                            </li>
+                            <li>
+                                Locate your build: <strong>[B2500] {identifier}</strong> and click on it.
+                            </li>
+                            <li>Wait for the build to finish. If the build fails, please <Link
+                                href={newIssueLink(debouncedFormValues)} target="_blank"
+                                rel="noopener">open an issue</Link> with details of your configuration.
+                            </li>
+                            <li>Refresh the page, then locate the firmware artifact and download it:
+                                <Box my={2}>
+                                    <img src="/esphome-b2500/artifact.png" alt="Artifact" width="100%"/>
+                                </Box>
+                            </li>
+                            <li>
+                                Unzip the file using the entered password:
+                                <strong onClick={handlePasswordCopy} style={{cursor: 'pointer', marginLeft: '5px'}}>
+                                    {password} <ContentCopy />
+                                </strong>
+                            </li>
+                            <li>
+                                Open <Link href="https://web.esphome.io/" target="_blank" rel="noopener">ESPHome
+                                Web</Link>, connect to your ESP32, click "Install" and select the unzipped .bin file.
+                            </li>
+                        </ol>
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseInstructionsModal} color="primary">
+                        Close
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </>
     );
 };
 

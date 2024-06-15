@@ -18,7 +18,7 @@ import { useDebounce } from './hooks/useDebounce';
 import SyntaxHighlighterComponent from './components/SyntaxHighlighterComponent';
 import ConfigForm from './components/ConfigForm';
 import BuildModal from './components/BuildModal';
-import { defaultFormValues, mergeDeep, generatePassword } from './utils';
+import {defaultFormValues, mergeDeep, newIssueLink} from './utils';
 
 nunjucks.configure({ autoescape: false });
 
@@ -28,10 +28,6 @@ const App: React.FC = () => {
   const [config, setConfig] = useState<string>('');
   const [formValues, setFormValues] = useState<FormValues>();
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [identifier, setIdentifier] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [passwordError, setPasswordError] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const debouncedFormValues = useDebounce(formValues, 200);
 
@@ -67,8 +63,6 @@ const App: React.FC = () => {
   };
 
   const openModal = () => {
-    setPassword(generatePassword());
-    setPasswordError('');
     setIsModalOpen(true);
   };
 
@@ -83,6 +77,21 @@ const App: React.FC = () => {
           <Typography variant="h4" align="center" gutterBottom>
             ESPHome B2500 Config Generator
           </Typography>
+          <Paper elevation={3} sx={{ padding: 2 }}>
+            <Typography variant="body1" paragraph>
+              Use this form to generate an ESPHome config to connect your ESP32 to a B2500 storage. If you encounter any issues, click the button below to report a problem.
+            </Typography>
+            <Button
+                variant="contained"
+                color="primary"
+                href={formValues ? newIssueLink(formValues) : ""}
+                target="_blank"
+                rel="noopener"
+                sx={{ mb: 2 }}
+            >
+              Report an Issue
+            </Button>
+            </Paper>
           <Box mt={4}>
             {formValues && <ConfigForm formValues={formValues} onFormChange={handleFormChange} />}
           </Box>
@@ -125,19 +134,11 @@ const App: React.FC = () => {
               </Box>
           )}
         </Container>
+        {isModalOpen && (
         <BuildModal
-            isModalOpen={isModalOpen}
             closeModal={closeModal}
-            identifier={identifier}
-            setIdentifier={setIdentifier}
-            password={password}
-            setPassword={setPassword}
-            passwordError={passwordError}
-            setPasswordError={setPasswordError}
-            isLoading={isLoading}
-            setIsLoading={setIsLoading}
             debouncedFormValues={debouncedFormValues}
-        />
+        />)}
       </ThemeProvider>
   );
 };
