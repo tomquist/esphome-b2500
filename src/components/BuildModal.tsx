@@ -15,11 +15,11 @@ import axios from 'axios';
 import crypto from 'crypto';
 import {
   getAllSecrets,
-  aesEncrypt,
   generateRandomIdentifier,
   generatePassword,
   newIssueLink,
 } from '../utils';
+import { aesEncrypt } from '../crypto';
 
 const publicKey = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvvRsA62G+HxFVteRvo9R

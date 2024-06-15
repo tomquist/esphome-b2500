@@ -151,20 +151,6 @@ export const generatePassword = () => {
   return crypto.randomBytes(16).toString('base64').slice(0, 16);
 };
 
-export const aesEncrypt = ({
-  password,
-  input,
-}: {
-  password: string;
-  input: Buffer;
-}) => {
-  const key = crypto.createHash('sha256').update(password).digest();
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-  const encrypted = Buffer.concat([cipher.update(input), cipher.final()]);
-  return Buffer.concat([iv, encrypted]);
-};
-
 export const generateRandomIdentifier = () => {
   const adjectives = [
     'tiny',
