@@ -167,7 +167,10 @@ const BuildModal: React.FC<BuildModalProps> = ({
               <li>
                 Wait for the build to finish. If the build fails, please{' '}
                 <Link
-                  href={newIssueLink(debouncedFormValues)}
+                  href={newIssueLink({
+                    config: debouncedFormValues,
+                    build: identifier,
+                  })}
                   target="_blank"
                   rel="noopener"
                 >

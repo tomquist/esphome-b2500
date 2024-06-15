@@ -121,7 +121,13 @@ export const redactSecrets = (config: FormValues) => {
   return redactedConfig;
 };
 
-export const newIssueLink = (config: FormValues) => {
+export const newIssueLink = ({
+  config,
+  build,
+}: {
+  config: FormValues;
+  build?: string;
+}) => {
   const redactedConfig = redactSecrets(config);
   const body = `<!-- Please describe the issue you are experiencing and provide as much context as possible. -->\n
 **Describe the issue**\n
@@ -140,7 +146,7 @@ export const newIssueLink = (config: FormValues) => {
 - ESP Board: [e.g. ESP32-C3]\n
 - B2500 Brand: [e.g. Marstek]\n
 - B2500 Version: [e.g. v1, v2, v3]\n
-
+${build ? `- Build: [${build}]\n` : ''}
 **Configuration**\n
 \`\`\`json\n${JSON.stringify(redactedConfig, null, 2)}\n\`\`\`\n
 `;

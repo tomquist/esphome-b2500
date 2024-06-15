@@ -86,7 +86,7 @@ const App: React.FC = () => {
           <Button
             variant="contained"
             color="primary"
-            href={formValues ? newIssueLink(formValues) : ''}
+            href={formValues ? newIssueLink({ config: formValues }) : ''}
             target="_blank"
             rel="noopener"
             sx={{ mb: 2 }}
