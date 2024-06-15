@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "ESPHome for B2500",
+  "name": "Configuration generator for a B2500 ESPHome image",
   "icons": [
     {
       "src": "favicon.ico",
