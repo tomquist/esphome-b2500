@@ -110,7 +110,7 @@ export const getAllSecrets = (debouncedFormValues: FormValues) => {
 };
 
 export const redactSecrets = (config: FormValues) => {
-  const redactedConfig = { ...config };
+  const redactedConfig = JSON.parse(JSON.stringify(config));
   redactedConfig.mqtt.password = '***';
   redactedConfig.wifi.password = '***';
   redactedConfig.set_wifi.password = '***';

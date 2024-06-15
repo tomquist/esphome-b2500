@@ -116,6 +116,12 @@ const StorageForm: React.FC<StorageFormProps> = ({
                 onKeyDown={handleMacAddressKeyDown(index)}
                 fullWidth
                 margin="normal"
+                error={
+                  !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(
+                    storage.mac_address
+                  )
+                }
+                helperText="You can find the MAC address in the PowerZero app by pressing on the device name on the top left corner of the screen."
               />
             </Grid>
             <Grid item xs={12}>
