@@ -16,6 +16,8 @@ jobs:
       ENCRYPTED_ZIP_PASSWORD: ${{ github.event.client_payload.password }}
       ENCRYPTED_CONFIG: ${{ github.event.client_payload.config }}
       PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -68,3 +70,14 @@ jobs:
           name: esphome-firmware-${{ github.event.client_payload.identifier }}
           path: firmware.zip
 
+      - name: Prepare for GitHub Pages deployment
+        run: |
+          mkdir deployment
+          mv firmware.zip deployment/${{ github.event.client_payload.identifier }}.zip
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: deployment
+          destination_dir: firmware/${{ github.event.client_payload.identifier }}
