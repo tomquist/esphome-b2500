@@ -8,7 +8,6 @@ import {
   Button,
   CircularProgress,
   Link,
-  Box,
 } from '@mui/material';
 import { ContentCopy } from '@mui/icons-material';
 import axios from 'axios';
@@ -179,15 +178,12 @@ const BuildModal: React.FC<BuildModalProps> = ({
                 with details of your configuration.
               </li>
               <li>
-                Refresh the page, then locate the firmware artifact and download
-                it:
-                <Box my={2}>
-                  <img
-                    src="/esphome-b2500/artifact.png"
-                    alt="Artifact"
-                    width="100%"
-                  />
-                </Box>
+                Download your firmware using this link:{' '}
+                <Link
+                  href={`https://github.com/tomquist/esphome-b2500/raw/gh-pages/firmware/${identifier}/${identifier}.zip`}
+                >
+                  Firmware Download
+                </Link>
               </li>
               <li>
                 Unzip the file using the entered password:
