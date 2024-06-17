@@ -157,11 +157,9 @@ const BuildModal: React.FC<BuildModalProps> = ({
                   rel="noopener"
                 >
                   Build List
-                </Link>
-              </li>
-              <li>
-                Locate your build: <strong>[B2500] {identifier}</strong> and
-                click on it.
+                </Link>{' '}
+                and locate your build: <strong>[B2500] {identifier}</strong>.
+                Keep this page open for the next steps!
               </li>
               <li>
                 Wait for the build to finish. If the build fails, please{' '}
@@ -178,7 +176,8 @@ const BuildModal: React.FC<BuildModalProps> = ({
                 with details of your configuration.
               </li>
               <li>
-                Download your firmware using this link:{' '}
+                Once the build completed, download your firmware using this
+                link:{' '}
                 <Link
                   href={`https://github.com/tomquist/esphome-b2500/raw/gh-pages/firmware/${identifier}/${identifier}.zip`}
                 >
@@ -194,6 +193,7 @@ const BuildModal: React.FC<BuildModalProps> = ({
                   {password} <ContentCopy />
                 </strong>
               </li>
+              <li>Connect your ESP32 to your computer.</li>
               <li>
                 Open{' '}
                 <Link
@@ -204,7 +204,7 @@ const BuildModal: React.FC<BuildModalProps> = ({
                   ESPHome Web
                 </Link>
                 , connect to your ESP32, click "Install" and select the unzipped
-                .bin file.
+                <code>*.bin</code> file.
               </li>
             </ol>
           </DialogContentText>
