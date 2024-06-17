@@ -46,12 +46,12 @@ export interface PowermeterSettings {
 
 export interface WebServerSettings {
   port: number;
-  ota: boolean;
   js_include: string;
 }
 
 export interface FallbackHotspotSettings {
   ssid: string;
+  enable_captive_portal: boolean;
 }
 
 export interface OtaSettings {

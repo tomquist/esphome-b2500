@@ -46,6 +46,7 @@
 {%- set ota_enable_unprotected_writes = ota.enable_unprotected_writes or False %}
 {%- set fallback_hotspot = fallback_hotspot or {} %}
 {%- set fallback_hotspot_ssid = fallback_hotspot.ssid or '' %}
+{%- set fallback_hotspot_enable_captive_portal = fallback_hotspot.enable_captive_portal or False %}
 {%- macro isV2(deviceNr) %}({%- for storage in storages -%}
             {%- if storage.version >= 2 %}ble_device_nr=={{ loop.index }}{% else %}false{% endif %}
             {%- if not loop.last %} || {% endif -%}
@@ -164,13 +165,13 @@ wifi:
 {%- if enable_web_server %}
 web_server:
   port: {{ web_server_port }}
-  ota: {% if web_server_ota %}true{% else %}false{% endif %}
+  ota: false
   js_include: "{{ yaml_string(web_server_js_include) }}"
   js_url: ""
   version: 2
 {%- endif %}
 
-{%- if enable_fallback_hotspot %}
+{%- if enable_fallback_hotspot and fallback_hotspot_enable_captive_portal %}
 captive_portal:
 {%- endif %}
 

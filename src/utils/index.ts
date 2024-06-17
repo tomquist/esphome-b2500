@@ -56,7 +56,6 @@ export const defaultFormValues: FormValues = {
   enable_web_server: true,
   web_server: {
     port: 80,
-    ota: false,
     js_include: './v2/www.js',
   },
   enable_ota: true,
@@ -67,6 +66,7 @@ export const defaultFormValues: FormValues = {
   enable_fallback_hotspot: true,
   fallback_hotspot: {
     ssid: 'ESPHome-b2500',
+    enable_captive_portal: true,
   },
   storages: [{ name: 'B2500', version: 1, mac_address: '00:00:00:00:00:00' }],
 };
@@ -199,6 +199,11 @@ export const validateConfig = (config: FormValues) => {
   if (config.enable_ota) {
     if (config.ota.password.trim() === '') {
       errors.push('OTA password is required');
+    }
+    if (config.ota.enable_unprotected_writes) {
+      errors.push(
+        'Unprotected writes is not supported by this tool. See https://github.com/esphome/esphome/pull/5535 for more information and build the image manually.'
+      );
     }
   }
   if (config.enable_fallback_hotspot) {

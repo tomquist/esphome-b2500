@@ -43,7 +43,6 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
     !formValues.web_server.port ||
     formValues.web_server.port < 1 ||
     formValues.web_server.port > 65535;
-  let otaPasswordInvalid = formValues.ota.password.trim() === '';
   let fallbackHotspotSsidInvalid =
     formValues.fallback_hotspot.ssid.trim() === '';
   let powermeterTxPinInvalid = formValues.powermeter.tx_pin.trim() === '';
@@ -176,14 +175,6 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <BooleanField
-                  value={formValues.web_server}
-                  prop={'ota'}
-                  onChange={handleWebServerChange}
-                  label={'OTA'}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
                 <TextField
                   label="JS Include"
                   name="js_include"
@@ -212,24 +203,51 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
         />
         {formValues.enable_ota && (
           <Box mb={2} border={1} borderRadius={5} padding={2}>
-            <TextField
-              label="Password"
-              name="password"
-              type="password"
-              value={formValues.ota.password}
-              onChange={handleOtaChange}
-              fullWidth
-              margin="normal"
-              required
-              error={otaPasswordInvalid}
-              helperText={otaPasswordInvalid ? 'Password is required' : ''}
-            />
-            <BooleanField
-              value={formValues.ota}
-              onChange={handleOtaChange}
-              prop="enable_unprotected_writes"
-              label="Enable Unprotected Writes"
-            />
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Password"
+                  name="password"
+                  type="password"
+                  value={formValues.ota.password}
+                  onChange={handleOtaChange}
+                  fullWidth
+                  margin="normal"
+                  helperText={
+                    <span>
+                      The password required to flash the device over-the-air. If
+                      left empty, no password is required. If you are using the
+                      automatic build system, this must be set to{' '}
+                      <code>my_ota_password</code>.
+                    </span>
+                  }
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <BooleanField
+                  value={formValues.ota}
+                  onChange={handleOtaChange}
+                  prop="enable_unprotected_writes"
+                  label="Enable Unprotected Writes"
+                  error={formValues.ota.enable_unprotected_writes}
+                  helperText={
+                    <span>
+                      If enabled, you need to build the image manually.
+                      Unprotected writes is not supported by this tool. See{' '}
+                      <a
+                        href={'https://github.com/esphome/esphome/pull/5535'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        here
+                      </a>{' '}
+                      for more information about what this is and how to build
+                      the image manually.
+                    </span>
+                  }
+                />
+              </Grid>
+            </Grid>
           </Box>
         )}
 
@@ -240,17 +258,44 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           label="Enable Fallback Hotspot"
         />
         {formValues.enable_fallback_hotspot && (
-          <TextField
-            label="Fallback Hotspot SSID"
-            name="ssid"
-            value={formValues.fallback_hotspot.ssid}
-            onChange={handleFallbackHotspotChange}
-            fullWidth
-            margin="normal"
-            required
-            error={fallbackHotspotSsidInvalid}
-            helperText={fallbackHotspotSsidInvalid ? 'SSID is required' : ''}
-          />
+          <Box mb={2} border={1} borderRadius={5} padding={2}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Fallback Hotspot SSID"
+                  name="ssid"
+                  value={formValues.fallback_hotspot.ssid}
+                  onChange={handleFallbackHotspotChange}
+                  fullWidth
+                  margin="normal"
+                  required
+                  error={fallbackHotspotSsidInvalid}
+                  helperText={
+                    <>
+                      The SSID of the hotspot that will automatically be enabled
+                      when the device can't connect to the configured WiFi
+                      network for one minute.
+                    </>
+                  }
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <BooleanField
+                  value={formValues.fallback_hotspot}
+                  onChange={handleFallbackHotspotChange}
+                  prop="enable_captive_portal"
+                  label="Enable Captive Portal"
+                  helperText={
+                    <>
+                      If enabled, a captive portal will be enabled on the
+                      fallback hotspot. This allows you to configure the device
+                      without needing to connect to the fallback hotspot.
+                    </>
+                  }
+                />
+              </Grid>
+            </Grid>
+          </Box>
         )}
         <BooleanField
           value={formValues}
