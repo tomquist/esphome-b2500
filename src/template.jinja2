@@ -192,7 +192,7 @@ mqtt:
 
 
 interval:
-  - interval: 5s
+  - interval: {{ poll_interval_seconds or '5' }}s
     startup_delay: 20s
     then:
       - script.stop: ble_process

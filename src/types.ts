@@ -66,6 +66,7 @@ export interface AutoRestartSettings {
 export interface FormValues {
   name: string;
   friendly_name: string;
+  poll_interval_seconds: number;
   mqtt: MQTTSettings;
   wifi: WifiSettings;
   board: string;

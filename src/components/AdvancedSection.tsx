@@ -67,6 +67,22 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
         <Typography variant="h6">Advanced</Typography>
       </AccordionSummary>
       <AccordionDetails>
+        <TextField
+          label="Poll Interval (seconds)"
+          name="poll_interval_seconds"
+          type="number"
+          value={formValues.poll_interval_seconds}
+          onChange={handleInputChange}
+          fullWidth
+          margin="normal"
+          required
+          error={formValues.poll_interval_seconds < 1}
+          helperText={
+            <>
+              The interval in seconds at which the device will poll the storage.
+            </>
+          }
+        />
         <BooleanField
           value={formValues}
           onChange={handleInputChange}
