@@ -19,6 +19,7 @@ export const defaultFormValues: FormValues = {
   },
   board: 'esp32dev',
   variant: 'auto',
+  idf_platform_version: '',
   enable_auto_restart: true,
   auto_restart: {
     restart_after_error_count: 8,

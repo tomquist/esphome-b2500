@@ -83,6 +83,21 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             </>
           }
         />
+        <TextField
+          label="ESP-IDF Platform Version"
+          name="idf_platform_version"
+          value={formValues.idf_platform_version}
+          onChange={handleInputChange}
+          fullWidth
+          margin="normal"
+          helperText={
+            <>
+              The ESP-IDF platform version to use. If left empty, the default
+              version will be used.{' '}
+              <b>Only change this if you know what you are doing!</b>
+            </>
+          }
+        />
         <BooleanField
           value={formValues}
           onChange={handleInputChange}

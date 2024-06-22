@@ -95,6 +95,9 @@ esp32:
       COMPILER_OPTIMIZATION_SIZE: y
     advanced:
       ignore_efuse_mac_crc: false
+    {%- if idf_platform_version %}
+    platform_version: "{{ yaml_string(idf_platform_version) }}"
+    {%- endif %}
 
 # Enable logging
 logger:

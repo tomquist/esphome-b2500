@@ -81,6 +81,7 @@ export interface FormValues {
   wifi: WifiSettings;
   board: string;
   variant: PlatformVariant;
+  idf_platform_version: string;
   enable_auto_restart: boolean;
   auto_restart: AutoRestartSettings;
   enable_powerzero: boolean;
