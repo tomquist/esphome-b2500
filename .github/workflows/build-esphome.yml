@@ -46,7 +46,7 @@ jobs:
 
       - name: Build firmware
         id: esphome-build
-        uses: esphome/build-action@v2
+        uses: esphome/build-action@v3
         with:
           yaml_file: device.yaml
           version: ${{ github.event.client_payload.esphome_version || '2024.5.5' }}

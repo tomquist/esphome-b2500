@@ -44,7 +44,7 @@
 {%- set ota = ota or {} %}
 {%- set ota_password = ota.password or '' %}
 {%- set ota_enable_unprotected_writes = ota.enable_unprotected_writes or False %}
-{%- set esphome_version = esphome_version or 'latest' %}
+{%- set esphome_version = esphome_version or '2024.5.5' %}
 {%- set use_modern_ota = (esphome_version == 'latest' or esphome_version >= '2024.6.0') %}
 {%- set fallback_hotspot = fallback_hotspot or {} %}
 {%- set fallback_hotspot_ssid = fallback_hotspot.ssid or '' %}
@@ -141,7 +141,6 @@ ota:
     unprotected_writes: True # This is mandatory if you want to flash the partition table or bootloader on a Shelly!
     {%- endif %}
 {%- else %}
-  platform: esphome
   password: "{{ yaml_string(ota_password) }}"
   {%- if ota_enable_unprotected_writes %}
   unprotected_writes: True # This is mandatory if you want to flash the partition table or bootloader on a Shelly!
