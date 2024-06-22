@@ -1,7 +1,19 @@
 // src/components/ConfigForm.tsx
 import React, { useCallback } from 'react';
-import { Paper, Typography, Divider, TextField, Link } from '@mui/material';
-import { FormValues, Storage } from '../types';
+import {
+  Paper,
+  Typography,
+  Divider,
+  TextField,
+  Link,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent,
+  FormHelperText,
+} from '@mui/material';
+import { FormValues, Storage, validPlatformVariants } from '../types';
 import { makeHandleInputChange } from '../utils/formUtils';
 import MqttSection from './MqttSection';
 import WifiSection from './WifiSection';
@@ -23,6 +35,16 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
       onFormChange({
         ...formValues,
         [name]: type === 'checkbox' ? checked : value,
+      });
+    },
+    [formValues, onFormChange]
+  );
+  const handleSelectChange = useCallback(
+    <E extends string>(e: SelectChangeEvent<E>) => {
+      const { name, value } = e.target;
+      onFormChange({
+        ...formValues,
+        [name]: value,
       });
     },
     [formValues, onFormChange]
@@ -134,6 +156,26 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
           </span>
         }
       />
+
+      <FormControl fullWidth margin="normal">
+        <InputLabel id="variant-label">Variant</InputLabel>
+        <Select
+          labelId="variant-label"
+          name="variant"
+          value={formValues.variant}
+          onChange={handleSelectChange}
+        >
+          {validPlatformVariants.map((variant) => (
+            <MenuItem key={variant} value={variant}>
+              {variant}
+            </MenuItem>
+          ))}
+        </Select>
+        <FormHelperText>
+          The variant of the ESP32 that is used on this board. If unsure, leave
+          this at "auto" to automatically detect the variant from the board.
+        </FormHelperText>
+      </FormControl>
 
       <Divider sx={{ my: 2 }} />
 

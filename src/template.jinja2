@@ -85,6 +85,9 @@ esphome:
 
 esp32:
   board: "{{ yaml_string(board or 'esp32dev') }}"
+  {%- if variant != 'auto' %}
+  variant: "{{ yaml_string(variant) }}"
+  {%- endif %}
   framework:
     type: esp-idf
     sdkconfig_options:

@@ -18,6 +18,7 @@ export const defaultFormValues: FormValues = {
     password: 'MyPassword',
   },
   board: 'esp32dev',
+  variant: 'auto',
   enable_auto_restart: true,
   auto_restart: {
     restart_after_error_count: 8,

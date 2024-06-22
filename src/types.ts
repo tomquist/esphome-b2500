@@ -63,6 +63,16 @@ export interface AutoRestartSettings {
   restart_after_error_count: number;
 }
 
+export const validPlatformVariants = [
+  'auto',
+  'esp32',
+  'esp32s2',
+  'esp32s3',
+  'esp32c3',
+  'esp32h2',
+] as const;
+export type PlatformVariant = (typeof validPlatformVariants)[number];
+
 export interface FormValues {
   name: string;
   friendly_name: string;
@@ -70,6 +80,7 @@ export interface FormValues {
   mqtt: MQTTSettings;
   wifi: WifiSettings;
   board: string;
+  variant: PlatformVariant;
   enable_auto_restart: boolean;
   auto_restart: AutoRestartSettings;
   enable_powerzero: boolean;
