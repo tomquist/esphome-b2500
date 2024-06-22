@@ -633,6 +633,29 @@ switch:
             id: ble_set_loadfirst
             ble_device_nr: {{ loop.index }}
             switch_cmd: 0
+
+  - platform: template
+    id: b2500_smartmeter_enabled_{{ loop.index }}
+    name: "{{ yaml_string(storage.name) }}: SmartMeter Enabled"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/enabled"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/enabled/set"
+    optimistic: True
+    assumed_state: True
+    on_turn_on:
+      then:
+        - script.execute:
+            id: ble_command_simple
+            ble_device_nr: {{ loop.index }}
+            ble_cmd: 0x11
+            ble_cmd_parm: 0x00
+    on_turn_off:
+      then:
+        - script.execute:
+            id: ble_set_timer_enable
+            ble_device_nr: {{ loop.index }}
+            timer: 9
+            enable: 1
+
 {%- endif %}
 {%- endfor %}
 
@@ -1070,7 +1093,7 @@ script:
 #         ( see note in top of doc )
 #
 #         new 1.60
-#         = 0x11  ???
+#         = 0x11  00 - enable adaptiv ????
 #         = 0x12  set timers
 #         = 0x13  get timers
 #
@@ -2266,7 +2289,7 @@ script:
             char mtopic[48]; 
             char mvalue[48]; 
             int mpower = 0;
-            #
+            // timer 1
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/1/enabled",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(x[5]));
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/1/value",ble_device_nr);
@@ -2275,7 +2298,7 @@ script:
             mpower = x[11] << 8 | x[10] ;
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/1/power",ble_device_nr);        
             id(mqtt_client).publish(mtopic,to_string(mpower));
-            #
+            // timer 2
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/2/enabled",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(x[12]));
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/2/value",ble_device_nr);
@@ -2284,7 +2307,7 @@ script:
             mpower = x[18] << 8 | x[17] ;
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/2/power",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(mpower));
-            #
+            // timer 3
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/3/enabled",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(x[19]));
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/3/value",ble_device_nr);
@@ -2293,6 +2316,15 @@ script:
             mpower = x[25] << 8 | x[24] ;
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/3/power",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(mpower));
+
+            // smartmeter
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/smartmeter/enabled",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(x[4]));
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/smartmeter/connected",ble_device_nr);
+            id(mqtt_client).publish(mtopic,to_string(x[26]));
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/smartmeter/value",ble_device_nr);
+            snprintf(mvalue, 48,"Abtastrate: %03i - %03i - %03i ( %03i s )",  x[27],x[28],(x[30] << 8) | x[29],(x[32] << 8) | x[31]);
+            id(mqtt_client).publish(mtopic,to_string(mvalue));
           }
           else if (x[3] == 0x01) {
             ESP_LOGD("main", "Data: cmd 0x01");
