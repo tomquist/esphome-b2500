@@ -46,10 +46,10 @@ jobs:
 
       - name: Build firmware
         id: esphome-build
-        uses: esphome/build-action@v3
+        uses: esphome/build-action@v3.1.0
         with:
           yaml_file: device.yaml
-          version: ${{ github.event.client_payload.esphome_version || '2024.5.5' }}
+          version: ${{ github.event.client_payload.esphome_version || 'latest' }}
 
       - name: Zip the firmware with a password
         run: |
