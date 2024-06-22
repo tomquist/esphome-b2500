@@ -205,26 +205,26 @@ interval:
   - interval: {{ poll_interval_seconds or '5' }}s
     startup_delay: 20s
     then:
-      - script.stop: ble_process
-      - script.execute: ble_process
-      - script.wait: ble_process
+      - script.stop: b2500_script_process
+      - script.execute: b2500_script_process
+      - script.wait: b2500_script_process
 {%- if enable_cellquery %}
       - delay: 1500ms
-      - script.stop: ble_process_cmd0F
-      - script.execute: ble_process_cmd0F
-      - script.wait: ble_process_cmd0F
+      - script.stop: b2500_script_process_cmd0F
+      - script.execute: b2500_script_process_cmd0F
+      - script.wait: b2500_script_process_cmd0F
       - delay: 1500ms
-      - script.stop: ble_process_cmd13
-      - script.execute: ble_process_cmd13
-      - script.wait: ble_process_cmd13
+      - script.stop: b2500_script_process_cmd13
+      - script.execute: b2500_script_process_cmd13
+      - script.wait: b2500_script_process_cmd13
 {%- endif %}
 {%- if enable_cmd30 %}
   - interval: 1min
     startup_delay: 30s
     then:
-      - script.stop: ble_process_cmd30
-      - script.execute: ble_process_cmd30
-      - script.wait: ble_process
+      - script.stop: b2500_script_process_cmd30
+      - script.execute: b2500_script_process_cmd30
+      - script.wait: b2500_script_process
 {%- endif %}
 
 time:
@@ -298,9 +298,9 @@ ble_client:
         - script.wait: b2500_script_send_command
         - delay: 500ms
         - script.execute: 
-            id: ble_set_time
+            id: b2500_script_set_time
             ble_device_nr: {{ loop.index }}
-        - script.wait: ble_set_time
+        - script.wait: b2500_script_set_time
 {%- endif %}
     on_disconnect:
       then:
@@ -408,11 +408,11 @@ button:
     disabled_by_default: True
     on_press:
       then:
-        - script.stop: ble_runtime_query30
+        - script.stop: b2500_script_runtime_query30
         - script.execute: 
-            id: ble_runtime_query30
+            id: b2500_script_runtime_query30
             ble_device_nr: {{ loop.index }}
-        - script.wait: ble_runtime_query30
+        - script.wait: b2500_script_runtime_query30
 {%- endif %}
 {%- if enable_experimental_commands %}
   - platform: template
@@ -634,13 +634,13 @@ switch:
     on_turn_on:
       then:
         - script.execute:
-            id: ble_set_loadfirst
+            id: b2500_script_set_loadfirst
             ble_device_nr: {{ loop.index }}
             switch_cmd: 1
     on_turn_off:
       then:
         - script.execute:
-            id: ble_set_loadfirst
+            id: b2500_script_set_loadfirst
             ble_device_nr: {{ loop.index }}
             switch_cmd: 0
 
@@ -654,14 +654,14 @@ switch:
     on_turn_on:
       then:
         - script.execute:
-            id: ble_command_simple
+            id: b2500_script_send_command
             ble_device_nr: {{ loop.index }}
             ble_cmd: 0x11
             ble_cmd_parm: 0x00
     on_turn_off:
       then:
         - script.execute:
-            id: ble_set_timer_enable
+            id: b2500_script_set_timer_enable
             ble_device_nr: {{ loop.index }}
             timer: 9
             enable: 1
@@ -958,7 +958,7 @@ sensor:
 {%- if enable_enforce_dod %}
     on_raw_value:
       - then:
-        - lambda: "id(ble_enforce_dod).execute({{ loop.index }},x);"
+        - lambda: "id(b2500_script_enforce_dod).execute({{ loop.index }},x);"
 {%- endif %}
 
   - platform: template
@@ -1024,7 +1024,7 @@ sensor:
     lambda: |-
       std::vector<char> tData;
       for (auto b : x) { tData.push_back(b); }
-      id(ble_notify_parse).execute({{ loop.index }},tData);
+      id(b2500_script_notify_parse).execute({{ loop.index }},tData);
       return (float)x[0];
 {%- endfor %}
 
@@ -1240,7 +1240,7 @@ script:
                   return rdat{{ loop.index }};
 {%- endfor %}
 
-  - id: ble_set_time
+  - id: b2500_script_set_time
     parameters:
       ble_device_nr: int
     then:
@@ -1288,7 +1288,7 @@ script:
 {%- endif %}
 {%- endfor %}
 
-  - id: ble_command_raw_01
+  - id: b2500_script_command_raw_01
     parameters:
       ble_device_nr: int
       ble_cmd_parm: char[]
@@ -1335,7 +1335,7 @@ script:
 {%- endfor %}
 
 
-  - id: ble_command_raw_06
+  - id: b2500_script_command_raw_06
     parameters:
       ble_device_nr: int
       ble_cmd_parm: char[]
@@ -1378,7 +1378,7 @@ script:
                   return rdat{{ loop.index }};
 {%- endfor %}
 
-  - id: ble_process
+  - id: b2500_script_process
     then:
 {%- for storage in storages %}
 {%- if loop.index0 > 0 %}
@@ -1443,7 +1443,7 @@ script:
                         - script.wait: b2500_script_send_command
 {%- endfor %}
 {%- if enable_cellquery %}
-  - id: ble_process_cmd0F
+  - id: b2500_script_process_cmd0F
     then:
 {%- for storage in storages %}
 {%- if loop.index0 > 0 %}
@@ -1463,24 +1463,24 @@ script:
                   - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 130 && id(b2500_device_id_{{ loop.index }}).state != "");'
 {%- endif %}
                 then:
-                  - script.stop: ble_runtime_query0F
+                  - script.stop: b2500_script_runtime_query0F
                   - script.execute: 
-                      id: ble_runtime_query0F
+                      id: b2500_script_runtime_query0F
                       ble_device_nr: 1
-                  - script.wait: ble_runtime_query0F
+                  - script.wait: b2500_script_runtime_query0F
             - if:
                 condition:
                   - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 130 && id(b2500_device_id_{{ loop.index }}).state != "");'
                 then:
                   - script.execute: 
-                      id: ble_runtime_query0F
+                      id: b2500_script_runtime_query0F
                       ble_device_nr: {{ loop.index }}
-                  - script.wait: ble_runtime_query0F
+                  - script.wait: b2500_script_runtime_query0F
 {%- endfor %}
 {%- endif %}
 
 {%- if enable_cellquery %}
-  - id: ble_process_cmd13
+  - id: b2500_script_process_cmd13
     then:
 {%- for storage in storages %}
 {%- if loop.index0 > 0 %}
@@ -1496,17 +1496,17 @@ script:
                 condition:
                   - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 155 && id(b2500_device_id_{{ loop.index }}).state != "");'
                 then:
-                  - script.stop: ble_runtime_query13
+                  - script.stop: b2500_script_runtime_query13
                   - script.execute: 
-                      id: ble_runtime_query13
+                      id: b2500_script_runtime_query13
                       ble_device_nr: 1
-                  - script.wait: ble_runtime_query13
+                  - script.wait: b2500_script_runtime_query13
 {%- endif %}
 {%- endfor %}
 {%- endif %}
 
 {%- if enable_cmd30 %}
-  - id: ble_process_cmd30
+  - id: b2500_script_process_cmd30
     then:
 {%- for storage in storages %}
 {%- if loop.index0 > 0 %}
@@ -1523,9 +1523,9 @@ script:
                   - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 130 && id(b2500_device_id_{{ loop.index }}).state != "");'
                 then:
                   - script.execute: 
-                      id: ble_runtime_query30
+                      id: b2500_script_runtime_query30
                       ble_device_nr: {{ loop.index }}
-                  - script.wait: ble_runtime_query30
+                  - script.wait: b2500_script_runtime_query30
 {%- endif %}
 {%- endfor %}
 {%- endif %}
@@ -1545,7 +1545,7 @@ script:
       - script.wait: b2500_script_send_command
 
 {%- if enable_cmd30 %}
-  - id: ble_runtime_query30
+  - id: b2500_script_runtime_query30
     parameters:
       ble_device_nr: int
     then:
@@ -1560,7 +1560,7 @@ script:
       - script.wait: b2500_script_send_command
 {%- endif %}
 
-  - id: ble_runtime_query0F
+  - id: b2500_script_runtime_query0F
     parameters:
       ble_device_nr: int
     then:
@@ -1574,7 +1574,7 @@ script:
           ble_cmd_parm: 0x01
       - script.wait: b2500_script_send_command
 
-  - id: ble_runtime_query13
+  - id: b2500_script_runtime_query13
     parameters:
       ble_device_nr: int
     then:
@@ -1611,7 +1611,7 @@ script:
           if (ble_cmd_t == 0x02) { ESP_LOGD("set_power_out", "Device %i - %s", ble_device_nr,"1 OFF / 2 ON"); }
           if (ble_cmd_t == 0x03) { ESP_LOGD("set_power_out", "Device %i - %s", ble_device_nr,"1 ON / 2 ON"); }
 
-  - id: ble_set_loadfirst
+  - id: b2500_script_set_loadfirst
     parameters:
       ble_device_nr: int
       switch_cmd: bool
@@ -1626,7 +1626,7 @@ script:
           ble_cmd_parm: !lambda return switch_cmd;
 
 
-  - id: ble_set_simultan
+  - id: b2500_script_set_simultan
     parameters:
       ble_device_nr: int
       switch_cmd: bool
@@ -1726,7 +1726,7 @@ script:
           rdat1.at(22) = 0;
           rdat1.at(23) = (power >> 0) & 0xFF;
           rdat1.at(24) = (power >> 8) & 0xFF;
-          id(ble_command_raw_01).execute(ble_device_nr,rdat1);
+          id(b2500_script_command_raw_01).execute(ble_device_nr,rdat1);
 
   - id: b2500_script_set_timer_enable
     parameters:
@@ -1758,9 +1758,9 @@ script:
           if ( timer == 1 ) { rdat1.at(4) = enable; rdat1.at(18) = 0; }
           if ( timer == 2 ) { rdat1.at(11) = enable; rdat1.at(18) = 0; }
           if ( timer == 3 ) { rdat1.at(4) = 0; rdat1.at(11) = 0; rdat1.at(18) = enable; }
-          id(ble_command_raw_01).execute(ble_device_nr,rdat1);
+          id(b2500_script_command_raw_01).execute(ble_device_nr,rdat1);
 
-  - id: ble_notify_parse
+  - id: b2500_script_notify_parse
     parameters:
       ble_device_nr: int
       x: char[]
@@ -2393,7 +2393,7 @@ script:
           }
 {%- endif %}
 {%- if enable_enforce_dod %}
-  - id: ble_enforce_dod
+  - id: b2500_script_enforce_dod
     parameters:
       ble_device_nr: int
       x: int
