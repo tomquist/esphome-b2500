@@ -44,21 +44,12 @@ jobs:
         run: |
           node render.js
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.8'
-
-      - name: Install ESPHome
-        run: |
-          python -m pip install --upgrade pip
-          pip install esphome
-
       - name: Build firmware
         id: esphome-build
         uses: esphome/build-action@v2
         with:
           yaml_file: device.yaml
+          version: ${{ github.event.client_payload.esphome_version || '2024.5.5' }}
 
       - name: Zip the firmware with a password
         run: |
