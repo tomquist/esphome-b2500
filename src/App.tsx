@@ -25,12 +25,25 @@ import {
   newIssueLink,
   validateConfig,
 } from './utils';
+import GetAppOutlinedIcon from '@mui/icons-material/GetAppOutlined';
+import PublishOutlinedIcon from '@mui/icons-material/PublishOutlined';
+import { useMediaQuery } from '@mui/material';
 
 nunjucks.configure({ autoescape: false });
 
 const theme = createTheme();
+const darkTheme = createTheme({
+  palette: {
+    mode: 'dark',
+    primary: {
+      main: '#90caf9', // customize primary color for dark mode if needed
+    },
+  },
+});
 
 const App: React.FC = () => {
+  const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
+  const themeToUse = prefersDarkMode ? darkTheme : theme;
   const [config, setConfig] = useState<string>('');
   const [formValues, setFormValues] = useState<FormValues>();
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -81,8 +94,40 @@ const App: React.FC = () => {
     [debouncedFormValues]
   );
 
+  const handleExport = () => {
+    const json = JSON.stringify(formValues, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'esphome-b2500.config.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const importedData = JSON.parse(event.target?.result as string);
+          setFormValues(importedData);
+        } catch (error) {
+          console.error('Error parsing JSON file', error);
+        }
+      };
+      reader.readAsText(file);
+
+      // Reset file input value to allow re-selection of the same file
+      e.target.value = ''; // Reset the value to trigger onChange next time
+    }
+  };
+
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={themeToUse}>
       <CssBaseline />
       <Container>
         <Typography variant="h4" align="center" gutterBottom>
@@ -117,6 +162,33 @@ const App: React.FC = () => {
           <Box mt={4}>
             <Paper elevation={3} sx={{ padding: 2, position: 'relative' }}>
               <Box display="flex" justifyContent="flex-end" mb={2}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  onClick={handleExport}
+                  sx={{ marginRight: 2 }}
+                  startIcon={<GetAppOutlinedIcon />}
+                >
+                  Export as JSON
+                </Button>
+                <label htmlFor="import-json">
+                  <input
+                    id="import-json"
+                    type="file"
+                    accept=".json"
+                    onChange={handleImport}
+                    style={{ display: 'none' }}
+                  />
+                  <Button
+                    variant="contained"
+                    color="success"
+                    component="span"
+                    sx={{ marginRight: 2 }}
+                    startIcon={<PublishOutlinedIcon />}
+                  >
+                    Import JSON
+                  </Button>
+                </label>
                 <Button
                   variant="contained"
                   color="primary"
