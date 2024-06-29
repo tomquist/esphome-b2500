@@ -1472,7 +1472,7 @@ script:
                   - script.stop: b2500_script_runtime_query0F
                   - script.execute: 
                       id: b2500_script_runtime_query0F
-                      ble_device_nr: 1
+                      ble_device_nr: {{ loop.index }}
                   - script.wait: b2500_script_runtime_query0F
             - if:
                 condition:
@@ -1505,7 +1505,7 @@ script:
                   - script.stop: b2500_script_runtime_query13
                   - script.execute: 
                       id: b2500_script_runtime_query13
-                      ble_device_nr: 1
+                      ble_device_nr: {{ loop.index }}
                   - script.wait: b2500_script_runtime_query13
 {%- endif %}
 {%- endfor %}
