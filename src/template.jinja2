@@ -1324,8 +1324,8 @@ script:
     then:
       - logger.log:
           level: INFO
-          format: "Sending raw command to device %i: %s"
-          args: [ 'ble_device_nr', 'ble_cmd_parm' ]
+          format: "Sending raw command to device %i"
+          args: [ 'ble_device_nr' ]
 {%- for storage in storages %}
       - if:
           condition:
@@ -1370,8 +1370,8 @@ script:
       ble_cmd_parm: char[]
     then:
       - logger.log:
-          format: "Sending raw command to device %i: %s"
-          args: [ 'ble_device_nr', 'ble_cmd_parm' ]
+          format: "Sending raw command to device %i"
+          args: [ 'ble_device_nr' ]
 {%- for storage in storages %}
       - if:
           condition:
