@@ -230,7 +230,7 @@ interval:
     then:
       - script.stop: b2500_script_process_cmd30
       - script.execute: b2500_script_process_cmd30
-      - script.wait: b2500_script_process
+      - script.wait: b2500_script_process_cmd30
 {%- endif %}
 
 time:
@@ -245,7 +245,11 @@ globals:
     initial_value: '0'
   - id: b2500_ble_initialized_{{ loop.index }}
     type: bool
+{%- if storage.version == 1 %}
     initial_value: '0'
+{%- else %}
+    initial_value: '1'
+{%- endif %}
 {%- if storage.version >= 2 %}
   - id: b2500_tmp_timers_{{ loop.index }}
     type: char[22]
@@ -318,7 +322,11 @@ ble_client:
             value: '0'
         - globals.set:
             id: b2500_ble_initialized_{{ loop.index }}
+{%- if storage.version == 1 %}
             value: '0'
+{%- else %}
+            value: '1'
+{%- endif %}
         - lambda: id(b2500_device_type_{{ loop.index }}).publish_state("not connected");
         - lambda: id(b2500_device_id_{{ loop.index }}).publish_state("");
         - lambda: id(b2500_device_ble_mac_{{ loop.index }}).publish_state("");
