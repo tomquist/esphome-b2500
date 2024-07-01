@@ -21,6 +21,7 @@
 {%- set enable_powerzero = enable_powerzero or False %}
 {%- set enable_enforce_dod = enable_enforce_dod or False %}
 {%- set enable_cellquery = enable_cellquery or False %}
+{%- set enable_timer_query = enable_timer_query or False %}
 {%- set enable_cmd30 = enable_cmd30 or False %}
 {%- set enable_esp_temperature = enable_esp_temperature or False %}
 {%- set enable_powermeter = enable_powermeter or False %}
@@ -72,6 +73,9 @@ esphome:
 {%- if enable_cellquery %}
       - switch.turn_on: b2500_esp32_cellquery_enabled
 {%- endif %}
+{%- if enable_timer_query %}
+      - switch.turn_on: b2500_esp32_timer_query_enabled
+{%- endif %}
 {%- if enable_cmd30 %}
       - switch.turn_on: b2500_esp32_cmd30_query_enabled
 {%- endif %}
@@ -110,18 +114,21 @@ logger:
     then:
       lambda: |-
         if (strstr(message, "BT_BTC") != NULL) {
+          id(mqtt_client).publish("b2500/debug",message);
           id(mqtt_client).publish("{{ mqtt_topic }}/debug","B_T_C FOUND: restart ESP32");
 {%- if enable_auto_restart %}
           id(controller_restart).press();
 {%- endif %}
         }
         if (strstr(message, "btc_transfer_context") != NULL) {
+          id(mqtt_client).publish("b2500/debug",message);
           id(mqtt_client).publish("{{ mqtt_topic }}/debug","B_T_C FOUND: restart ESP32");
 {%- if enable_auto_restart %}
           id(controller_restart).press();
 {%- endif %}
         }
         if (strstr(message, "mode: single") != NULL) {
+          id(mqtt_client).publish("b2500/debug",message);
           id(mqtt_client).publish("{{ mqtt_topic }}/debug","single mode: restart ESP32");
 {%- if enable_auto_restart %}
           id(controller_restart).press();
@@ -134,6 +141,7 @@ logger:
           id(mqtt_client).publish("{{ mqtt_topic }}/debug",mvalue);
 {%- if enable_auto_restart %}
           if(id(b2500_internal_error_count) > {{ auto_restart_after_error_count }}) {
+            ESP_LOGI("b2500","handle error counter: RESET");
             id(b2500_internal_error_count) = 0;
             id(mqtt_client).publish("{{ mqtt_topic }}/debug","handle error counter: RESET");
             id(controller_restart).press();
@@ -214,24 +222,30 @@ interval:
   - interval: {{ poll_interval_seconds or '5' }}s
     startup_delay: 20s
     then:
-      - script.stop: b2500_script_process
+      - script.wait: b2500_script_notify_parse
+      - script.wait: b2500_script_process
       - script.execute: b2500_script_process
       - script.wait: b2500_script_process
 {%- if enable_cellquery %}
       - delay: 1500ms
-      - script.stop: b2500_script_process_cmd0F
-      - script.execute: b2500_script_process_cmd0F
-      - script.wait: b2500_script_process_cmd0F
+      - script.wait: b2500_script_notify_parse
+      - script.wait: b2500_script_request_cellinfo_if_needed
+      - script.execute: b2500_script_request_cellinfo_if_needed
+      - script.wait: b2500_script_request_cellinfo_if_needed
+{%- endif %}
+{%- if enable_timer_query %}
       - delay: 1500ms
-      - script.stop: b2500_script_process_cmd13
-      - script.execute: b2500_script_process_cmd13
-      - script.wait: b2500_script_process_cmd13
+      - script.wait: b2500_script_notify_parse
+      - script.wait: b2500_script_request_timers_if_needed
+      - script.execute: b2500_script_request_timers_if_needed
+      - script.wait: b2500_script_request_timers_if_needed
 {%- endif %}
 {%- if enable_cmd30 %}
   - interval: 1min
     startup_delay: 30s
     then:
-      - script.stop: b2500_script_process_cmd30
+      - script.wait: b2500_script_notify_parse
+      - script.wait: b2500_script_process_cmd30
       - script.execute: b2500_script_process_cmd30
       - script.wait: b2500_script_process_cmd30
 {%- endif %}
@@ -257,6 +271,9 @@ globals:
   - id: b2500_tmp_timers_{{ loop.index }}
     type: char[22]
     initial_value: "{0x0,0x0,0x0,0x0,0x0,0x0,0x0, 0x0,0x0,0x0,0x0,0x0,0x0,0x0, 0x0,0x0,0x0,0x0,0x0,0x0,0x0 }"
+  - id: b2500_timers_initialized_{{ loop.index }}
+    type: bool
+    initial_value: '0'
 {%- endif %}
 {%- if enable_cmd30 %}
   - id: b2500_cmd30_xor_last_{{ loop.index }}
@@ -288,7 +305,9 @@ ble_client:
     id: b2500_ble_client_{{ loop.index }}
     on_connect:
       then:
-        - logger.log: "Connected to BLE device {{ loop.index }} ({{ yaml_string(storage.name) }})"
+        - logger.log:
+            level: INFO
+            format: "Connected to BLE device {{ loop.index }} ({{ yaml_string(storage.name) }})"
         - globals.set:
             id: b2500_ble_connected_{{ loop.index }}
             value: '1'
@@ -304,6 +323,7 @@ ble_client:
         - lambda: id(b2500_device_region_{{ loop.index }}).publish_state("");
 {%- if storage.version == 1 %}
         - delay: 500ms
+        - script.wait: b2500_script_notify_parse
         - script.execute:
             id: b2500_script_send_command
             ble_device_nr: {{ loop.index }}
@@ -311,6 +331,7 @@ ble_client:
             ble_cmd_parm: 0x00
         - script.wait: b2500_script_send_command
         - delay: 500ms
+        - script.wait: b2500_script_notify_parse
         - script.execute: 
             id: b2500_script_set_time
             ble_device_nr: {{ loop.index }}
@@ -318,7 +339,9 @@ ble_client:
 {%- endif %}
     on_disconnect:
       then:
-        - logger.log: "Disconnected from BLE device {{ loop.index }} ({{ yaml_string(storage.name) }})"
+        - logger.log:
+            level: INFO
+            format: "Disconnected from BLE device {{ loop.index }} ({{ yaml_string(storage.name) }})"
         - binary_sensor.template.publish:
             id: b2500_device_ble_ok_{{ loop.index }}
             state: OFF
@@ -331,6 +354,11 @@ ble_client:
             value: '0'
 {%- else %}
             value: '1'
+{%- endif %}
+{%- if storage.version >= 2 %}
+        - globals.set:
+            id: b2500_timers_initialized_{{ loop.index }}
+            value: '0'
 {%- endif %}
         - lambda: id(b2500_device_type_{{ loop.index }}).publish_state("not connected");
         - lambda: id(b2500_device_id_{{ loop.index }}).publish_state("");
@@ -515,22 +543,29 @@ number:
           ble_device_nr: {{ loop.index }}
           dod: !lambda return x;
 {%- if storage.version >= 2 %}
+{%- set storage_loop = loop %}
+{%- for _ in range(3) %}
   - platform: template
-    id: b2500_timer3_power_{{ loop.index }}
-    name: "{{ sensor_prefix(loop.index, storage) }} Timer 3 Output Power"
-    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/timer/3/power"
-    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/timer/3/power/set"
+    id: b2500_timer{{ loop.index }}_power_{{ storage_loop.index }}
+    name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Output Power"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/power"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/power/set"
     optimistic: True
     min_value: 50
-    max_value: 400
+    max_value: 800
     step: 1
     restore_value: True
     on_value:
-      - script.execute:
-          id: b2500_script_set_timer_power
-          ble_device_nr: {{ loop.index }}
-          timer: 3
-          power: !lambda return x; 
+      - if:
+          condition:
+            lambda: return id(b2500_timers_initialized_{{ storage_loop.index }});
+          then:
+            - script.execute:
+                id: b2500_script_set_timer_power
+                ble_device_nr: {{ storage_loop.index }}
+                timer: {{ loop.index }}
+                power: !lambda return x;
+{%- endfor %}
 {%- endif %}
 {%- endfor %}
 
@@ -605,18 +640,26 @@ switch:
     assumed_state: True
     on_turn_on:
       then:
-        - script.execute:
-            id: b2500_script_set_timer_enable
-            ble_device_nr: {{ storage_loop.index }}
-            timer: {{ loop.index }}
-            enable: 1
+      - if:
+          condition:
+            lambda: return id(b2500_timers_initialized_{{ storage_loop.index }});
+          then:
+            - script.execute:
+                id: b2500_script_set_timer_enable
+                ble_device_nr: {{ storage_loop.index }}
+                timer: {{ loop.index }}
+                enable: 1
     on_turn_off:
       then:
-        - script.execute:
-            id: b2500_script_set_timer_enable
-            ble_device_nr: {{ storage_loop.index }}
-            timer: {{ loop.index }}
-            enable: 0
+      - if:
+          condition:
+            lambda: return id(b2500_timers_initialized_{{ storage_loop.index }});
+          then:
+            - script.execute:
+                id: b2500_script_set_timer_enable
+                ble_device_nr: {{ storage_loop.index }}
+                timer: {{ loop.index }}
+                enable: 0
 {%- endfor %}
 {%- endif %}
 {%- endfor %}
@@ -682,7 +725,7 @@ switch:
         - script.execute:
             id: b2500_script_set_timer_enable
             ble_device_nr: {{ loop.index }}
-            timer: 9
+            timer: -1
             enable: 1
 
 {%- endif %}
@@ -731,8 +774,10 @@ switch:
 {%- if enable_timer_query %}
   - platform: template
     id: b2500_esp32_timer_query_enabled
-    name: "Timer Query Enabled (cmd13)"
+    name: "Timer Query Enabled"
     optimistic: True
+    command_topic: "{{ yaml_string(mqtt_topic) }}/esp32/timerquery/enabled/set"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/timerquery/enabled"
     #restore_mode: RESTORE_DEFAULT_ON
     #assumed_state: True
 {%- endif %}
@@ -914,10 +959,22 @@ sensor:
       name: 'Current'
     power:
       name: 'Power'
+      id: power
     frequency:
       name: "Frequency"
       accuracy_decimals: 2
     update_interval: 5s
+  - platform: total_daily_energy
+    name: "Energy Daily"
+    power_id: power
+    unit_of_measurement: "kWh"
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 3
+    filters:
+      # From W to kW
+      - multiply: 0.001
+
 {%- endif %}
   - platform: uptime
     name: Uptime Sensor
@@ -1232,6 +1289,7 @@ script:
       ble_cmd_parm: string
     then:
       - logger.log:
+          level: INFO
           format: "Sending string command to device %i: [%i]"
           args: [ 'ble_device_nr','ble_cmd']
 {%- for storage in storages %}
@@ -1331,36 +1389,32 @@ script:
           condition:
             lambda: 'return (ble_device_nr == {{ loop.index }});'
           then:
-{%- if storage.version >= 2 %}
             - ble_client.ble_write:
                 id: b2500_ble_client_{{ loop.index }}
                 service_uuid: 0000ff00-0000-1000-8000-00805f9b34fb
                 characteristic_uuid: 0000ff01-0000-1000-8000-00805f9b34fb
                 value: !lambda |-
-                  std::vector<unsigned char> rdat{{ loop.index }};
+                  std::vector<unsigned char> rdat1;
 
                   for (auto b : ble_cmd_parm) {
-                    rdat{{ loop.index }}.push_back((unsigned char)b);
+                    rdat1.push_back((unsigned char)b);
                   }
 
-                  int rlen = rdat{{ loop.index }}.size();
-                  rdat{{ loop.index }}.at(1) = rlen+1;
+                  int rlen = rdat1.size();
+                  rdat1.at(1) = rlen+1;
                   int rxor = 0;
                   for (int i=0;i<rlen;i++) {
-                    rxor = rxor ^ rdat{{ loop.index }}[i];
+                    rxor = rxor ^ rdat1[i];
                   }
-                  rdat{{ loop.index }}.push_back(rxor);
+                  rdat1.push_back(rxor);
 
                   if (id(b2500_internal_console_dbg)) {
-                    for (auto b : rdat{{ loop.index }}) {
+                    for (auto b : rdat1) {
                       ESP_LOGD("COMMAND raw", "%x - %i - %c", b,b,b);
                     }
                   }
 
-                  return rdat{{ loop.index }};
-{%- else %}
-            - delay: 100ms
-{%- endif %}
+                  return rdat1;
 {%- endfor %}
 
 
@@ -1370,6 +1424,7 @@ script:
       ble_cmd_parm: char[]
     then:
       - logger.log:
+          level: INFO
           format: "Sending raw command to device %i"
           args: [ 'ble_device_nr' ]
 {%- for storage in storages %}
@@ -1422,11 +1477,6 @@ script:
                 condition:
                   - lambda: 'return (id(b2500_device_ble_mac_{{ loop.index }}).state != "");'
                 then:
-                  - script.execute:
-                      id: ble_runtime_query
-                      ble_device_nr: {{ loop.index }}
-                  - script.wait: ble_runtime_query
-
                   ### query FC41D_FW if empty and FW > 133
                   - if:
                       condition:
@@ -1449,14 +1499,12 @@ script:
                             ble_cmd: 0x09
                             ble_cmd_parm: 0x01
                         - script.wait: b2500_script_send_command
-{%- if storage.version >= 2 %}
                   ### query runtime info last
                   - script.stop: ble_runtime_query
                   - script.execute: 
                       id: ble_runtime_query
                       ble_device_nr: {{ loop.index }}
                   - script.wait: ble_runtime_query
-{%- endif %}
 
                 else:
                   ### query deviceinfo if empty
@@ -1472,7 +1520,7 @@ script:
                         - script.wait: b2500_script_send_command
 {%- endfor %}
 {%- if enable_cellquery %}
-  - id: b2500_script_process_cmd0F
+  - id: b2500_script_request_cellinfo_if_needed
     then:
 {%- for storage in storages %}
 {%- if loop.index0 > 0 %}
@@ -1480,36 +1528,26 @@ script:
 {%- endif %}
       - if:
           condition:
-            - lambda: 'return (id(b2500_ble_connected_{{ loop.index }}) && id(b2500_ble_initialized_{{ loop.index }}) && id(b2500_esp32_cellquery_enabled).state);'
-          then:
-            - if:
-                condition:
+            and:
+              - lambda: 'return (id(b2500_ble_connected_{{ loop.index }}) && id(b2500_ble_initialized_{{ loop.index }}) && id(b2500_esp32_cellquery_enabled).state);'
 {%- if storage.version >= 2 %}
-                  ### query cmd0F if firmware > 1.55
-                  - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 155 && id(b2500_device_id_{{ loop.index }}).state != "");'
+              ### query cmd0F if firmware > 1.55
+              - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 155 && id(b2500_device_id_{{ loop.index }}).state != "");'
 {%- else %}
-                  ### query cmd0F if firmware > 1.30
-                  - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 130 && id(b2500_device_id_{{ loop.index }}).state != "");'
+              ### query cmd0F if firmware > 1.30
+              - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 130 && id(b2500_device_id_{{ loop.index }}).state != "");'
 {%- endif %}
-                then:
-                  - script.stop: b2500_script_runtime_query0F
-                  - script.execute: 
-                      id: b2500_script_runtime_query0F
-                      ble_device_nr: {{ loop.index }}
-                  - script.wait: b2500_script_runtime_query0F
-            - if:
-                condition:
-                  - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 130 && id(b2500_device_id_{{ loop.index }}).state != "");'
-                then:
-                  - script.execute: 
-                      id: b2500_script_runtime_query0F
-                      ble_device_nr: {{ loop.index }}
-                  - script.wait: b2500_script_runtime_query0F
+          then:
+            - script.stop: b2500_script_request_cellinfo
+            - script.execute:
+                id: b2500_script_request_cellinfo
+                ble_device_nr: {{ loop.index }}
+            - script.wait: b2500_script_request_cellinfo
 {%- endfor %}
 {%- endif %}
 
-{%- if enable_cellquery %}
-  - id: b2500_script_process_cmd13
+{%- if enable_timer_query %}
+  - id: b2500_script_request_timers_if_needed
     then:
 {%- for storage in storages %}
 {%- if loop.index0 > 0 %}
@@ -1518,18 +1556,20 @@ script:
 {%- if storage.version >= 2 %}
       - if:
           condition:
-            - lambda: 'return (id(b2500_ble_connected_{{ loop.index }}) && id(b2500_ble_initialized_{{ loop.index }}) && id(b2500_esp32_cellquery_enabled).state);'
+            and:
+              - lambda: 'return (id(b2500_ble_connected_{{ loop.index }}) && id(b2500_ble_initialized_{{ loop.index }}) && id(b2500_esp32_timer_query_enabled).state);'
+              ### query cmd0F if firmware > 1.55
+              - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 155 && id(b2500_device_id_{{ loop.index }}).state != "");'
           then:
-            ### query cmd0F if firmware > 1.55
-            - if:
-                condition:
-                  - lambda: 'return (id(b2500_device_fw_version_{{ loop.index }}).state * 100 > 155 && id(b2500_device_id_{{ loop.index }}).state != "");'
-                then:
-                  - script.stop: b2500_script_runtime_query13
-                  - script.execute: 
-                      id: b2500_script_runtime_query13
-                      ble_device_nr: {{ loop.index }}
-                  - script.wait: b2500_script_runtime_query13
+            - script.wait: b2500_script_request_timers
+            - script.execute:
+                id: b2500_script_request_timers
+                ble_device_nr: {{ loop.index }}
+            - script.wait: b2500_script_request_timers
+{%- else %}
+      - logger.log:
+          level: INFO
+          format: "Skipping request timers for device {{ loop.index }} - not supported by firmware"
 {%- endif %}
 {%- endfor %}
 {%- endif %}
@@ -1564,6 +1604,7 @@ script:
       ble_device_nr: int
     then:
       - logger.log: 
+          level: INFO
           format: "Performing runtime query for device %i"
           args: [ 'ble_device_nr' ]      
       - script.execute: 
@@ -1579,6 +1620,7 @@ script:
       ble_device_nr: int
     then:
       - logger.log: 
+          level: INFO
           format: "Performing runtime query 30 (errorlog ?) for device %i"
           args: [ 'ble_device_nr' ]      
       - script.execute: 
@@ -1589,11 +1631,12 @@ script:
       - script.wait: b2500_script_send_command
 {%- endif %}
 
-  - id: b2500_script_runtime_query0F
+  - id: b2500_script_request_cellinfo
     parameters:
       ble_device_nr: int
     then:
       - logger.log: 
+          level: INFO
           format: "Requesting cell infos for device %i"
           args: [ 'ble_device_nr' ]      
       - script.execute: 
@@ -1603,11 +1646,13 @@ script:
           ble_cmd_parm: 0x01
       - script.wait: b2500_script_send_command
 
-  - id: b2500_script_runtime_query13
+{%- if enable_timer_query %}
+  - id: b2500_script_request_timers
     parameters:
       ble_device_nr: int
     then:
       - logger.log:
+          level: INFO
           format: "Requesting timer for device %i"
           args: [ 'ble_device_nr' ]
       - script.execute:
@@ -1616,6 +1661,7 @@ script:
           ble_cmd: 0x13
           ble_cmd_parm: 0x00
       - script.wait: b2500_script_send_command
+{%- endif %}
 
   - id: b2500_script_set_powerout
     parameters:
@@ -1646,6 +1692,7 @@ script:
       switch_cmd: bool
     then:
       - logger.log:
+          level: INFO
           format: "Setting load first on device %i to %i"
           args: [ble_device_nr,switch_cmd]
       - script.execute:
@@ -1661,6 +1708,7 @@ script:
       switch_cmd: bool
     then:
       - logger.log: 
+          level: INFO
           format: "Setting simultan on device %i to %i"
           args: [ble_device_nr,switch_cmd]
       - script.execute:
@@ -1675,6 +1723,7 @@ script:
       switch_cmd: bool
     then:
       - logger.log: 
+          level: INFO
           format: "Setting PV2 Passthrough on device %i to %i"
           args: [ble_device_nr,switch_cmd]
       - script.execute: 
@@ -1689,6 +1738,7 @@ script:
       dod: int
     then:
       - logger.log: 
+          level: INFO
           format: "Setting DOD on device %i to %i"
           args: [ 'ble_device_nr','dod' ]
       - if:
@@ -1707,6 +1757,7 @@ script:
       discharge: int
     then:
       - logger.log: 
+          level: INFO
           format: "Setting Discharge Threshold on device %i to %i"
           args: [ 'ble_device_nr','discharge' ]
       - if:
@@ -1719,7 +1770,6 @@ script:
                 ble_cmd: 0x0C
                 ble_cmd_parm: !lambda return discharge;
 
-  ### power control with timer3 ( for tests )
   - id: b2500_script_set_timer_power
     parameters:
       ble_device_nr: int
@@ -1741,20 +1791,25 @@ script:
           {%- if storage.version >= 2 %}
           if (ble_device_nr=={{ loop.index }}) {
             for (int i=0;i<21;i++) {
-                rdat1.push_back((unsigned char)id(b2500_tmp_timers_{{ loop.index }}])[i]);              
+              rdat1.push_back((unsigned char)id(b2500_tmp_timers_{{ loop.index }})[i]);
             }
           }
           {%- endif %}
           {%- endfor %}
-          rdat1.at(4) = 0;
-          rdat1.at(11) = 0;
-          rdat1.at(18) = 1;
-          rdat1.at(19) = 0;
-          rdat1.at(20) = 0;
-          rdat1.at(21) = 24;
-          rdat1.at(22) = 0;
-          rdat1.at(23) = (power >> 0) & 0xFF;
-          rdat1.at(24) = (power >> 8) & 0xFF;
+          int timer_offset = (timer - 1) * 7 + 4;
+
+          // From 00:00
+          // rdat1.at(timer_offset + 1) = 0;
+          // rdat1.at(timer_offset + 2) = 0;
+
+          // To 24:00
+          // rdat1.at(timer_offset + 3) = 24;
+          // rdat1.at(timer_offset + 4) = 0;
+
+          // Power
+          rdat1.at(timer_offset + 5) = (power >> 0) & 0xFF;
+          rdat1.at(timer_offset + 6) = (power >> 8) & 0xFF;
+
           id(b2500_script_command_raw_01).execute(ble_device_nr,rdat1);
 
   - id: b2500_script_set_timer_enable
@@ -1778,15 +1833,22 @@ script:
           {%- if storage.version >= 2 %}
           if (ble_device_nr=={{ loop.index }}) {
             for (int i=0;i<21;i++) {
-                rdat1.push_back((unsigned char)id(b2500_tmp_timers_{{ loop.index }})[i]);
+              rdat1.push_back((unsigned char)id(b2500_tmp_timers_{{ loop.index }})[i]);
             }
           }
           {%- endif %}
           {%- endfor %}
-          if ( timer == 0 ) { rdat1.at(4) = 0; rdat1.at(11) = 0; rdat1.at(18) = 0; }
-          if ( timer == 1 ) { rdat1.at(4) = enable; rdat1.at(18) = 0; }
-          if ( timer == 2 ) { rdat1.at(11) = enable; rdat1.at(18) = 0; }
-          if ( timer == 3 ) { rdat1.at(4) = 0; rdat1.at(11) = 0; rdat1.at(18) = enable; }
+          if (timer == 0) {
+            // Enable/Disable all timers
+            for (int i=0;i<3;i++) {
+              int timer_offset = i * 7 + 4;
+              rdat1.at(timer_offset) = enable;
+            }
+          } else if (timer > 0 && timer <= 3) {
+            // Enable/Disable single timer
+            int timer_offset = (timer - 1) * 7 + 4;
+            rdat1.at(timer_offset) = enable;
+          }
           id(b2500_script_command_raw_01).execute(ble_device_nr,rdat1);
 
   - id: b2500_script_notify_parse
@@ -1821,8 +1883,14 @@ script:
           if (ble_device_nr=={{ loop.index }}) { id(b2500_device_last_response_{{ loop.index }}).publish_state(strTime); }
 {%- endfor %}
 
+          int deviceVersion = 0;
+{%- for storage in storages %}
+          if (ble_device_nr=={{ loop.index }}) { deviceVersion = {{ storage.version }}; }
+{%- endfor %}
+
           if ((std::count (x.begin(), x.end(), '_') == 16) || (std::count (x.begin(), x.begin() + 10, '_') == 3)) 
           {   
+{%- if enable_cellquery %}
             ESP_LOGD("main", "Data: cmd 0x0F");
             int pos = 0;
             int soc = 0;
@@ -1865,18 +1933,18 @@ script:
             */
 
             // float soccalc =  (cv/14000 - 3.0) * 200;
-            float lowlimit  = 3.0;                                           // low voltage limit
-            float highlimit = 3.5;                                           // high voltage limit
-                                                                    
+            float lowlimit  = 3.050;                                           // low voltage limit
+            //float highlimit = 3.328;                                         // high voltage limit
+            float highlimit = 3.400;
+
             float soccalc =  100*((cv/14000) 
                               - highlimit)/(highlimit - lowlimit) + 100;     // equation of line with two points (0,lowlimit) (100,highlimit)
 
-
-            ESP_LOGI("cellVoltage","soc: %i, temp1: %i, temp2: %i",soc,t1,t2);
-            ESP_LOGI("cellVoltage","cell01: %.f, cell 02: %.f, cell 03: %.f, cell 04: %.f", cellV[0], cellV[1], cellV[2], cellV[3]);
-            ESP_LOGI("cellVoltage","cell05: %.f, cell 06: %.f, cell 07: %.f, cell 08: %.f", cellV[4], cellV[5], cellV[6], cellV[7]);
-            ESP_LOGI("cellVoltage","cell09: %.f, cell 10: %.f, cell 11: %.f, cell 12: %.f", cellV[8], cellV[9], cellV[10], cellV[11]);
-            ESP_LOGI("cellVoltage","cell13: %.f, cell 14: %.f", cellV[12], cellV[13]);
+            ESP_LOGD("cellVoltage","soc: %i, temp1: %i, temp2: %i",soc,t1,t2);
+            ESP_LOGD("cellVoltage","cell01: %.f, cell 02: %.f, cell 03: %.f, cell 04: %.f", cellV[0], cellV[1], cellV[2], cellV[3]);
+            ESP_LOGD("cellVoltage","cell05: %.f, cell 06: %.f, cell 07: %.f, cell 08: %.f", cellV[4], cellV[5], cellV[6], cellV[7]);
+            ESP_LOGD("cellVoltage","cell09: %.f, cell 10: %.f, cell 11: %.f, cell 12: %.f", cellV[8], cellV[9], cellV[10], cellV[11]);
+            ESP_LOGD("cellVoltage","cell13: %.f, cell 14: %.f", cellV[12], cellV[13]);
 
 
             char mtopic[48];
@@ -1898,8 +1966,13 @@ script:
             id(mqtt_client).publish(mtopic,to_string(cv/14000));
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/cdiff",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string((cmax-cmin)/1000));
+
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/soccalc",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(soccalc));
+
+            // corrected
+            //snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/soccalc_c",ble_device_nr);
+            //id(mqtt_client).publish(mtopic,to_string(soccalc_c));
 
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/temp1",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(t1));
@@ -1917,7 +1990,7 @@ script:
             id(bccvdiff).publish_state((cmax-cmin)/1000); 
             id(bccvavg).publish_state(cv/14000);                             // avarage cellvoltage (V)
             */
-
+{%- endif %}
           }   
 
           else if (x[3] == 0x03) {
@@ -2318,8 +2391,8 @@ script:
             {%- for storage in storages %}
             {%- if storage.version >= 2 %}
             if (ble_device_nr=={{ loop.index }}) {
-              for (int i=5;i<26;i++) {
-                id(b2500_tmp_timers_{{ loop.index }})[i-5] = x[i];
+              for (int i=0;i<21;i++) {
+                id(b2500_tmp_timers_{{ loop.index }})[i] = x[i + 5];
               }
             }
             {%- endif %}
@@ -2328,33 +2401,40 @@ script:
             char mtopic[48]; 
             char mvalue[48]; 
             int mpower = 0;
-            // timer 1
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/1/enabled",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(x[5]));
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/1/value",ble_device_nr);
-            snprintf(mvalue, 48,"%02i:%02i - %02i:%02i ( %3i W )",x[6],x[7],x[8],x[9],(x[11] << 8) | x[10]);
+            int timer_offset = 5;
+
+            {%- for _ in range(3) %}
+            {%- set timer_index = loop.index %}
+            // timer {{ timer_index }}
+            {%- if timer_index > 1 %}
+            timer_offset += 7;
+            {%- endif %}
+            {%- for storage in storages %}
+            {%- if storage.version >= 2 %}
+            if (ble_device_nr=={{ loop.index }} && id(b2500_timer{{ timer_index }}_enabled_{{ loop.index }}).state != x[timer_offset]) {
+              id(b2500_timer{{ timer_index }}_enabled_{{ loop.index }}).publish_state(x[timer_offset]);
+            }
+            {%- endif %}
+            {%- endfor %}
+            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/{{ timer_index }}/value",ble_device_nr);
+            snprintf(mvalue, 48,"%02i:%02i - %02i:%02i ( %3i W )",x[timer_offset + 1],x[timer_offset + 2],x[timer_offset + 3],x[timer_offset + 4],(x[timer_offset + 6] << 8) | x[timer_offset + 5]);
             id(mqtt_client).publish(mtopic,to_string(mvalue));
-            mpower = x[11] << 8 | x[10] ;
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/1/power",ble_device_nr);        
-            id(mqtt_client).publish(mtopic,to_string(mpower));
-            // timer 2
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/2/enabled",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(x[12]));
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/2/value",ble_device_nr);
-            snprintf(mvalue, 48,"%02i:%02i - %02i:%02i ( %3i W )",x[13],x[14],x[15],x[16],(x[18] << 8) | x[17]);
-            id(mqtt_client).publish(mtopic,to_string(mvalue));
-            mpower = x[18] << 8 | x[17] ;
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/2/power",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(mpower));
-            // timer 3
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/3/enabled",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(x[19]));
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/3/value",ble_device_nr);
-            snprintf(mvalue, 48,"%02i:%02i - %02i:%02i ( %3i W )",x[20],x[21],x[22],x[23],(x[25] << 8) | x[24]);
-            id(mqtt_client).publish(mtopic,to_string(mvalue));
-            mpower = x[25] << 8 | x[24] ;
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/3/power",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(mpower));
+            mpower = x[timer_offset + 6] << 8 | x[timer_offset + 5];
+            {%- for storage in storages %}
+            {%- if storage.version >= 2 %}
+            if (ble_device_nr=={{ loop.index }} && id(b2500_timer{{ timer_index }}_power_{{ loop.index }}).state != mpower) {
+              id(b2500_timer{{ timer_index }}_power_{{ loop.index }}).publish_state(mpower);
+            }
+            {%- endif %}
+            {%- endfor %}
+            {%- endfor %}
+            {%- for storage in storages %}
+            {%- if storage.version >= 2 %}
+            if (ble_device_nr=={{ loop.index }} && !id(b2500_timers_initialized_{{ loop.index }})) {
+              id(b2500_timers_initialized_{{ loop.index }}) = true;
+            }
+            {%- endif %}
+            {%- endfor %}
 
             // smartmeter
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/smartmeter/enabled",ble_device_nr);

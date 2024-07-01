@@ -133,6 +133,12 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
         <BooleanField
           value={formValues}
           onChange={handleInputChange}
+          prop="enable_timer_query"
+          label="Enable Timer Query (v2 & 3 only)"
+        />
+        <BooleanField
+          value={formValues}
+          onChange={handleInputChange}
           prop="enable_experimental_commands"
           label="Enable Experimental Commands"
         />
