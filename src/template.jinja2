@@ -1128,6 +1128,60 @@ sensor:
     unit_of_measurement: '°C'
     device_class: temperature
     icon: mdi:thermometer
+
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage Sum"
+    id: b2500_device_cell_voltage_sum_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/cells/sum/voltage"
+    unit_of_measurement: V
+    device_class: voltage
+    accuracy_decimals: 3
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage Min"
+    id: b2500_device_cell_voltage_min_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/cells/sum/cmin"
+    unit_of_measurement: V
+    device_class: voltage
+    accuracy_decimals: 3
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage Max"
+    id: b2500_device_cell_voltage_max_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/cells/sum/cmax"
+    unit_of_measurement: V
+    device_class: voltage
+    accuracy_decimals: 3
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage Avg"
+    id: b2500_device_cell_voltage_avg_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/cells/sum/cavg"
+    unit_of_measurement: V
+    device_class: voltage
+    accuracy_decimals: 3
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage Diff"
+    id: b2500_device_cell_voltage_diff_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/cells/sum/cdiff"
+    unit_of_measurement: V
+    device_class: voltage
+    accuracy_decimals: 3
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Calculated SoC"
+    id: b2500_device_cell_voltage_soccalc_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/cells/sum/soccalc"
+    unit_of_measurement: '%'
+    device_class: battery
+    accuracy_decimals: 3
+  {%- set storage_loop = loop %}
+  {%- for _ in range(14) %}
+  - platform: template
+    name: "{{ sensor_prefix(storage_loop.index, storage) }} Cell Voltage {{ loop.index }}"
+    id: b2500_device_cell_voltage_{{ loop.index }}_{{ storage_loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/battery/cells/{% if loop.index < 10 %}0{% endif %}{{ loop.index }}/voltage"
+    unit_of_measurement: V
+    device_class: voltage
+    accuracy_decimals: 3
+  {%- endfor %}
+
 {%- endfor %}
 
   - platform: template
@@ -2028,48 +2082,25 @@ script:
 
 
             char mtopic[48];
-            for (int i=0; i<14; i++) {
-              snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/%02d/voltage",ble_device_nr,i+1);
-              //ESP_LOGD("cellVoltageX","%s : %f", mtopic, cellV[i]);
-              id(mqtt_client).publish(mtopic,to_string(cellV[i]/1000));
+            {%- for storage in storages %}
+            if (ble_device_nr=={{ loop.index }}) {
+              {%- set storage_loop = loop %}
+              {%- for _ in range(14) %}
+              id(b2500_device_cell_voltage_{{ loop.index }}_{{ storage_loop.index }}).publish_state(cellV[{{ loop.index0 }}]/1000);
+              {%- endfor %}
+              id(b2500_device_cell_voltage_sum_{{ loop.index }}).publish_state(cv/1000);
+              id(b2500_device_cell_voltage_min_{{ loop.index }}).publish_state(cmin/1000);
+              id(b2500_device_cell_voltage_max_{{ loop.index }}).publish_state(cmax/1000);
+              id(b2500_device_cell_voltage_avg_{{ loop.index }}).publish_state(cv/14000);
+              id(b2500_device_cell_voltage_diff_{{ loop.index }}).publish_state((cmax-cmin)/1000);
+              id(b2500_device_cell_voltage_soccalc_{{ loop.index }}).publish_state(soccalc);
             }
-
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/voltage",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(cv/1000));
-
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/cmin",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(cmin/1000));
-
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/cmax",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(cmax/1000));
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/cavg",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(cv/14000));
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/cdiff",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string((cmax-cmin)/1000));
-
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/soccalc",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(soccalc));
-
-            // corrected
-            //snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/cells/sum/soccalc_c",ble_device_nr);
-            //id(mqtt_client).publish(mtopic,to_string(soccalc_c));
+            {%- endfor %}
 
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/temp1",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(t1));
             snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/temp2",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(t2));
-
-           /*
-            id(bcsoc).publish_state(soc);                                    // SOC from device (%)
-            id(bcsoccalc).publish_state(soccalc);                            // SOC calculated from cell voltages (%)       
-            id(bctemp1).publish_state(t1);                                   // Temperature 1 (°C)
-            id(bctemp2).publish_state(t2);                                   // Temperature 2 (°C)
-            id(bccvsum).publish_state(cv/1000);                              // sum of cellvoltages = battery Voltage(V)
-            id(bccvmin).publish_state(cmin/1000);                            // lowest cellvoltage (V)
-            id(bccvmax).publish_state(cmax/1000);                            // highest cellvoltage (V)
-            id(bccvdiff).publish_state((cmax-cmin)/1000); 
-            id(bccvavg).publish_state(cv/14000);                             // avarage cellvoltage (V)
-            */
           {%- endif %}
           }   
 
