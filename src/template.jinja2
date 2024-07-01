@@ -508,6 +508,55 @@ button:
 {%- endif %}
 {%- endfor %}
 
+datetime:
+  {%- for storage in storages %}
+  {%- if storage.version >= 2 %}
+  {%- set storage_loop = loop %}
+  {%- for _ in range(3) %}
+  - platform: template
+    id: b2500_timer{{ loop.index }}_time_start_{{ storage_loop.index }}
+    type: time
+    name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Start Time"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/start"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/start/set"
+    optimistic: True
+    restore_value: True
+    on_value:
+      - if:
+          condition:
+            lambda: return id(b2500_timers_initialized_{{ storage_loop.index }});
+          then:
+            - script.execute:
+                id: b2500_script_set_timer_time
+                ble_device_nr: {{ storage_loop.index }}
+                timer: {{ loop.index }}
+                is_start: 1
+                hour: !lambda return x.hour;
+                minute: !lambda return x.minute;
+  - platform: template
+    id: b2500_timer{{ loop.index }}_time_end_{{ storage_loop.index }}
+    type: time
+    name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} End Time"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/end"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/end/set"
+    optimistic: True
+    restore_value: True
+    on_value:
+      - if:
+          condition:
+            lambda: return id(b2500_timers_initialized_{{ storage_loop.index }});
+          then:
+            - script.execute:
+                id: b2500_script_set_timer_time
+                ble_device_nr: {{ storage_loop.index }}
+                timer: {{ loop.index }}
+                is_start: 0
+                hour: !lambda return x.hour;
+                minute: !lambda return x.minute;
+  {%- endfor %}
+  {%- endif %}
+  {%- endfor %}
+
 number:
 {%- for storage in storages %}
 {%- if storage.version == 1 %}
@@ -1780,7 +1829,7 @@ script:
           level: INFO
           format: "Setting Timer %i on Device: %i to power %i"
           args: [ 'timer','ble_device_nr','power' ]
-      - lambda: !
+      - lambda: !lambda |-
           std::vector<char> rdat1 { 0x73, 0x1a, 0x23, 0x12 };
           // 73 1a 23 12  T1 S1 S2 E1 E2 V1 V2    XOR
           //              00 00 00 00 00 64 00
@@ -1798,17 +1847,48 @@ script:
           {%- endfor %}
           int timer_offset = (timer - 1) * 7 + 4;
 
-          // From 00:00
-          // rdat1.at(timer_offset + 1) = 0;
-          // rdat1.at(timer_offset + 2) = 0;
-
-          // To 24:00
-          // rdat1.at(timer_offset + 3) = 24;
-          // rdat1.at(timer_offset + 4) = 0;
-
           // Power
           rdat1.at(timer_offset + 5) = (power >> 0) & 0xFF;
           rdat1.at(timer_offset + 6) = (power >> 8) & 0xFF;
+
+          id(b2500_script_command_raw_01).execute(ble_device_nr,rdat1);
+  - id: b2500_script_set_timer_time
+    parameters:
+      ble_device_nr: int
+      timer: int
+      is_start: int
+      hour: int
+      minute: int
+    then:
+      - logger.log:
+          level: INFO
+          format: "Setting Timer %i on Device: %i to time %i:%i (is_start: %i)"
+          args: [ 'timer','ble_device_nr','hour','minute','is_start' ]
+      - lambda: !lambda |-
+          std::vector<char> rdat1 { 0x73, 0x1a, 0x23, 0x12 };
+          {%- for storage in storages %}
+          {%- if storage.version >= 2 %}
+          if (ble_device_nr=={{ loop.index }}) {
+            for (int i=0;i<21;i++) {
+              rdat1.push_back((unsigned char)id(b2500_tmp_timers_{{ loop.index }})[i]);
+            }
+          }
+          {%- endif %}
+          {%- endfor %}
+          int timer_offset = (timer - 1) * 7 + 4;
+
+          if (is_start) {
+            rdat1.at(timer_offset + 1) = hour;
+            rdat1.at(timer_offset + 2) = minute;
+          } else {
+            if (hour == 0 && minute == 0) {
+              rdat1.at(timer_offset + 3) = 24;
+              rdat1.at(timer_offset + 4) = 0;
+            } else {
+              rdat1.at(timer_offset + 3) = hour;
+              rdat1.at(timer_offset + 4) = minute;
+            }
+          }
 
           id(b2500_script_command_raw_01).execute(ble_device_nr,rdat1);
 
@@ -1822,7 +1902,7 @@ script:
           level: INFO
           format: "Setting Timer %i on Device: %i to enabled state %i"
           args: [ 'timer','ble_device_nr','enable' ]
-      - lambda: !
+      - lambda: !lambda |-
           std::vector<char> rdat1 { 0x73, 0x1a, 0x23, 0x12 };
           // 73 1a 23 12  T1 S1 S2 E1 E2 V1 V2    XOR
           //              00 00 00 00 00 64 00
@@ -1869,28 +1949,28 @@ script:
               }
           }
 
-{%- if enable_hexdump %}
+          {%- if enable_hexdump %}
           if (id(b2500_hexdump).state == true) {
             ESP_LOG_BUFFER_HEXDUMP("hexdump", &x[0], x.size(), ESP_LOG_ERROR);
           }
-{%- endif %}
+          {%- endif %}
 
           // reset error counter
           id(b2500_internal_error_count) = 0;
 
           auto strTime = id(sntp_time).now().strftime("%d.%m.%Y %H:%M:%S");
-{%- for storage in storages %}
+          {%- for storage in storages %}
           if (ble_device_nr=={{ loop.index }}) { id(b2500_device_last_response_{{ loop.index }}).publish_state(strTime); }
-{%- endfor %}
+          {%- endfor %}
 
           int deviceVersion = 0;
-{%- for storage in storages %}
+          {%- for storage in storages %}
           if (ble_device_nr=={{ loop.index }}) { deviceVersion = {{ storage.version }}; }
-{%- endfor %}
+          {%- endfor %}
 
           if ((std::count (x.begin(), x.end(), '_') == 16) || (std::count (x.begin(), x.begin() + 10, '_') == 3)) 
           {   
-{%- if enable_cellquery %}
+          {%- if enable_cellquery %}
             ESP_LOGD("main", "Data: cmd 0x0F");
             int pos = 0;
             int soc = 0;
@@ -1990,7 +2070,7 @@ script:
             id(bccvdiff).publish_state((cmax-cmin)/1000); 
             id(bccvavg).publish_state(cv/14000);                             // avarage cellvoltage (V)
             */
-{%- endif %}
+          {%- endif %}
           }   
 
           else if (x[3] == 0x03) {
@@ -2005,9 +2085,9 @@ script:
             */
             int pvPower1 = x[6] | x[7] << 8;
             int pvPower2 = x[8] | x[9] << 8;
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_in1_power_{{ loop.index }}).publish_state(pvPower1); id(b2500_in2_power_{{ loop.index }}).publish_state(pvPower2); id(b2500_total_power_in_{{ loop.index }}).publish_state(pvPower1 + pvPower2);} 
-{%- endfor %}
+            {%- endfor %}
             id(b2500_total_in_power).publish_state({%- for storage in storages %}
                 {%- if loop.index0 > 0 %} + {% endif -%}
                 id(b2500_total_power_in_{{ loop.index }}).state
@@ -2020,9 +2100,9 @@ script:
                         x[Y] | x[Z] << 8;
             */
             int batRemain = x[10] | x[11] << 8 ;
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_battery_remaining_percent_{{ loop.index }}).publish_state(batRemain / 10); }
-{%- endfor %}
+            {%- endfor %}
 
             // Entladen bei weniger als ??? Watt PV Eingang
             /*
@@ -2044,9 +2124,9 @@ script:
                         x[Y] | x[Z] << 8;
             */
             int batCapacity = x[22] | x[23] << 8;
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_battery_remaining_capacity_{{ loop.index }}).publish_state(batCapacity); }
-{%- endfor %}
+            {%- endfor %}
 
             // Ausgangsleistung in Watt
             /*
@@ -2056,9 +2136,9 @@ script:
             */
             int powerOut1 = x[24] | x[25] << 8;
             int powerOut2 = x[26] | x[27] << 8;
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_out1_power_{{ loop.index }}).publish_state(powerOut1); id(b2500_out2_power_{{ loop.index }}).publish_state(powerOut2); id(b2500_total_power_out_{{ loop.index }}).publish_state(powerOut1 + powerOut2); }
-{%- endfor %}
+            {%- endfor %}
             id(b2500_total_out_power).publish_state({%- for storage in storages %}
                 {%- if loop.index0 > 0 %} + {% endif -%}
                 id(b2500_total_power_out_{{ loop.index }}).state
@@ -2070,9 +2150,9 @@ script:
                     0-255 ( ~ anzeige als /100 )
             */
             float dev_version = x[12];
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_device_fw_version_{{ loop.index }}).publish_state(dev_version / 100); }
-{%- endfor %}
+            {%- endfor %}
 
             // Temperature Sensors 
             /*
@@ -2082,9 +2162,9 @@ script:
             */
             int dev_temp1 = x[33];
             int dev_temp2 = x[35];
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_device_temperature1_{{ loop.index }}).publish_state(dev_temp1); id(b2500_device_temperature2_{{ loop.index }}).publish_state(dev_temp2);}
-{%- endfor %}
+            {%- endfor %}
 
             // 
             /*
@@ -2092,11 +2172,11 @@ script:
                     0-100 Prozentualer Anteil der Entladeleistung an der Nennleistung
             */
             int dod_level = x[18];
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { 
               if (id(b2500_battery_dod_{{ loop.index }}).state != dod_level) { id(b2500_battery_dod_{{ loop.index }}).publish_state(dod_level); }
             }
-{%- endfor %}
+            {%- endfor %}
 
             // binary sensor / bool
             // pv 1 und 2 in
@@ -2107,7 +2187,7 @@ script:
                       0x01 （Aufladung）
                       0x02 （transparent für Wechselrichter）
             */
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { 
               if( x[4] == 0x00 ) { id(b2500_pv1_active_{{ loop.index }}).publish_state(false);id(b2500_pv1_transparent_{{ loop.index }}).publish_state(false); }
               if( x[4] == 0x01 ) { id(b2500_pv1_active_{{ loop.index }}).publish_state(true); id(b2500_pv1_transparent_{{ loop.index }}).publish_state(false); }
@@ -2116,7 +2196,7 @@ script:
               if( x[5] == 0x01 ) { id(b2500_pv2_active_{{ loop.index }}).publish_state(true); id(b2500_pv2_transparent_{{ loop.index }}).publish_state(false); }
               if( x[5] == 0x02 ) { id(b2500_pv2_active_{{ loop.index }}).publish_state(true); id(b2500_pv2_transparent_{{ loop.index }}).publish_state(true); }        
             }
-{%- endfor %}
+            {%- endfor %}
 
             // pv 2 durchleiten
             /*
@@ -2124,14 +2204,14 @@ script:
                       0x00 （PV1 Aufladung PV2 Durchleitung）
                       0x01 （Volles Laden und Entladen）
             */
-{%- for storage in storages %}
-{%- if storage.version == 1 %}
+            {%- for storage in storages %}
+            {%- if storage.version == 1 %}
             if (ble_device_nr=={{ loop.index }}) { 
               if( x[13] == 0x00 ) { id(b2500_pv2_passthrough_enabled_{{ loop.index }}).turn_on(); }
               if( x[13] == 0x01 ) { id(b2500_pv2_passthrough_enabled_{{ loop.index }}).turn_off(); }
             }
-{%- endif %}
-{%- endfor %}
+            {%- endif %}
+            {%- endfor %}
 
             // Entlademodus 
             /*
@@ -2140,14 +2220,14 @@ script:
                       0x01 （Erst Laden, dann Entladen）
             */
 
-{%- for storage in storages %}
-{%- if storage.version >= 2 %}
+            {%- for storage in storages %}
+            {%- if storage.version >= 2 %}
             if (ble_device_nr=={{ loop.index }}) { 
               if( x[13] == 0x00 ) { id(b2500_device_loadfirst_{{ loop.index }}).turn_off(); }
               if( x[13] == 0x01 ) { id(b2500_device_loadfirst_{{ loop.index }}).turn_on(); }
             }
-{%- endif %}
-{%- endfor %}
+            {%- endif %}
+            {%- endfor %}
 
             // RESERVED ( wifi / mqtt )
             /*
@@ -2169,14 +2249,14 @@ script:
                       03 = ??? / mqtt connected                      
             */
             // wifi and mqtt
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) {             
               if( x[15] == 0x00 ) { id(b2500_device_wifi_ok_{{ loop.index }}).publish_state(false); id(b2500_device_mqtt_ok_{{ loop.index }}).publish_state(false); }
               if( x[15] == 0x01 ) { id(b2500_device_wifi_ok_{{ loop.index }}).publish_state(true);  id(b2500_device_mqtt_ok_{{ loop.index }}).publish_state(false); }
               if( x[15] == 0x02 ) { id(b2500_device_wifi_ok_{{ loop.index }}).publish_state(false);  id(b2500_device_mqtt_ok_{{ loop.index }}).publish_state(true);  }
               if( x[15] == 0x03 ) { id(b2500_device_wifi_ok_{{ loop.index }}).publish_state(true);  id(b2500_device_mqtt_ok_{{ loop.index }}).publish_state(true);  }
             }
-{%- endfor %}
+            {%- endfor %}
 
             // power 1 und 2 enabled/disabled
             /*
@@ -2186,8 +2266,8 @@ script:
                       0x02 nur OUT2 Freigabe
                       0x03 OUT1&OUT2 Freigabe        
             */
-{%- for storage in storages %}
-{%- if storage.version == 1 %}
+            {%- for storage in storages %}
+            {%- if storage.version == 1 %}
             static int power{{ loop.index }}_old = 0;  
             if (ble_device_nr=={{ loop.index }}) { 
               //ESP_LOGD("POWER{{ loop.index }}_OUT", "old: %i, new: %i", power{{ loop.index }}_old,x[14]);
@@ -2199,8 +2279,8 @@ script:
                 power{{ loop.index }}_old = x[14];
               }
             }
-{%- endif %}
-{%- endfor %}
+            {%- endif %}
+            {%- endfor %}
 
             // power 1 und 2 active
             /*
@@ -2209,14 +2289,14 @@ script:
                       0x00（Aus）
                       0x01（Entladung）
             */
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) {
               if( x[16] == 0x00 ) { id(b2500_power1_active_{{ loop.index }}).publish_state(false);}
               if( x[16] == 0x01 ) { id(b2500_power1_active_{{ loop.index }}).publish_state(true); }
               if( x[17] == 0x00 ) { id(b2500_power2_active_{{ loop.index }}).publish_state(false);}
               if( x[17] == 0x01 ) { id(b2500_power2_active_{{ loop.index }}).publish_state(true); }
             }
-{%- endfor %}
+            {%- endfor %}
             // zusatzakku 1 und 2
             /*
                 [28]  Ist Netzgerät 1 angeschlossen (1Byte)
@@ -2224,30 +2304,30 @@ script:
                       0x00（Kein Akkupack angeschlossen）
                       0x01（Verbinden Sie das Netzteil）        
             */
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) {            
               if( x[28] == 0x00 ) { id(b2500_extern1_connected_{{ loop.index }}).publish_state(false);}
               if( x[28] == 0x01 ) { id(b2500_extern1_connected_{{ loop.index }}).publish_state(true); }
               if( x[29] == 0x00 ) { id(b2500_extern2_connected_{{ loop.index }}).publish_state(false);}
               if( x[29] == 0x01 ) { id(b2500_extern2_connected_{{ loop.index }}).publish_state(true); }
             }
-{%- endfor %}
+            {%- endfor %}
 
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { 
               if( x[21] == 0x00 ) { id(b2500_device_scene_{{ loop.index }}).publish_state("Tag"); }
               if( x[21] == 0x01 ) { id(b2500_device_scene_{{ loop.index }}).publish_state("Nacht"); }
               if( x[21] == 0x02 ) { id(b2500_device_scene_{{ loop.index }}).publish_state("Morgens/Abends"); }
             }
-{%- endfor %}
-{%- for storage in storages %}
+            {%- endfor %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { 
               if( x[30] == 0x00 ) { id(b2500_device_region_{{ loop.index }}).publish_state("EU"); }
               if( x[30] == 0x01 ) { id(b2500_device_region_{{ loop.index }}).publish_state("China"); }
               if( x[30] == 0x02 ) { id(b2500_device_region_{{ loop.index }}).publish_state("non-EU"); }
               if( x[30] == 0xff ) { id(b2500_device_region_{{ loop.index }}).publish_state("not SET"); }
             }
-{%- endfor %}
+            {%- endfor %}
 
             // internal mode description
             /*
@@ -2261,8 +2341,8 @@ script:
             */
       
 
-{%- for storage in storages %}
-{%- if storage.version >= 2 %}
+            {%- for storage in storages %}
+            {%- if storage.version >= 2 %}
             if (ble_device_nr=={{ loop.index }}) { 
               if ( id(b2500_pv1_transparent_{{ loop.index }}).state == true  && id(b2500_pv2_transparent_{{ loop.index }}).state == true ) { id(b2500_device_mode_{{ loop.index }}).publish_state("trans"); } 
               else { 
@@ -2275,8 +2355,8 @@ script:
                 }
               }
             }
-{%- endif %}
-{%- endfor %}
+            {%- endif %}
+            {%- endfor %}
           }
           else if (x[3] == 0x04) {
             ESP_LOGD("main", "Data: deviceInfo ");
@@ -2309,9 +2389,9 @@ script:
             std::string sType(reinterpret_cast<char*>(vType));
             std::string sID(reinterpret_cast<char*>(vID));
             std::string sMac(reinterpret_cast<char*>(vMac));
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_device_type_{{ loop.index }}).publish_state(sType); id(b2500_device_id_{{ loop.index }}).publish_state(sID); id(b2500_device_ble_mac_{{ loop.index }}).publish_state(sMac); }
-{%- endfor %}
+            {%- endfor %}
           }
           // get wifi info - "admin mode ?!?" only
           else if (x[3] == 0x08) {
@@ -2325,9 +2405,9 @@ script:
             vSSID[data_len-5] = 0x00;
             ESP_LOGD("deviceInfo", "%i: %s", data_len,vSSID);
             std::string sSSID(reinterpret_cast<char*>(vSSID));
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_device_wifi_ssid_{{ loop.index }}).publish_state(sSSID); }
-{%- endfor %}
+            {%- endfor %}
 
             for (auto b : x) {
               ESP_LOGD("data", "%x \t %i \t %x", b,b,b);
@@ -2347,9 +2427,9 @@ script:
             vSSID[data_len-6] = 0x00;
             ESP_LOGI("Signal/SSID", "%i: %s", vSignal,vSSID);
             std::string sSSID(reinterpret_cast<char*>(vSSID));
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_device_wifi_ssid_{{ loop.index }}).publish_state(sSSID); }
-{%- endfor %}
+            {%- endfor %}
           }          
           else if (x[3] == 0x23) {          
             ESP_LOGD("main", "Data: fc41d FW ");            
@@ -2362,9 +2442,9 @@ script:
             vFC41D_FW[data_len-6] = 0x00;
             ESP_LOGI("FC41D FW", "%i: %s", data_len,vFC41D_FW);
             std::string sFC41D_FW(reinterpret_cast<char*>(vFC41D_FW));
-{%- for storage in storages %}
+            {%- for storage in storages %}
             if (ble_device_nr=={{ loop.index }}) { id(b2500_device_fc41d_fw_{{ loop.index }}).publish_state(sFC41D_FW); }
-{%- endfor %}
+            {%- endfor %}
           }
           else if (x[3] == 0x30) {
             ESP_LOGD("main", "Data: cmd 0x30");
@@ -2378,9 +2458,9 @@ script:
               ESP_LOGD("data 30 - raw" , "0x%.2x - %.f - %.f", x[i], data1,data2);
               i += 8;
             }
-{%- for storage in storages %}
+            {%- for storage in storages %}
             //if (ble_device_nr=={{ loop.index }}) { id(ble_{{ loop.index }}_wait_process) = 0; }
-{%- endfor %}
+            {%- endfor %}
           }
           else if (x[3] == 0x13 && {{ isV2('ble_device_nr') }}) {
             ESP_LOGI("main", "Data: cmd 0x13 (timer) - Device: %i",ble_device_nr );
@@ -2401,6 +2481,10 @@ script:
             char mtopic[48]; 
             char mvalue[48]; 
             int mpower = 0;
+            int start_hour = 0;
+            int start_minute = 0;
+            int end_hour = 0;
+            int end_minute = 0;
             int timer_offset = 5;
 
             {%- for _ in range(3) %}
@@ -2416,9 +2500,31 @@ script:
             }
             {%- endif %}
             {%- endfor %}
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/timer/{{ timer_index }}/value",ble_device_nr);
-            snprintf(mvalue, 48,"%02i:%02i - %02i:%02i ( %3i W )",x[timer_offset + 1],x[timer_offset + 2],x[timer_offset + 3],x[timer_offset + 4],(x[timer_offset + 6] << 8) | x[timer_offset + 5]);
-            id(mqtt_client).publish(mtopic,to_string(mvalue));
+            start_hour = x[timer_offset + 1] % 24;
+            start_minute = x[timer_offset + 2] % 60;
+            {%- for storage in storages %}
+            {%- if storage.version >= 2 %}
+            if (ble_device_nr=={{ loop.index }} && (id(b2500_timer{{ timer_index }}_time_start_{{ loop.index }}).hour != start_hour || id(b2500_timer{{ timer_index }}_time_start_{{ loop.index }}).minute != start_minute)) {
+                auto call = id(b2500_timer{{ timer_index }}_time_start_{{ loop.index }}).make_call();
+                call.set_hour(start_hour);
+                call.set_minute(start_minute);
+                call.perform();
+            }
+            {%- endif %}
+            {%- endfor %}
+            end_hour = x[timer_offset + 3] % 24;
+            end_minute = x[timer_offset + 4] % 60;
+            {%- for storage in storages %}
+            {%- if storage.version >= 2 %}
+            if (ble_device_nr=={{ loop.index }} && (id(b2500_timer{{ timer_index }}_time_end_{{ loop.index }}).hour != end_hour || id(b2500_timer{{ timer_index }}_time_end_{{ loop.index }}).minute != end_minute)) {
+                auto call = id(b2500_timer{{ timer_index }}_time_end_{{ loop.index }}).make_call();
+                call.set_hour(end_hour);
+                call.set_minute(end_minute);
+                call.perform();
+            }
+            {%- endif %}
+            {%- endfor %}
+          
             mpower = x[timer_offset + 6] << 8 | x[timer_offset + 5];
             {%- for storage in storages %}
             {%- if storage.version >= 2 %}
