@@ -965,6 +965,14 @@ binary_sensor:
     id: b2500_extern2_connected_{{ loop.index }}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/extern2/connected"
     icon: mdi:battery-plus
+
+  {%- if storage.version >= 2 %}
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} SmartMeter Connected"
+    id: b2500_smartmeter_connected_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/connected"
+    icon: mdi:meter-electric
+  {%- endif %}
 {%- endfor %}
 
 {%- if enable_powermeter %}
@@ -1128,6 +1136,24 @@ sensor:
     unit_of_measurement: '°C'
     device_class: temperature
     icon: mdi:thermometer
+  {%- if storage.version >= 2 %}
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Smartmeter Power Out"
+    id: b2500_smartmeter_power_out_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/out"
+    accuracy_decimals: 0
+    unit_of_measurement: 'W'
+    device_class: power
+    icon: mdi:home-lightning-bolt
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Smartmeter Value"
+    id: b2500_smartmeter_value_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/value"
+    accuracy_decimals: 0
+    unit_of_measurement: 'VA'
+    device_class: power
+    icon: mdi:meter-electric
+  {%- endif %}
 
   - platform: template
     name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage Sum"
@@ -2574,13 +2600,17 @@ script:
             {%- endfor %}
 
             // smartmeter
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/smartmeter/enabled",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(x[4]));
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/smartmeter/connected",ble_device_nr);
-            id(mqtt_client).publish(mtopic,to_string(x[26]));
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/smartmeter/value",ble_device_nr);
-            snprintf(mvalue, 48,"Abtastrate: %03i - %03i - %03i ( %03i s )",  x[27],x[28],(x[30] << 8) | x[29],(x[32] << 8) | x[31]);
-            id(mqtt_client).publish(mtopic,to_string(mvalue));
+            {%- for storage in storages %}
+            {%- if storage.version >= 2 %}
+            if (ble_device_nr=={{ loop.index }}) {
+              if (id(b2500_smartmeter_enabled_{{ loop.index }}).state != x[4]) { id(b2500_smartmeter_enabled_{{ loop.index }}).publish_state(x[4]); }
+              id(b2500_smartmeter_connected_{{ loop.index }}).publish_state(x[26]);
+              id(b2500_smartmeter_power_out_{{ loop.index }}).publish_state((x[28] << 8) | x[27]);
+              id(b2500_smartmeter_value_{{ loop.index }}).publish_state((x[30] << 8) | x[29]);
+              // id(b2500_smartmeter_rate_{{ loop.index }}).publish_state((x[32] << 8) | x[31]);
+            }
+            {%- endif %}
+            {%- endfor %}
           }
           else if (x[3] == 0x01) {
             ESP_LOGD("main", "Data: cmd 0x01");
