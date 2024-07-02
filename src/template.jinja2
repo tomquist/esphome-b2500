@@ -591,9 +591,9 @@ number:
           id: b2500_script_set_dod
           ble_device_nr: {{ loop.index }}
           dod: !lambda return x;
-{%- if storage.version >= 2 %}
-{%- set storage_loop = loop %}
-{%- for _ in range(3) %}
+  {%- if storage.version >= 2 %}
+  {%- set storage_loop = loop %}
+  {%- for _ in range(3) %}
   - platform: template
     id: b2500_timer{{ loop.index }}_power_{{ storage_loop.index }}
     name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Output Power"
@@ -614,9 +614,9 @@ number:
                 ble_device_nr: {{ storage_loop.index }}
                 timer: {{ loop.index }}
                 power: !lambda return x;
-{%- endfor %}
-{%- endif %}
-{%- endfor %}
+  {%- endfor %}
+  {%- endif %}
+  {%- endfor %}
 
 {%- if enable_powerzero %}
   ### power zero
@@ -1155,6 +1155,7 @@ sensor:
     icon: mdi:meter-electric
   {%- endif %}
 
+  {%- if enable_cellquery %}
   - platform: template
     name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage Sum"
     id: b2500_device_cell_voltage_sum_{{ loop.index }}
@@ -1207,6 +1208,7 @@ sensor:
     device_class: voltage
     accuracy_decimals: 3
   {%- endfor %}
+  {%- endif %}
 
 {%- endfor %}
 
@@ -2682,7 +2684,7 @@ script:
 {%- endfor %}
           // test: works good  +1 for dod ... else 100 - dod_level
           int res = 101 - dod_level;
-          if (x <= res ) {
+          if (battery_level <= res ) {
             ESP_LOGD("enforce_dod","++++ ble_device_nr = %d, batterie_level = %d, dod_level = %d, res = %d" ,ble_device_nr,battery_level,dod_level,res);
 {%- for storage in storages %}
 {%- if storage.version == 1 %}
