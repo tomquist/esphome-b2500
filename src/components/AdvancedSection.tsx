@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   Accordion,
   AccordionSummary,
@@ -7,10 +7,21 @@ import {
   Typography,
   Box,
   Grid,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText,
+  FormControl,
+  SelectChangeEvent,
 } from '@mui/material';
 import { ExpandMore } from '@mui/icons-material';
 import BooleanField from './BooleanField';
-import { FormValues } from '../types';
+import {
+  EspTemperatureSettings,
+  espTemperatureVariantLabels,
+  FormValues,
+  validEspTemperatureVariants,
+} from '../types';
 
 interface AdvancedSectionProps {
   formValues: FormValues;
@@ -23,6 +34,9 @@ interface AdvancedSectionProps {
   handleManualIPChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handlePowerzeroChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handlePowermeterChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleEspTemperatureChange: (
+    espTemperatureSettings: EspTemperatureSettings
+  ) => void;
 }
 
 const AdvancedSection: React.FC<AdvancedSectionProps> = ({
@@ -36,6 +50,7 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
   handleManualIPChange,
   handlePowerzeroChange,
   handlePowermeterChange,
+  handleEspTemperatureChange,
 }) => {
   let setWifiSsidInvalid = formValues.set_wifi.ssid.trim() === '';
   let setWifiPasswordInvalid = formValues.set_wifi.password.trim() === '';
@@ -61,6 +76,17 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
     formValues.powerzero.limit_cmd_topic.trim() === '';
   let powerzerolimitStateTopicInvalid =
     formValues.powerzero.limit_state_topic.trim() === '';
+
+  const handleEspTemperatureSelectChange = useCallback(
+    <E extends string>(e: SelectChangeEvent<E>) => {
+      const { name, value } = e.target;
+      handleEspTemperatureChange({
+        ...formValues.esp_temperature,
+        [name]: value,
+      });
+    },
+    [formValues, handleEspTemperatureChange]
+  );
   return (
     <Accordion>
       <AccordionSummary expandIcon={<ExpandMore />}>
@@ -346,6 +372,37 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           prop="enable_esp_temperature"
           label="Enable ESP temperature"
         />
+        {formValues.enable_esp_temperature && (
+          <Box mb={2} border={1} borderRadius={5} padding={2}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth margin="normal">
+                  <InputLabel id="esp-temperature-variant-label">
+                    Variant
+                  </InputLabel>
+                  <Select
+                    labelId="esp-temperature-variant-label"
+                    name="variant"
+                    value={formValues.esp_temperature.variant}
+                    onChange={handleEspTemperatureSelectChange}
+                  >
+                    {validEspTemperatureVariants.map((variant) => (
+                      <MenuItem key={variant} value={variant}>
+                        {espTemperatureVariantLabels[variant]}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>
+                    The method to measure the temperature. If unsure, leave this
+                    at "{espTemperatureVariantLabels['internal']}" to use the
+                    internal temperature sensor.
+                  </FormHelperText>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </Box>
+        )}
+
         <BooleanField
           value={formValues}
           onChange={handleInputChange}

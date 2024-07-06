@@ -28,6 +28,9 @@ export const defaultFormValues: FormValues = {
   enable_timer_query: true,
   enable_cmd30: false,
   enable_esp_temperature: false,
+  esp_temperature: {
+    variant: 'internal',
+  },
   enable_powermeter: false,
   enable_experimental_commands: false,
   enable_hexdump: false,

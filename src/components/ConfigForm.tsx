@@ -13,7 +13,12 @@ import {
   SelectChangeEvent,
   FormHelperText,
 } from '@mui/material';
-import { FormValues, Storage, validPlatformVariants } from '../types';
+import {
+  EspTemperatureSettings,
+  FormValues,
+  Storage,
+  validPlatformVariants,
+} from '../types';
 import { makeHandleInputChange } from '../utils/formUtils';
 import MqttSection from './MqttSection';
 import WifiSection from './WifiSection';
@@ -91,6 +96,16 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
     makeHandleInputChange(formValues, onFormChange)('powermeter'),
     [formValues, onFormChange]
   );
+  const handleEspTemperatureChange = useCallback(
+    (temperatureSettings: EspTemperatureSettings) => {
+      onFormChange({
+        ...formValues,
+        esp_temperature: temperatureSettings,
+      });
+    },
+    [formValues, onFormChange]
+  );
+
   /* eslint-enable react-hooks/exhaustive-deps */
 
   const handleStorageChange = useCallback(
@@ -199,6 +214,7 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
         handleManualIPChange={handleManualIPChange}
         handlePowerzeroChange={handlePowerzeroChange}
         handlePowermeterChange={handlePowermeterChange}
+        handleEspTemperatureChange={handleEspTemperatureChange}
       />
 
       <Divider sx={{ my: 2 }} />

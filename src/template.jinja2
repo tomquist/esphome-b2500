@@ -24,6 +24,8 @@
 {%- set enable_timer_query = enable_timer_query or False %}
 {%- set enable_cmd30 = enable_cmd30 or False %}
 {%- set enable_esp_temperature = enable_esp_temperature or False %}
+{%- set esp_temperature = esp_temperature or {} %}
+{%- set esp_temperature_variant = esp_temperature.variant or 'internal' %}
 {%- set enable_powermeter = enable_powermeter or False %}
 {%- set powermeter_tx_pin = powermeter.tx_pin or 'GPIO6' %}
 {%- set powermeter_rx_pin = powermeter.rx_pin or 'GPIO7' %}
@@ -999,7 +1001,14 @@ uart:
 {%- endif %}
 
 sensor:
-{%- if enable_esp_temperature %}
+{%- if enable_esp_temperature and esp_temperature_variant == 'internal' %}
+  - platform: internal_temperature
+    name: "Temperature"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+{%- endif %}
+{%- if enable_esp_temperature and esp_temperature_variant == 'ntc' %}
   - platform: ntc
     sensor: temp_resistance_reading
     name: "Temperature"

@@ -63,6 +63,19 @@ export interface AutoRestartSettings {
   restart_after_error_count: number;
 }
 
+export const validEspTemperatureVariants = ['internal', 'ntc'] as const;
+export const espTemperatureVariantLabels: Record<
+  (typeof validEspTemperatureVariants)[number],
+  string
+> = {
+  internal: 'ESP32 Internal Sensor',
+  ntc: 'NTC Thermistor',
+};
+
+export interface EspTemperatureSettings {
+  variant: (typeof validEspTemperatureVariants)[number];
+}
+
 export const validPlatformVariants = [
   'auto',
   'esp32',
@@ -92,6 +105,7 @@ export interface FormValues {
   enable_experimental_commands: boolean;
   enable_cmd30: boolean;
   enable_esp_temperature: boolean;
+  esp_temperature: EspTemperatureSettings;
   enable_set_mqtt: boolean;
   enable_hexdump: boolean;
 
