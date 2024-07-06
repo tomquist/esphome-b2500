@@ -56,6 +56,18 @@
             {%- endfor %}){% endmacro %}
 {%- macro yaml_string(value) %}{% set escaped_value = value | replace('\\', '\\\\') | replace('"', '\\"') %}{{ escaped_value }}{% endmacro %}
 {%- macro sensor_prefix(loopindex, storage) %}B2500 - {{ loopindex }} - {{ yaml_string(storage.name) }}:{% endmacro %}
+{%- set hasV1 = false %}
+{%- set hasV2 = false %}
+{% for storage in storages %}
+  {%- if storage.version == 1 %}
+    {%- set hasV1 = true %}
+  {%- elif storage.version >= 2 %}
+    {%- set hasV2 = true %}
+  {%- endif %}
+{% endfor %}
+{%- if enable_timer_query and not hasV2 %}
+  {%- set enable_timer_query = false %}
+{%- endif %}
 
 {%- set _ = '' -%}
 esphome:
@@ -508,6 +520,7 @@ button:
 {%- endif %}
 {%- endfor %}
 
+{%- if enable_timer_query %}
 datetime:
   {%- for storage in storages %}
   {%- if storage.version >= 2 %}
@@ -556,6 +569,7 @@ datetime:
   {%- endfor %}
   {%- endif %}
   {%- endfor %}
+{%- endif %}
 
 number:
 {%- for storage in storages %}
@@ -591,7 +605,7 @@ number:
           id: b2500_script_set_dod
           ble_device_nr: {{ loop.index }}
           dod: !lambda return x;
-  {%- if storage.version >= 2 %}
+  {%- if storage.version >= 2 and enable_timer_query %}
   {%- set storage_loop = loop %}
   {%- for _ in range(3) %}
   - platform: template
@@ -1900,7 +1914,7 @@ script:
                 ble_device_nr: !lambda return ble_device_nr;
                 ble_cmd: 0x0C
                 ble_cmd_parm: !lambda return discharge;
-
+  {%- if enable_timer_query %}
   - id: b2500_script_set_timer_power
     parameters:
       ble_device_nr: int
@@ -2012,6 +2026,7 @@ script:
             rdat1.at(timer_offset) = enable;
           }
           id(b2500_script_command_raw_01).execute(ble_device_nr,rdat1);
+  {%- endif %}
 
   - id: b2500_script_notify_parse
     parameters:
@@ -2521,6 +2536,7 @@ script:
             //if (ble_device_nr=={{ loop.index }}) { id(ble_{{ loop.index }}_wait_process) = 0; }
             {%- endfor %}
           }
+          {%- if enable_timer_query %}
           else if (x[3] == 0x13 && {{ isV2('ble_device_nr') }}) {
             ESP_LOGI("main", "Data: cmd 0x13 (timer) - Device: %i",ble_device_nr );
             int data_len = x.size();
@@ -2614,6 +2630,7 @@ script:
             {%- endif %}
             {%- endfor %}
           }
+          {%- endif %}
           else if (x[3] == 0x01) {
             ESP_LOGD("main", "Data: cmd 0x01");
             ESP_LOG_BUFFER_HEXDUMP("hexdump", &x[0], x.size(), ESP_LOG_ERROR);
