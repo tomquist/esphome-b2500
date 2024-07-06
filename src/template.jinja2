@@ -733,9 +733,9 @@ switch:
 {%- if storage.version == 1 %}
   - platform: template
     id: b2500_pv2_passthrough_enabled_{{ loop.index }}
-    name: "{{ sensor_prefix(loop.index, storage) }} PV2 Passtrough Enabled"
-    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/passtrough"
-    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/passtrough/set"
+    name: "{{ sensor_prefix(loop.index, storage) }} PV2 Passthrough Enabled"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/passthrough"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/passthrough/set"
     optimistic: True
     assumed_state: True
     on_turn_on:
