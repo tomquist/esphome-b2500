@@ -127,5 +127,10 @@ export interface FormValues {
   enable_fallback_hotspot: boolean;
   fallback_hotspot: FallbackHotspotSettings;
 
+  /**
+   * Needed for some ESP32-S3 boards to enable DIO flash mode.
+   */
+  enable_dio_flash_mode: boolean;
+
   storages: Storage[];
 }

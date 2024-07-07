@@ -75,6 +75,10 @@
 esphome:
   name: "{{ yaml_string(name) }}"
   friendly_name: "{{ yaml_string(friendly_name) }}"
+{%- if enable_dio_flash_mode %}
+  platformio_options:
+    board_build.flash_mode: dio
+{%- endif %}
   on_boot:
     priority: -100
     then:

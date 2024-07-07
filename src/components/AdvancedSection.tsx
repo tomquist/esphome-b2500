@@ -548,6 +548,14 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
 
         <BooleanField
           value={formValues}
+          prop={'enable_dio_flash_mode'}
+          onChange={handleInputChange}
+          label="Enable DIO Flash Mode"
+          helperText="This is required for some ESP32 devices to flash them. Leave this disabled unless you know what you are doing."
+        />
+
+        <BooleanField
+          value={formValues}
           onChange={handleInputChange}
           prop="enable_powerzero"
           label="Enable Powerzero"

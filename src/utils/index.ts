@@ -75,6 +75,7 @@ export const defaultFormValues: FormValues = {
     ssid: 'ESPHome-b2500',
     enable_captive_portal: true,
   },
+  enable_dio_flash_mode: false,
   storages: [{ name: 'B2500', version: 1, mac_address: '00:00:00:00:00:00' }],
 };
 
