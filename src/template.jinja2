@@ -113,6 +113,7 @@ esp32:
   {%- if variant != 'auto' %}
   variant: "{{ yaml_string(variant) }}"
   {%- endif %}
+  flash_size: {{ flash_size or '4MB' }}
   framework:
     type: esp-idf
     sdkconfig_options:
@@ -240,12 +241,18 @@ interval:
   - interval: {{ poll_interval_seconds or '5' }}s
     startup_delay: 20s
     then:
+      - logger.log:
+          level: INFO
+          format: "Polling B2500 devices..."
       - script.wait: b2500_script_notify_parse
       - script.wait: b2500_script_process
       - script.execute: b2500_script_process
       - script.wait: b2500_script_process
 {%- if enable_cellquery %}
       - delay: 1500ms
+      - logger.log:
+          level: INFO
+          format: "Polling B2500 cellinfo..."
       - script.wait: b2500_script_notify_parse
       - script.wait: b2500_script_request_cellinfo_if_needed
       - script.execute: b2500_script_request_cellinfo_if_needed
@@ -253,6 +260,9 @@ interval:
 {%- endif %}
 {%- if enable_timer_query %}
       - delay: 1500ms
+      - logger.log:
+          level: INFO
+          format: "Polling B2500 timers..."
       - script.wait: b2500_script_notify_parse
       - script.wait: b2500_script_request_timers_if_needed
       - script.execute: b2500_script_request_timers_if_needed
@@ -262,6 +272,9 @@ interval:
   - interval: 1min
     startup_delay: 30s
     then:
+      - logger.log:
+          level: INFO
+          format: "Polling B2500 CMD30..."
       - script.wait: b2500_script_notify_parse
       - script.wait: b2500_script_process_cmd30
       - script.execute: b2500_script_process_cmd30

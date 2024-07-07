@@ -86,6 +86,9 @@ export const validPlatformVariants = [
 ] as const;
 export type PlatformVariant = (typeof validPlatformVariants)[number];
 
+export const validFlashSized = ['2MB', '4MB', '8MB', '16MB', '32MB'] as const;
+export type FlashSize = (typeof validFlashSized)[number];
+
 export interface FormValues {
   name: string;
   friendly_name: string;
@@ -95,6 +98,7 @@ export interface FormValues {
   board: string;
   variant: PlatformVariant;
   idf_platform_version: string;
+  flash_size: FlashSize;
   enable_auto_restart: boolean;
   auto_restart: AutoRestartSettings;
   enable_powerzero: boolean;

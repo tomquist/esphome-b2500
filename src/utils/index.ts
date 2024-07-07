@@ -19,6 +19,7 @@ export const defaultFormValues: FormValues = {
   },
   board: 'esp32dev',
   variant: 'auto',
+  flash_size: '4MB',
   idf_platform_version: '',
   enable_auto_restart: true,
   auto_restart: {

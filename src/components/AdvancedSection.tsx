@@ -21,6 +21,7 @@ import {
   espTemperatureVariantLabels,
   FormValues,
   validEspTemperatureVariants,
+  validFlashSized,
 } from '../types';
 
 interface AdvancedSectionProps {
@@ -124,6 +125,25 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             </>
           }
         />
+        <FormControl fullWidth margin="normal">
+          <InputLabel id="flash-size-label">Flash Size</InputLabel>
+          <Select
+            labelId="flash-size-label"
+            name="variant"
+            value={formValues.flash_size}
+            onChange={handleEspTemperatureSelectChange}
+          >
+            {validFlashSized.map((variant) => (
+              <MenuItem key={variant} value={variant}>
+                {variant}
+              </MenuItem>
+            ))}
+          </Select>
+          <FormHelperText>
+            The flash size of the ESP32. If unsure, leave this at "4MB" to use
+            the most common flash size.
+          </FormHelperText>
+        </FormControl>
         <BooleanField
           value={formValues}
           onChange={handleInputChange}
