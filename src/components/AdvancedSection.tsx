@@ -19,6 +19,7 @@ import BooleanField from './BooleanField';
 import {
   EspTemperatureSettings,
   espTemperatureVariantLabels,
+  FlashSize,
   FormValues,
   validEspTemperatureVariants,
   validFlashSized,
@@ -129,9 +130,11 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           <InputLabel id="flash-size-label">Flash Size</InputLabel>
           <Select
             labelId="flash-size-label"
-            name="variant"
+            name="flash_size"
             value={formValues.flash_size}
-            onChange={handleEspTemperatureSelectChange}
+            onChange={
+              handleInputChange as (e: SelectChangeEvent<FlashSize>) => void
+            }
           >
             {validFlashSized.map((variant) => (
               <MenuItem key={variant} value={variant}>
