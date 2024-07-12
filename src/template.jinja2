@@ -197,9 +197,15 @@ wifi:
     dns1: "{{ yaml_string(manual_ip.dns or manual_ip.gateway) }}"
 {%- endif %}
   on_connect:
+    - logger.log:
+        level: INFO
+        format: "Connected to WiFi. Starting BLE scan."
     - esp32_ble_tracker.start_scan:
         continuous: true
   on_disconnect:
+    - logger.log:
+        level: INFO
+        format: "Disconnected from WiFi. Stopping BLE scan."
     - esp32_ble_tracker.stop_scan:
 
 {%- if enable_fallback_hotspot %}
@@ -235,6 +241,14 @@ mqtt:
   reboot_timeout: 0s
   topic_prefix: "{{ yaml_string(mqtt_topic) }}"
   log_topic: "{{ yaml_string(mqtt_topic) }}/debug"
+  on_connect:
+    - logger.log:
+        level: INFO
+        format: "MQTT connected"
+  on_disconnect:
+    - logger.log:
+        level: INFO
+        format: "MQTT disconnected"
 
 
 interval:
