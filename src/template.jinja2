@@ -2095,7 +2095,7 @@ script:
           // reset error counter
           id(b2500_internal_error_count) = 0;
 
-          auto strTime = id(sntp_time).now().strftime("%d.%m.%Y %H:%M:%S");
+          auto strTime = id(sntp_time).now().strftime("%Y-%m-%dT%H:%M:%S");
           {%- for storage in storages %}
           if (ble_device_nr=={{ loop.index }}) { id(b2500_device_last_response_{{ loop.index }}).publish_state(strTime); }
           {%- endfor %}
