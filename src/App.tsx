@@ -114,7 +114,8 @@ const App: React.FC = () => {
       reader.onload = (event) => {
         try {
           const importedData = JSON.parse(event.target?.result as string);
-          setFormValues(importedData);
+          const mergedValues = mergeDeep(importedData, defaultFormValues);
+          setFormValues(mergedValues);
         } catch (error) {
           console.error('Error parsing JSON file', error);
         }
