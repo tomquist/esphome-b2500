@@ -151,6 +151,18 @@ export const validateConfig = (config: FormValues) => {
       errors.push('Storage MAC address is invalid');
     }
   }
+
+  let nameInvalid =
+    config.name.length > 31 || !/^[a-z0-9-]+$/.test(config.name);
+  if (nameInvalid) {
+    errors.push('Name is invalid');
+  }
+  if (config.friendly_name.trim() === '') {
+    errors.push('Friendly name is required');
+  }
+  if (config.friendly_name.length > 63) {
+    errors.push('Friendly name is too long');
+  }
   if (config.wifi.ssid.trim() === '') {
     errors.push('WiFi SSID is required');
   }
