@@ -57,6 +57,7 @@
             {%- if not loop.last %} || {% endif -%}
             {%- endfor %}){% endmacro %}
 {%- macro yaml_string(value) %}{% set escaped_value = value | replace('\\', '\\\\') | replace('"', '\\"') %}{{ escaped_value }}{% endmacro %}
+{%- macro yaml_lambda_string(value) %}{% set escaped_value = yaml_string(value) | replace('#', '\\#') %}{{ escaped_value }}{% endmacro %}
 {%- macro sensor_prefix(loopindex, storage) %}B2500 - {{ loopindex }} - {{ yaml_string(storage.name) }}:{% endmacro %}
 {%- set hasV1 = false %}
 {%- set hasV2 = false %}
@@ -99,7 +100,7 @@ esphome:
 {%- endif %}
 {%- for storage in storages %}
       - lambda: id(b2500_device_generation_{{ loop.index }}).publish_state("{{ storage.version }}");
-      - lambda: id(b2500_device_name_{{ loop.index }}).publish_state("{{ yaml_string(storage.name) }}");
+      - lambda: id(b2500_device_name_{{ loop.index }}).publish_state("{{ yaml_lambda_string(storage.name) }}");
 {%- if storage.version == 1 %}
       #- switch.turn_off: b2500_out1_active_{{ loop.index }}
       #- switch.turn_off: b2500_out2_active_{{ loop.index }}
