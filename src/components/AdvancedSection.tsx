@@ -147,50 +147,53 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             the most common flash size.
           </FormHelperText>
         </FormControl>
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_auto_restart"
-          label="Enable Auto Restart"
-        />
-        {formValues.enable_auto_restart && (
-          <TextField
-            label="Restart after error count"
-            name="restart_after_error_count"
-            type="number"
-            value={formValues.auto_restart.restart_after_error_count}
-            onChange={handleAutoRestartChange}
-            fullWidth
-            margin="normal"
-            required
-            error={formValues.auto_restart.restart_after_error_count < 1}
-          />
+        {formValues.template_version === 'v1' && (
+          <>
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_auto_restart"
+              label="Enable Auto Restart"
+            />
+            {formValues.enable_auto_restart && (
+              <TextField
+                label="Restart after error count"
+                name="restart_after_error_count"
+                type="number"
+                value={formValues.auto_restart.restart_after_error_count}
+                onChange={handleAutoRestartChange}
+                fullWidth
+                margin="normal"
+                required
+                error={formValues.auto_restart.restart_after_error_count < 1}
+              />
+            )}
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_hexdump"
+              label="Enable Hexdump"
+            />
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_cellquery"
+              label="Enable Cellquery"
+            />
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_timer_query"
+              label="Enable Timer Query (v2 & 3 only)"
+            />
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_experimental_commands"
+              label="Enable Experimental Commands"
+            />
+          </>
         )}
-
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_hexdump"
-          label="Enable Hexdump"
-        />
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_cellquery"
-          label="Enable Cellquery"
-        />
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_timer_query"
-          label="Enable Timer Query (v2 & 3 only)"
-        />
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_experimental_commands"
-          label="Enable Experimental Commands"
-        />
         <BooleanField
           value={formValues}
           onChange={handleInputChange}
@@ -231,12 +234,14 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           </Box>
         )}
 
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_enforce_dod"
-          label="Enable Enforce DoD"
-        />
+        {formValues.template_version === 'v1' && (
+          <BooleanField
+            value={formValues}
+            onChange={handleInputChange}
+            prop="enable_enforce_dod"
+            label="Enable Enforce DoD"
+          />
+        )}
         <BooleanField
           value={formValues}
           onChange={handleInputChange}
@@ -383,12 +388,14 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             </Grid>
           </Box>
         )}
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_cmd30"
-          label="Enable CMD30"
-        />
+        {formValues.template_version === 'v1' && (
+          <BooleanField
+            value={formValues}
+            onChange={handleInputChange}
+            prop="enable_cmd30"
+            label="Enable CMD30"
+          />
+        )}
         <BooleanField
           value={formValues}
           onChange={handleInputChange}

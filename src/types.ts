@@ -1,4 +1,6 @@
 // src/types.ts
+export type TemplateVersion = 'v1' | 'v2';
+
 export interface MQTTSettings {
   topic: string;
   broker: string;
@@ -90,6 +92,7 @@ export const validFlashSized = ['2MB', '4MB', '8MB', '16MB', '32MB'] as const;
 export type FlashSize = (typeof validFlashSized)[number];
 
 export interface FormValues {
+  template_version: TemplateVersion;
   name: string;
   friendly_name: string;
   poll_interval_seconds: number;

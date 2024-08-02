@@ -126,6 +126,37 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
   return (
     <Paper elevation={3} sx={{ padding: 2 }}>
       <Typography variant="h6">General Settings</Typography>
+      <FormControl fullWidth margin="normal">
+        <InputLabel id="variant-label">Configuration Version</InputLabel>
+        <Select
+          labelId="template-version-label"
+          name="template_version"
+          value={formValues.template_version}
+          onChange={handleSelectChange}
+        >
+          <MenuItem key={1} value={'v1'}>
+            v1
+          </MenuItem>
+          <MenuItem key={2} value={'v2'}>
+            v2 (beta)
+          </MenuItem>
+        </Select>
+        <FormHelperText>
+          You can choose between two different configuration versions:
+          <ul>
+            <li>
+              v1 - Old config based on{' '}
+              <a href="https://github.com/noone2k/hm2500pub/tree/master">
+                noone2k's ESPHome config
+              </a>
+            </li>
+            <li>
+              v2 (beta) - A new config that uses a native ESPHome component.
+              It's less resource-intensive but some features are unavailable.
+            </li>
+          </ul>
+        </FormHelperText>
+      </FormControl>
       <TextField
         label="Name"
         name="name"
