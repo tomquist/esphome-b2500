@@ -1,0 +1,768 @@
+{%- set name = name or 'b2500' %}
+{%- set friendly_name = friendly_name or name %}
+{%- set mqtt = mqtt or {} %}
+{%- set mqtt_topic = mqtt.topic or 'b2500' %}
+{%- set mqtt_enable_set = mqtt.enable_set or False %}
+{%- set mqtt_broker = mqtt.broker %}
+{%- set mqtt_port = mqtt.port or 1883 %}
+{%- set mqtt_user = mqtt.username %}
+{%- set mqtt_password = mqtt.password %}
+{%- set mqtt_discovery = mqtt.discovery or False %}
+{%- set wifi = wifi or {} %}
+{%- set wifi_ssid = wifi.ssid %}
+{%- set wifi_password = wifi.password %}
+{%- set board = board or 'esp32dev' %}
+{%- set enable_auto_restart = enable_auto_restart or False %}
+{%- set auto_restart = auto_restart or {} %}
+{%- set auto_restart_after_error_count = auto_restart.restart_after_error_count or 8 %}
+{%- set manual_ip = manual_ip or {} %}
+{%- set enable_manual_ip = enable_manual_ip or False %}
+{%- set timezone = timezone or 'Europe/Berlin' %}
+{%- set enable_powerzero = enable_powerzero or False %}
+{%- set enable_esp_temperature = enable_esp_temperature or False %}
+{%- set esp_temperature = esp_temperature or {} %}
+{%- set esp_temperature_variant = esp_temperature.variant or 'internal' %}
+{%- set enable_powermeter = enable_powermeter or False %}
+{%- set powermeter_tx_pin = powermeter.tx_pin or 'GPIO6' %}
+{%- set powermeter_rx_pin = powermeter.rx_pin or 'GPIO7' %}
+{%- set powermeter_baud_rate = powermeter.baud_rate or 9600 %}
+{%- set powermeter_stop_bits = powermeter.stop_bits or 1 %}
+{%- set set_wifi_ssid = set_wifi.ssid or '' %}
+{%- set set_wifi_password = set_wifi.password or '' %}
+{%- set powerzero = powerzero or {} %}
+{%- set powerzero_grid_power_topic = powerzero.grid_power_topic or 'tibber-esp/sensor/power/state' %}
+{%- set powerzero_limit_cmd_topic = powerzero.limit_cmd_topic or 'openDTU/XXXXXXXXXXXX/cmd/limit_persistent_relative' %}
+{%- set powerzero_limit_state_topic = powerzero.limit_state_topic or 'openDTU/XXXXXXXXXXXX/state/limit_relative' %}
+{%- set storages = storages or [] %}
+{%- set enable_web_server = enable_web_server or False %}
+{%- set web_server_port = web_server.port or 80 %}
+{%- set web_server_ota = web_server.ota or False %}
+{%- set web_server_js_include = web_server.js_include or './v2/www.js' %}
+{%- set enable_ota = enable_ota %}
+{%- set ota = ota or {} %}
+{%- set ota_password = ota.password or '' %}
+{%- set ota_enable_unprotected_writes = ota.enable_unprotected_writes or False %}
+{%- set esphome_version = esphome_version or 'latest' %}
+{%- set use_modern_ota = (esphome_version == 'latest' or esphome_version >= '2024.6.0') %}
+{%- set fallback_hotspot = fallback_hotspot or {} %}
+{%- set fallback_hotspot_ssid = fallback_hotspot.ssid or '' %}
+{%- set fallback_hotspot_enable_captive_portal = fallback_hotspot.enable_captive_portal or False %}
+{%- macro isV2(deviceNr) %}({%- for storage in storages -%}
+            {%- if storage.version >= 2 %}ble_device_nr=={{ loop.index }}{% else %}false{% endif %}
+            {%- if not loop.last %} || {% endif -%}
+            {%- endfor %}){% endmacro %}
+{%- macro yaml_string(value) %}{% set escaped_value = value | replace('\\', '\\\\') | replace('"', '\\"') %}{{ escaped_value }}{% endmacro %}
+{%- macro yaml_lambda_string(value) %}{% set escaped_value = yaml_string(value) | replace('#', '\\#') %}{{ escaped_value }}{% endmacro %}
+{%- macro sensor_prefix(loopindex, storage) %}B2500 - {{ loopindex }} - {{ yaml_string(storage.name) }}:{% endmacro %}
+{%- set hasV1 = false %}
+{%- set hasV2 = false %}
+{% for storage in storages %}
+  {%- if storage.version == 1 %}
+    {%- set hasV1 = true %}
+  {%- elif storage.version >= 2 %}
+    {%- set hasV2 = true %}
+  {%- endif %}
+{% endfor %}
+{%- if enable_timer_query and not hasV2 %}
+  {%- set enable_timer_query = false %}
+{%- endif %}
+{%- set _ = '' -%}
+esphome:
+  name: "{{ yaml_string(name) }}"
+  friendly_name: "{{ yaml_string(friendly_name) }}"
+{%- if enable_dio_flash_mode %}
+  platformio_options:
+    board_build.flash_mode: dio
+{%- endif %}
+  on_boot:
+    priority: -100
+    then:
+{%- if enable_powerzero %}
+      - switch.turn_on: b2500_npw_enabled
+{%- endif %}
+{%- for storage in storages %}
+      - lambda: id(b2500_device_generation_{{ loop.index }}).publish_state("{{ storage.version }}");
+      - lambda: id(b2500_device_name_{{ loop.index }}).publish_state("{{ yaml_lambda_string(storage.name) }}");
+{%- endfor %}
+
+esp32:
+  board: "{{ yaml_string(board or 'esp32dev') }}"
+  {%- if variant != 'auto' %}
+  variant: "{{ yaml_string(variant) }}"
+  {%- endif %}
+  flash_size: {{ flash_size or '4MB' }}
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_FREERTOS_UNICORE: y
+      COMPILER_OPTIMIZATION_SIZE: y
+    advanced:
+      ignore_efuse_mac_crc: false
+    {%- if idf_platform_version %}
+    platform_version: "{{ yaml_string(idf_platform_version) }}"
+    {%- endif %}
+
+# Enable logging
+logger:
+  level: INFO
+
+{%- if enable_ota %}
+ota:
+{%- if use_modern_ota %}
+  - platform: esphome
+    password: "{{ yaml_string(ota_password) }}"
+    {%- if ota_enable_unprotected_writes %}
+    unprotected_writes: True # This is mandatory if you want to flash the partition table or bootloader on a Shelly!
+    {%- endif %}
+{%- else %}
+  password: "{{ yaml_string(ota_password) }}"
+  {%- if ota_enable_unprotected_writes %}
+  unprotected_writes: True # This is mandatory if you want to flash the partition table or bootloader on a Shelly!
+  {%- endif %}
+{%- endif %}
+{%- endif %}
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/tomquist/esphome-b2500
+      ref: main
+    components: [b2500]
+
+wifi:
+  ssid: "{{ yaml_string(wifi_ssid) }}"
+  password: "{{ yaml_string(wifi_password) }}"
+  reboot_timeout: 0s
+  fast_connect: True
+{%- if enable_manual_ip %}
+  manual_ip:
+    static_ip: "{{ yaml_string(manual_ip.ip) }}"
+    gateway: "{{ yaml_string(manual_ip.gateway) }}"
+    subnet: "{{ yaml_string(manual_ip.subnet or '255.255.255.0') }}"
+    dns1: "{{ yaml_string(manual_ip.dns or manual_ip.gateway) }}"
+{%- endif %}
+  on_connect:
+    - logger.log:
+        level: INFO
+        format: "Connected to WiFi. Starting BLE scan."
+  on_disconnect:
+    - logger.log:
+        level: INFO
+        format: "Disconnected from WiFi. Stopping BLE scan."
+
+{%- if enable_fallback_hotspot %}
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "{{ fallback_hotspot_ssid }}"
+{%- endif %}
+
+{%- if enable_web_server %}
+web_server:
+  port: {{ web_server_port }}
+  ota: false
+  js_include: "{{ yaml_string(web_server_js_include) }}"
+  js_url: ""
+  version: 2
+{%- endif %}
+
+{%- if enable_fallback_hotspot and fallback_hotspot_enable_captive_portal %}
+captive_portal:
+{%- endif %}
+
+mqtt:
+  id: mqtt_client
+  broker: "{{ yaml_string(mqtt_broker) }}"
+  port: {{ mqtt_port }}
+{%- if mqtt_user %}
+  username: "{{ yaml_string(mqtt_user) }}"
+{%- endif %}
+{%- if mqtt_password %}
+  password: "{{ yaml_string(mqtt_password) }}"
+{%- endif %}
+  discovery: {% if mqtt_discovery %}True{% else %}False{% endif %}
+  reboot_timeout: 0s
+  topic_prefix: "{{ yaml_string(mqtt_topic) }}"
+  log_topic: "{{ yaml_string(mqtt_topic) }}/debug"
+  on_connect:
+    - logger.log:
+        level: INFO
+        format: "MQTT connected"
+  on_disconnect:
+    - logger.log:
+        level: INFO
+        format: "MQTT disconnected"
+
+b2500:
+{%- for storage in storages %}
+  - id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+    update_interval: {{ poll_interval_seconds or '5' }}s
+    ble_client_id: b2500_ble_client_{{ loop.index }}
+{%- endfor %}
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: "{{ yaml_string(timezone) }}"
+
+ble_client:
+{%- for storage in storages %}
+  - mac_address: {{ storage.mac_address | default('!secret hm2500_' ~ loop.index ~ '_mac') }}
+    id: b2500_ble_client_{{ loop.index }}
+    on_connect:
+      then:
+        - logger.log:
+            level: INFO
+            format: "Connected to BLE device {{ loop.index }} ({{ yaml_string(storage.name) }})"
+        - binary_sensor.template.publish:
+            id: b2500_device_ble_ok_{{ loop.index }}
+            state: ON
+
+    on_disconnect:
+      then:
+        - logger.log:
+            level: INFO
+            format: "Disconnected from BLE device {{ loop.index }} ({{ yaml_string(storage.name) }})"
+        - binary_sensor.template.publish:
+            id: b2500_device_ble_ok_{{ loop.index }}
+            state: OFF
+{%- endfor %}
+
+button:
+  - platform: restart
+    id: controller_restart
+    name: "Restart Controller"
+{%- for storage in storages %}
+  - platform: b2500
+    b2500_id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+    reboot:
+      id: b2500_button_reboot_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Reboot B2500"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/reboot/set"
+    factory_reset:
+      id: b2500_button_factory_reset_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Reset to Factory Settings"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/factory_settings/set"
+      disabled_by_default: True
+{%- if enable_set_wifi %}
+  - platform: template
+    id: b2500_button_set_wifi{{ loop.index }}
+    name: "{{ sensor_prefix(loop.index, storage) }} Set Wifi SSID / Password"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/wifi/set"
+    disabled_by_default: True
+    on_press:
+      then:
+        - b2500.set_wifi:
+            id: b2500_{{ loop.index }}
+            ssid: "{{ yaml_string(set_wifi_ssid) }}"
+            password: "{{ yaml_string(set_wifi_password) }}"
+{%- endif %}
+{%- if enable_set_mqtt %}
+  - platform: template
+    id: b2500_button_set_mqtt_{{ loop.index }}
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/mqtt/set"
+    name: "{{ sensor_prefix(loop.index, storage) }} Set MQTT to {{ mqtt_broker }}"
+    disabled_by_default: True
+    on_press:
+      then:
+        - b2500.set_mqtt:
+            id: b2500_{{ loop.index }}
+            host: "{{ yaml_string(mqtt_broker) }}"
+            port: {{ mqtt_port }}
+            username: "{{ yaml_string(mqtt_user) }}"
+            password: "{{ yaml_string(mqtt_password) }}"
+{%- endif %}
+{%- endfor %}
+
+{%- if hasV2 %}
+datetime:
+  {%- for storage in storages %}
+  {%- if storage.version >= 2 %}
+  {%- set storage_loop = loop %}
+  - platform: b2500
+    b2500_id: b2500_{{ storage_loop.index }}
+    generation: {{ storage.version }}
+  {%- for _ in range(3) %}
+    timer{{ loop.index }}_start:
+      id: b2500_timer{{ loop.index }}_time_start_{{ storage_loop.index }}
+      name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Start Time"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/start"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/start/set"
+    timer{{ loop.index }}_end:
+      id: b2500_timer{{ loop.index }}_time_end_{{ storage_loop.index }}
+      name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} End Time"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/end"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/end/set"
+  {%- endfor %}
+  {%- endif %}
+  {%- endfor %}
+{%- endif %}
+
+number:
+{%- for storage in storages %}
+  - platform: b2500
+    b2500_id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+{%- if storage.version == 1 %}
+    discharge_threshold:
+      id: b2500_battery_discharge_threshold_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Discharge Threshold"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/discharge_threshold"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/discharge_threshold/set"
+{%- endif %}
+    dod:
+      id: b2500_battery_dod_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Depth of Discharge"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/dod"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/dod/set"
+  {%- if storage.version >= 2 %}
+  {%- set storage_loop = loop %}
+  {%- for _ in range(3) %}
+    timer{{ loop.index }}_output_power:
+      id: b2500_timer{{ loop.index }}_power_{{ storage_loop.index }}
+      name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Output Power"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/power"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/power/set"
+  {%- endfor %}
+  {%- endif %}
+  {%- endfor %}
+
+{%- if enable_powerzero %}
+  ### power zero
+  - platform: template
+    name: "MQTT: opendtu set limit"
+    id: b2500_mqtt_opendtu_limit
+    internal: False
+    state_topic: "{{ yaml_string(powerzero_limit_cmd_topic) }}"
+    command_topic: "{{ yaml_string(powerzero_limit_state_topic) }}"
+    optimistic: True
+    min_value: 1
+    max_value: 100
+    step: 1
+    restore_value: True
+
+  - platform: template
+    name: "MQTT: opendtu set limit max"
+    id: b2500_mqtt_opendtu_limit_max
+    state_topic: "{{ yaml_string(mqtt_topic) }}/npw/max_limit"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/npw/max_limit/set"
+    internal: False
+    optimistic: True
+    min_value: 1
+    max_value: 100
+    step: 1
+    restore_value: True
+{%- endif %}
+
+
+switch:
+{%- for storage in storages %}
+  - platform: ble_client
+    ble_client_id: b2500_ble_client_{{ loop.index }}
+    name: "{{ sensor_prefix(loop.index, storage) }} Bluetooth Enabled"
+    id: b2500_bluetooth_enabled_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/bluetooth/enabled"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/bluetooth/enabled/set"
+    icon: mdi:bluetooth-connect
+  - platform: b2500
+    b2500_id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+{%- set storage_loop = loop %}
+{%- if storage.version == 1 %}
+{%- for _ in range(2) %}
+    out{{ loop.index }}:
+      id: b2500_out{{ loop.index }}_active_{{ storage_loop.index }}
+      name: "{{ sensor_prefix(storage_loop.index, storage) }} Out {{ loop.index }} - Active"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled/set"
+{%- endfor %}
+{%- elif storage.version >= 2 %}
+{%- for _ in range(3) %}
+    timer{{ loop.index }}_enabled:
+      id: b2500_timer{{ loop.index }}_enabled_{{ storage_loop.index }}
+      name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Enabled"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/enabled"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/enabled/set"
+{%- endfor %}
+    adaptive_mode:
+      id: b2500_smartmeter_enabled_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} SmartMeter Enabled"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/enabled"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/enabled/set"
+{%- endif %}
+{%- endfor %}
+{%- if enable_powerzero %}
+  - platform: template
+    id: b2500_npw_enabled
+    name: "PowerZero Enabled"
+    optimistic: True
+    command_topic: "{{ yaml_string(mqtt_topic) }}/npw/enabled/set"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/npw/enabled"
+    #restore_mode: RESTORE_DEFAULT_ON
+    #assumed_state: True
+{%- endif %}
+
+select:
+{%- for storage in storages %}
+  - platform: b2500
+    b2500_id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+    charge_mode:
+      id: b2500_charge_mode_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Charge Mode"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/charge_mode"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/charge_mode/set"
+{%- endfor %}
+
+text_sensor:
+{%- for storage in storages %}
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Generation"
+    id: b2500_device_generation_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/generation"
+    icon: mdi:devices
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} Name"
+    id: b2500_device_name_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/name"
+    icon: mdi:devices
+  - platform: b2500
+    b2500_id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+    device_type:
+      name: "{{ sensor_prefix(loop.index, storage) }} Device Type"
+      id: b2500_device_type_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/type"
+      icon: mdi:devices
+    device_id:
+      name: "{{ sensor_prefix(loop.index, storage) }} Device ID"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/id"
+      id: b2500_device_id_{{ loop.index }}
+      icon: mdi:identifier
+    firmware_version:
+      name: "{{ sensor_prefix(loop.index, storage) }} Device Firmware Version"
+      id: b2500_device_fw_version_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/fw_version"
+      icon: mdi:chip
+    mac_address:
+      name: "{{ sensor_prefix(loop.index, storage) }} MAC Address"
+      id: b2500_device_ble_mac_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/ble_mac"
+      icon: mdi:network
+    wifi_ssid:
+      name: "{{ sensor_prefix(loop.index, storage) }} Wifi SSID"
+      id: b2500_device_wifi_ssid_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/wifi_ssid"
+      icon: mdi:wifi
+    fc41d_version:
+      name: "{{ sensor_prefix(loop.index, storage) }} FC41D-Firmware"
+      id: b2500_device_fc41d_fw_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/fc41d_fw"
+      icon: mdi:chip
+    scene:
+      name: "{{ sensor_prefix(loop.index, storage) }} Scene"
+      id: b2500_device_scene_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/scene"
+      icon: mdi:theme-light-dark
+    region:
+      name: "{{ sensor_prefix(loop.index, storage) }} Region"
+      id: b2500_device_region_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/region"
+      icon: mdi:earth
+    last_response:
+      name: "{{ sensor_prefix(loop.index, storage) }} Last Response"
+      id: b2500_device_last_response_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/last_response"
+      icon: mdi:update
+    cell_voltage:
+      name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage"
+      id: b2500_device_cell_voltage_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/cell_voltage"
+      disabled_by_default: true
+      icon: mdi:battery
+{%- endfor %}
+
+binary_sensor:
+{%- for storage in storages %}
+  - platform: b2500
+    b2500_id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+    in1_active:
+      name: "{{ sensor_prefix(loop.index, storage) }} PV 1 - Active"
+      id: b2500_pv1_active_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv1/active"
+      icon: mdi:solar-power
+    in2_active:
+      name: "{{ sensor_prefix(loop.index, storage) }} PV 2 - Active"
+      id: b2500_pv2_active_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/active"
+      icon: mdi:solar-power
+    in1_transparent:
+      name: "{{ sensor_prefix(loop.index, storage) }} PV 1 - Transparent"
+      id: b2500_pv1_transparent_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv1/transparent"
+      icon: mdi:transit-connection-variant
+    in2_transparent:
+      name: "{{ sensor_prefix(loop.index, storage) }} PV 2 - Transparent"
+      id: b2500_pv2_transparent_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/transparent"
+      icon: mdi:transit-connection-variant
+    wifi_connected:
+      name: "{{ sensor_prefix(loop.index, storage) }} Wifi Connected"
+      id: b2500_device_wifi_ok_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/wifi_ok"
+      icon: mdi:wifi
+    mqtt_connected:
+      name: "{{ sensor_prefix(loop.index, storage) }} MQTT Connected"
+      id: b2500_device_mqtt_ok_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/mqtt_ok"
+      icon: mdi:cloud
+    out1_active:
+      name: "{{ sensor_prefix(loop.index, storage) }} Out 1 - Active"
+      id: b2500_power1_active_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power1/active"
+      icon: mdi:power-plug-battery
+    out2_active:
+      name: "{{ sensor_prefix(loop.index, storage) }} Out 2 - Active"
+      id: b2500_power2_active_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power2/active"
+      icon: mdi:power-plug-battery
+    extern1_connected:
+      name: "{{ sensor_prefix(loop.index, storage) }} Extension 1 connected"
+      id: b2500_extern1_connected_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/extern1/connected"
+      icon: mdi:battery-plus
+    extern2_connected:
+      name: "{{ sensor_prefix(loop.index, storage) }} Extension 2 connected"
+      id: b2500_extern2_connected_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/extern2/connected"
+      icon: mdi:battery-plus
+  {%- if storage.version >= 2 %}
+    smart_meter_connected:
+      name: "{{ sensor_prefix(loop.index, storage) }} SmartMeter Connected"
+      id: b2500_smartmeter_connected_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/connected"
+      icon: mdi:meter-electric
+  {%- endif %}
+
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} BLE Connected"
+    id: b2500_device_ble_ok_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/ble_ok"
+    icon: mdi:bluetooth
+{%- endfor %}
+
+{%- if enable_powermeter %}
+uart:
+  id: uart_bus
+  tx_pin: {{ powermeter_tx_pin }}
+  rx_pin: {{ powermeter_rx_pin }}
+  baud_rate: {{ powermeter_baud_rate }}
+  stop_bits: {{ powermeter_stop_bits }}
+{%- endif %}
+
+sensor:
+{%- if enable_esp_temperature and esp_temperature_variant == 'internal' %}
+  - platform: internal_temperature
+    name: "Temperature"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+{%- endif %}
+{%- if enable_esp_temperature and esp_temperature_variant == 'ntc' %}
+  - platform: ntc
+    sensor: temp_resistance_reading
+    name: "Temperature"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    icon: "mdi:thermometer"
+    calibration:
+      b_constant: 3350
+      reference_resistance: 10kOhm
+      reference_temperature: 298.15K
+  - platform: resistance
+    id: temp_resistance_reading
+    sensor: temp_analog_reading
+    configuration: DOWNSTREAM
+    resistor: 10kOhm
+  - platform: adc
+    id: temp_analog_reading
+    pin: GPIO3
+    attenuation: 11db
+{%- endif %}
+{%- if enable_powermeter %}
+  - platform: bl0942
+    uart_id: uart_bus
+    voltage:
+      name: 'Voltage'
+    current:
+      name: 'Current'
+    power:
+      name: 'Power'
+      id: power
+    frequency:
+      name: "Frequency"
+      accuracy_decimals: 2
+    update_interval: 5s
+  - platform: total_daily_energy
+    name: "Energy Daily"
+    power_id: power
+    unit_of_measurement: "kWh"
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 3
+    filters:
+      # From W to kW
+      - multiply: 0.001
+
+{%- endif %}
+  - platform: uptime
+    name: Uptime Sensor
+    filters:
+      - lambda: return x / 3600.0;
+    unit_of_measurement: "hours"
+    accuracy_decimals: 2
+    state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/uptime"
+  
+{%- for storage in storages %}
+  - platform: b2500
+    b2500_id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+    in1_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} In 1 - Power"
+      id: b2500_in1_power_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv1/power"
+      device_class: power
+      icon: mdi:solar-power
+    in2_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} In 2 - Power"
+      id: b2500_in2_power_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/power"
+      device_class: power
+      icon: mdi:solar-power
+    in_total_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} Total Power In"
+      id: b2500_total_power_in_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv/power"
+      device_class: power
+    out1_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} Out 1 - Power"
+      id: b2500_out1_power_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power1/power"
+      device_class: power
+    out2_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} Out 2 - Power"
+      id: b2500_out2_power_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power2/power"
+      device_class: power
+    out_total_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} Total Power Out"
+      id: b2500_total_power_out_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power/power"
+      device_class: power
+    soc:
+      name: "{{ sensor_prefix(loop.index, storage) }} Battery Level"
+      id: b2500_battery_remaining_percent_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/remaining_percent"
+    capacity:
+      name: "{{ sensor_prefix(loop.index, storage) }} Battery Capacity"
+      id: b2500_battery_remaining_capacity_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/remaining_capacity"
+      device_class: energy
+    temperature_low:
+      name: "{{ sensor_prefix(loop.index, storage) }} Temperature 1"
+      id: b2500_device_temperature1_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/temp1"
+      device_class: temperature
+      icon: mdi:thermometer
+    temperature_high:
+      name: "{{ sensor_prefix(loop.index, storage) }} Temperature 2"
+      id: b2500_device_temperature2_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/temp2"
+      device_class: temperature
+      icon: mdi:thermometer
+  {%- if storage.version >= 2 %}
+    adaptive_power_out:
+      name: "{{ sensor_prefix(loop.index, storage) }} Smartmeter Power Out"
+      id: b2500_smartmeter_power_out_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/out"
+      device_class: power
+      icon: mdi:home-lightning-bolt
+    smart_meter_reading:
+      name: "{{ sensor_prefix(loop.index, storage) }} Smartmeter Value"
+      id: b2500_smartmeter_value_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/value"
+      device_class: power
+      icon: mdi:meter-electric
+  {%- endif %}
+{%- endfor %}
+
+  - platform: template
+    name: "Total Power In"
+    id: b2500_total_in_power
+    state_topic: "{{ yaml_string(mqtt_topic) }}/S/pv/power"
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+
+  - platform: template
+    name: "Total Power Out"
+    id: b2500_total_out_power
+    state_topic: "{{ yaml_string(mqtt_topic) }}/S/power/power"
+    accuracy_decimals: 0
+    unit_of_measurement: W
+    device_class: power
+
+{%- if enable_powerzero %}
+### power zero - mqtt grid power sensor ( any who publish the grid power to mqtt )
+  - platform: mqtt_subscribe
+    name: "MQTT: Grid Power"
+    id: mqtt_grid_power
+    topic: "{{ yaml_string(powerzero_grid_power_topic) }}"
+    on_value:
+      then:    
+        - script.execute: power_zero
+{%- endif %}
+
+{%- if enable_powerzero %}
+script:
+  - id: power_zero
+    then:
+    ###   Nulleinspeisung - Powerzero by neromatrix
+    ###                   - mqtt only adaption by noone2k
+    ###   first attempt, use at your own risk !
+    ###   Ver. 0.01m
+    - lambda: |- 
+          if(id(b2500_npw_enabled).state) 
+          {
+            int ptu_min_value =     5;
+            int ptu_max_value =     id(b2500_mqtt_opendtu_limit_max).state; // 50; // <- nax rel value -> id(npw2500_zeropower_max_powerlimit_rel).state;
+            int ptu_limit =         0;
+            int ptu_max_power =     600; // max:2 (x:4*2 for 4port using 2port)
+            int grid_to_ptu_ratio = ptu_max_power/100;
+            int grid_min_value =    20;
+            static int ptu_old_limit = 0;
+            /*
+              <- actual power mqtt -> prev. int(id(npw2500_grid_power).state);
+              keep over grid_min_value
+            */ 
+            int grid_value = int(id(mqtt_grid_power).state) - grid_min_value;;
+
+            ptu_limit = grid_value / grid_to_ptu_ratio + ptu_old_limit;
+            
+            if(ptu_limit > ptu_max_value) ptu_limit = ptu_max_value;
+            if(ptu_limit < ptu_min_value) ptu_limit = ptu_min_value;
+
+            // change only if diff more than +/-1%
+            if ( ptu_limit - ptu_old_limit > 1 || ptu_old_limit - ptu_limit > 1 ) {
+              ESP_LOGD("npw2500","PowerZero PTU old limit  %d, PTU new limit %d, Grid value %d " ,ptu_old_limit, ptu_limit, grid_value);
+              ptu_old_limit = ptu_limit;  
+              //char mtopic[64];
+              //snprintf(mtopic, 64,"openDTU/116482876939/cmd/limit_persistent_relative");
+              //id(mqtt_client).publish(mtopic,to_string(ptu_limit));
+              id(b2500_mqtt_opendtu_limit).publish_state(ptu_limit);
+             }
+          }
+{%- endif %}

@@ -27,6 +27,9 @@ for (const secret of secrets) {
   }
 }
 
-const template = fs.readFileSync('./src/template.jinja2', 'utf-8');
+const templateV1 = fs.readFileSync('./src/template.jinja2', 'utf-8');
+const templateV2 = fs.readFileSync('./src/template_v2.jinja2', 'utf-8');
+
+const template = config.template_version === 'v2' ? templateV2 : templateV1;
 const renderedConfig = nunjucks.renderString(template, config);
 fs.writeFileSync('device.yaml', renderedConfig);

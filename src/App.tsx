@@ -13,6 +13,7 @@ import {
 import { FileCopy, Download, Build } from '@mui/icons-material';
 import nunjucks from 'nunjucks';
 import template from './template.jinja2';
+import templateV2 from './template_v2.jinja2';
 import FileSaver from 'file-saver';
 import { FormValues } from './types';
 import { useDebounce } from './hooks/useDebounce';
@@ -63,7 +64,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!debouncedFormValues) return;
-    const renderedConfig = nunjucks.renderString(template, debouncedFormValues);
+    const templateToUse =
+      formValues?.template_version === 'v2' ? templateV2 : template;
+    const renderedConfig = nunjucks.renderString(
+      templateToUse,
+      debouncedFormValues
+    );
     setConfig(renderedConfig);
     localStorage.setItem('formValues', JSON.stringify(debouncedFormValues));
   }, [debouncedFormValues]);
