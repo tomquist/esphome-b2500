@@ -65,7 +65,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!debouncedFormValues) return;
     const templateToUse =
-      formValues?.template_version === 'v2' ? templateV2 : template;
+      debouncedFormValues?.template_version === 'v2' ? templateV2 : template;
     const renderedConfig = nunjucks.renderString(
       templateToUse,
       debouncedFormValues
