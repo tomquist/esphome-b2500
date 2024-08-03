@@ -478,7 +478,7 @@ text_sensor:
     cell_voltage:
       name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage"
       id: b2500_device_cell_voltage_{{ loop.index }}
-      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/cell_voltage"
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/cell_voltage"
       disabled_by_default: true
       icon: mdi:battery
 {%- endfor %}
