@@ -11,5 +11,24 @@ void TimerStartTimeEntity::control(const datetime::TimeCall &call) {
   this->publish_state();
 }
 
+
+void TimerStartTimeEntity::setup() {
+  this->parent_->get_state()->add_on_message_callback([this](B2500Message message) { this->on_message(message); });
+}
+
+void TimerStartTimeEntity::on_message(B2500Message message) {
+  if (message == B2500_MSG_TIMER_INFO) {
+    auto timers = this->parent_->get_state()->get_timer_info();
+    uint8_t start_hour = timers.timer[this->timer_].start.hour % 24;
+    uint8_t start_minute = timers.timer[this->timer_].start.minute % 60;
+    if (this->hour != start_hour || this->minute != start_minute) {
+      auto call = this->make_call();
+      call.set_hour(start_hour);
+      call.set_minute(start_minute);
+      call.perform();
+    }
+  }
+}
+
 }  // namespace b2500
 }  // namespace esphome

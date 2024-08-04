@@ -2,7 +2,6 @@
 
 #ifdef USE_ESP32
 
-#include "esphome/components/datetime/time_entity.h"
 #include "b2500_base.h"
 
 namespace esphome {
@@ -19,8 +18,6 @@ class B2500ComponentV2 : public B2500ComponentBase {
   void set_timer_output_power_number(int timer, number::Number *number) {
     this->timer_output_power_number_[timer] = number;
   }
-  void set_timer_start_datetime(int timer, datetime::TimeEntity *time) { this->timer_start_[timer] = time; }
-  void set_timer_end_datetime(int timer, datetime::TimeEntity *time) { this->timer_end_[timer] = time; }
 
   // Actions
   bool set_timer_enabled(int timer, bool enabled);
@@ -35,9 +32,6 @@ class B2500ComponentV2 : public B2500ComponentBase {
   switch_::Switch *adaptive_mode_switch_{nullptr};
 
   number::Number *timer_output_power_number_[3]{nullptr};
-
-  datetime::TimeEntity *timer_start_[3]{nullptr};
-  datetime::TimeEntity *timer_end_[3]{nullptr};
 
   void poll_runtime_info_() override;
   void interpret_message(B2500Message message) override;

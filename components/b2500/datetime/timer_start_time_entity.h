@@ -6,12 +6,14 @@
 namespace esphome {
 namespace b2500 {
 
-class TimerStartTimeEntity : public datetime::TimeEntity, public Parented<B2500ComponentV2> {
+class TimerStartTimeEntity : public datetime::TimeEntity, public Component, public Parented<B2500ComponentV2> {
  public:
   TimerStartTimeEntity(int timer) : timer_(timer) { this->second_ = 0; }
 
  protected:
   void control(const datetime::TimeCall &call) override;
+  void setup() override;
+  void on_message(B2500Message message);
 
   int timer_{0};
 };

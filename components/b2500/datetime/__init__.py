@@ -9,10 +9,10 @@ DEPENDENCIES = ["b2500"]
 CODEOWNERS = ["@tomquist"]
 
 TimerStartTimeEntity = b2500_ns.class_(
-    "TimerStartTimeEntity", datetime.TimeEntity, cg.Parented
+    "TimerStartTimeEntity", datetime.TimeEntity, cg.Component, cg.Parented
 )
 TimerEndTimeEntity = b2500_ns.class_(
-    "TimerEndTimeEntity", datetime.TimeEntity, cg.Parented
+    "TimerEndTimeEntity", datetime.TimeEntity, cg.Component, cg.Parented
 )
 
 CONFIG_SCHEMA = cv.Schema(
@@ -48,10 +48,10 @@ async def to_code(config):
         if conf := config.get(switch_type):
             btn = await datetime.new_datetime(conf, x)
             await cg.register_parented(btn, config[CONF_B2500_ID])
-            cg.add(b2500_component.set_timer_start_datetime(x, btn))
+            await cg.register_component(btn, config)
     for x in range(3):
         switch_type = f"timer{x + 1}_end"
         if conf := config.get(switch_type):
             btn = await datetime.new_datetime(conf, x)
             await cg.register_parented(btn, config[CONF_B2500_ID])
-            cg.add(b2500_component.set_timer_end_datetime(x, btn))
+            await cg.register_component(btn, config)

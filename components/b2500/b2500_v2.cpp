@@ -112,26 +112,6 @@ void B2500ComponentV2::interpret_message(B2500Message message) {
           this->timer_output_power_number_[i]->state != timers.timer[i].output_power) {
         this->timer_output_power_number_[i]->publish_state(timers.timer[i].output_power);
       }
-      if (this->timer_start_[i] != nullptr) {
-        uint8_t start_hour = timers.timer[i].start.hour % 24;
-        uint8_t start_minute = timers.timer[i].start.minute % 60;
-        if (this->timer_start_[i]->hour != start_hour || this->timer_start_[i]->minute != start_minute) {
-          auto call = this->timer_start_[i]->make_call();
-          call.set_hour(start_hour);
-          call.set_minute(start_minute);
-          call.perform();
-        }
-      }
-      if (this->timer_end_[i] != nullptr) {
-        uint8_t end_hour = timers.timer[i].end.hour % 24;
-        uint8_t end_minute = timers.timer[i].end.minute % 60;
-        if (this->timer_end_[i]->hour != end_hour || this->timer_end_[i]->minute != end_minute) {
-          auto call = this->timer_end_[i]->make_call();
-          call.set_hour(end_hour);
-          call.set_minute(end_minute);
-          call.perform();
-        }
-      }
       if (this->adaptive_mode_switch_ != nullptr &&
           this->adaptive_mode_switch_->state != timers.adaptive_mode_enabled) {
         this->adaptive_mode_switch_->publish_state(timers.adaptive_mode_enabled);
