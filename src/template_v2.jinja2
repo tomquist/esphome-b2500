@@ -751,7 +751,7 @@ sensor:
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
-    filter:
+    filters:
       - multiply: 0.001
     {%- if storages|length > 1 %}
     on_value:
@@ -766,7 +766,7 @@ sensor:
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 0
-    filter:
+    filters:
       - multiply: 0.001
     {%- if storages|length > 1 %}
     on_value:
