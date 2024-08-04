@@ -30,7 +30,7 @@ CONF_HOST = "host"
 CONF_SSL = "ssl"
 CONF_CHARGE_MODE = "charge_mode"
 
-AUTO_LOAD = ["b2500", "binary_sensor", "switch"]
+AUTO_LOAD = ["b2500", "binary_sensor", "switch", "datetime"]
 MULTI_CONF = 3
 
 b2500_ns = cg.esphome_ns.namespace("b2500")
