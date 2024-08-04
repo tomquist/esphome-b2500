@@ -765,7 +765,7 @@ sensor:
     unit_of_measurement: kWh
     state_class: total_increasing
     device_class: energy
-    accuracy_decimals: 0
+    accuracy_decimals: 3
     filters:
       - multiply: 0.001
     {%- if storages|length > 1 %}
@@ -797,7 +797,7 @@ sensor:
     name: "Total Daily Energy In"
     id: b2500_total_daily_energy_in
     state_topic: "{{ yaml_string(mqtt_topic) }}/S/pv/energy"
-    accuracy_decimals: 0
+    accuracy_decimals: 3
     unit_of_measurement: kWh
     device_class: energy
     retain: false
@@ -806,7 +806,7 @@ sensor:
     name: "Total Daily Energy Out"
     id: b2500_total_daily_energy_out
     state_topic: "{{ yaml_string(mqtt_topic) }}/S/power/energy"
-    accuracy_decimals: 0
+    accuracy_decimals: 3
     unit_of_measurement: kWh
     device_class: energy
     retain: false
