@@ -269,13 +269,14 @@ void B2500ComponentBase::interpret_runtime_info() {
            "%d, out2_enabled: %d, "
            "discharge_threshold: %d, dod: %d, remaining_capacity: %d, device_scene: %d, out1_power: %d, "
            "out2_power: %d, "
-           "device_region: %d, extern1_connected: %d, extern2_connected: %d",
+           "device_region: %d, extern1_connected: %d, extern2_connected: %d, "
+           "hour: %d, minute: %d",
            payload.in1_active.byte, payload.in2_active.byte, payload.in1_power, payload.in2_power, payload.soc,
            payload.dev_version, payload.charge_mode.byte, payload.wifi_mqtt_state.wifi_connected,
            payload.wifi_mqtt_state.mqtt_connected, payload.out1_active, payload.out2_active,
            payload.discharge_setting.out1_enable, payload.discharge_setting.out2_enable, payload.discharge_threshold,
            payload.dod, payload.remaining_capacity, payload.device_scene, payload.out1_power, payload.out2_power,
-           payload.device_region, payload.extern1_connected, payload.extern2_connected);
+           payload.device_region, payload.extern1_connected, payload.extern2_connected, payload.time.hour, payload.time.minute);
 
   if (this->dod_number_ != nullptr && this->dod_number_->state != payload.dod) {
     this->dod_number_->publish_state(payload.dod);

@@ -47,6 +47,11 @@ union InActive {
   uint8_t byte;
 } __attribute__((packed));
 
+struct TimeInfo {
+  uint8_t hour;
+  uint8_t minute;
+} __attribute__((packed));
+
 struct RuntimeInfoPacket {
   InActive in1_active;                  // 4
   InActive in2_active;                  // 5
@@ -68,10 +73,9 @@ struct RuntimeInfoPacket {
   uint8_t extern1_connected;           // 28
   uint8_t extern2_connected;           // 29
   enum DeviceRegion device_region;     // 30
-  uint8_t unknown1;                    // 31
-  uint8_t temperature_low;             // 32
-  uint8_t unknown2;                    // 33
-  uint8_t temperature_high;            // 34
+  TimeInfo time;                      // 31 - 32
+  uint16_t temperature_low;            // 33 - 34
+  uint16_t temperature_high;           // 35 - 36
 } __attribute__((packed));
 
 struct DeviceInfoPacket {
@@ -96,15 +100,10 @@ struct FC41DInfoPacket {
   std::string firmware;
 };
 
-struct TimerTime {
-  uint8_t hour;
-  uint8_t minute;
-} __attribute__((packed));
-
 struct TimerInfo {
   uint8_t enabled;
-  TimerTime start;
-  TimerTime end;
+  TimeInfo start;
+  TimeInfo end;
   uint16_t output_power;
 } __attribute__((packed));
 

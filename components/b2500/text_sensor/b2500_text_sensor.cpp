@@ -89,6 +89,16 @@ void B2500TextSensor::on_message(B2500Message message) {
         this->region_text_sensor_->publish_state(region);
       }
     }
+    if (this->device_time_text_sensor_ != nullptr) {
+      auto hour = runtime_info.time.hour;
+      auto minute = runtime_info.time.minute;
+      char buffer[8];
+      sprintf(buffer, "%02d:%02d", hour, minute);
+      auto time_str = std::string(buffer);
+      if (this->device_time_text_sensor_->state != time_str) {
+        this->device_time_text_sensor_->publish_state(time_str);
+      }
+    }
   } else if (message == B2500_MSG_DEVICE_INFO) {
     auto device_info = this->state_->get_device_info();
     if (this->device_type_text_sensor_ != nullptr && this->device_type_text_sensor_->state != device_info.type) {

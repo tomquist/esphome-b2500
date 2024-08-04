@@ -22,6 +22,7 @@ class B2500TextSensor : public Component {
   SUB_TEXT_SENSOR(region)
   SUB_TEXT_SENSOR(cell_voltage)
 
+  SUB_TEXT_SENSOR(device_time)
   SUB_TEXT_SENSOR(last_response)
 
  protected:

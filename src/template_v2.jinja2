@@ -217,6 +217,10 @@ ble_client:
         - binary_sensor.template.publish:
             id: b2500_device_ble_ok_{{ loop.index }}
             state: ON
+        - delay: 1s
+        - b2500.set_datetime:
+            id: b2500_{{ loop.index }}
+            datetime: !lambda 'return id(sntp_time).now();'
 
     on_disconnect:
       then:
@@ -232,6 +236,7 @@ button:
   - platform: restart
     id: controller_restart
     name: "Restart Controller"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/restart/set"
 {%- for storage in storages %}
   - platform: b2500
     b2500_id: b2500_{{ loop.index }}
@@ -440,6 +445,13 @@ text_sensor:
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/id"
       id: b2500_device_id_{{ loop.index }}
       icon: mdi:identifier
+{% if storage.version >= 2 %}
+    device_time:
+      name: "{{ sensor_prefix(loop.index, storage) }} Device Time"
+      id: b2500_device_time_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/time"
+      icon: mdi:clock
+{% endif %}
     firmware_version:
       name: "{{ sensor_prefix(loop.index, storage) }} Device Firmware Version"
       id: b2500_device_fw_version_{{ loop.index }}

@@ -18,6 +18,7 @@ B2500TextSensor = b2500_ns.class_("B2500TextSensor", cg.Component)
 CONF_FIRMWARE_VERSION = "firmware_version"
 CONF_DEVICE_TYPE = "device_type"
 CONF_DEVICE_ID = "device_id"
+CONF_DEVICE_TIME = "device_time"
 CONF_MAC_ADDRESS = "mac_address"
 CONF_FC41D_VERSION = "fc41d_version"
 CONF_WIFI_SSID = "wifi_ssid"
@@ -30,6 +31,7 @@ MARKERS: dict[str] = [
     CONF_FIRMWARE_VERSION,
     CONF_DEVICE_TYPE,
     CONF_DEVICE_ID,
+    CONF_DEVICE_TIME,
     CONF_MAC_ADDRESS,
     CONF_FC41D_VERSION,
     CONF_WIFI_SSID,
