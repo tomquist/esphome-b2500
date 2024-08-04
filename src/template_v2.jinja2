@@ -101,7 +101,7 @@ esp32:
 
 # Enable logging
 logger:
-  level: INFO
+  level: {{ log_level or 'INFO' }}
 
 {%- if enable_ota %}
 ota:

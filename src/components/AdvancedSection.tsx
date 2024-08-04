@@ -21,8 +21,10 @@ import {
   espTemperatureVariantLabels,
   FlashSize,
   FormValues,
+  LogLevel,
   validEspTemperatureVariants,
   validFlashSized,
+  validLogLevels,
 } from '../types';
 
 interface AdvancedSectionProps {
@@ -95,6 +97,28 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
         <Typography variant="h6">Advanced</Typography>
       </AccordionSummary>
       <AccordionDetails>
+        {formValues.template_version === 'v2' && (
+          <FormControl fullWidth margin="normal">
+            <InputLabel id="log-level-label">Log Level</InputLabel>
+            <Select
+              labelId="log-level-label"
+              name="log_level"
+              value={formValues.log_level}
+              onChange={
+                handleInputChange as (e: SelectChangeEvent<LogLevel>) => void
+              }
+            >
+              {validLogLevels.map((logLevel) => (
+                <MenuItem key={logLevel} value={logLevel}>
+                  {logLevel}
+                </MenuItem>
+              ))}
+            </Select>
+            <FormHelperText>
+              The log level of the device. If unsure, leave this at "INFO".
+            </FormHelperText>
+          </FormControl>
+        )}
         <TextField
           label="Poll Interval (seconds)"
           name="poll_interval_seconds"

@@ -91,9 +91,13 @@ export type PlatformVariant = (typeof validPlatformVariants)[number];
 export const validFlashSized = ['2MB', '4MB', '8MB', '16MB', '32MB'] as const;
 export type FlashSize = (typeof validFlashSized)[number];
 
+export const validLogLevels = ['DEBUG', 'INFO'] as const;
+export type LogLevel = (typeof validLogLevels)[number];
+
 export interface FormValues {
   template_version: TemplateVersion;
   name: string;
+  log_level: LogLevel;
   friendly_name: string;
   poll_interval_seconds: number;
   mqtt: MQTTSettings;

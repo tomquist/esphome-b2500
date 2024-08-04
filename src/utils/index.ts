@@ -6,6 +6,7 @@ export const defaultFormValues: FormValues = {
   name: 'b2500',
   friendly_name: 'B2500',
   poll_interval_seconds: 5,
+  log_level: 'INFO',
   mqtt: {
     topic: 'b2500',
     broker: 'mqttbroker.local',
