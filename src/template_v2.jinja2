@@ -334,7 +334,7 @@ number:
 {%- if enable_powerzero %}
   ### power zero
   - platform: template
-    name: "MQTT: opendtu set limit"
+    name: "PowerZero: Grid Power"
     id: b2500_mqtt_opendtu_limit
     internal: False
     state_topic: "{{ yaml_string(powerzero_limit_cmd_topic) }}"
@@ -346,7 +346,7 @@ number:
     restore_value: True
 
   - platform: template
-    name: "MQTT: opendtu set limit max"
+    name: "PowerZero: Max Limit"
     id: b2500_mqtt_opendtu_limit_max
     state_topic: "{{ yaml_string(mqtt_topic) }}/npw/max_limit"
     command_topic: "{{ yaml_string(mqtt_topic) }}/npw/max_limit/set"
@@ -356,6 +356,15 @@ number:
     max_value: 100
     step: 1
     restore_value: True
+
+  - platform: template
+    name: "PowerZero: Max Power Config"
+    id: max_power_config
+    min_value: 100
+    max_value: 2000
+    step: 100
+    initial_value: 600
+    optimistic: true
 {%- endif %}
 
 
@@ -624,12 +633,11 @@ sensor:
   - platform: total_daily_energy
     name: "Energy Daily"
     power_id: power
-    unit_of_measurement: "kWh"
+    unit_of_measurement: kWh
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
     filters:
-      # From W to kW
       - multiply: 0.001
 
 {%- endif %}
@@ -666,9 +674,11 @@ sensor:
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv/power"
       device_class: power
       retain: false
+      {%- if storages|length > 1 %}
       on_value:
         then:
           - script.execute: b2500_update_total_power_in
+      {%- endif %}
     out1_power:
       name: "{{ sensor_prefix(loop.index, storage) }} Out 1 - Power"
       id: b2500_out1_power_{{ loop.index }}
@@ -687,9 +697,11 @@ sensor:
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power/power"
       device_class: power
       retain: false
+      {%- if storages|length > 1 %}
       on_value:
         then:
           - script.execute: b2500_update_total_power_out
+      {%- endif %}
     soc:
       name: "{{ sensor_prefix(loop.index, storage) }} Battery Level"
       id: b2500_battery_remaining_percent_{{ loop.index }}
@@ -731,8 +743,38 @@ sensor:
       icon: mdi:meter-electric
       retain: false
   {%- endif %}
+  - platform: total_daily_energy
+    name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy In"
+    id: b2500_total_daily_energy_in_{{ loop.index }}
+    power_id: b2500_total_power_in_{{ loop.index }}
+    unit_of_measurement: kWh
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 3
+    filter:
+      - multiply: 0.001
+    {%- if storages|length > 1 %}
+    on_value:
+      then:
+        - script.execute: b2500_update_total_daily_energy_in
+    {%- endif %}
+  - platform: total_daily_energy
+    name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy Out"
+    id: b2500_total_daily_energy_out_{{ loop.index }}
+    power_id: b2500_total_power_out_{{ loop.index }}
+    unit_of_measurement: kWh
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 0
+    filter:
+      - multiply: 0.001
+    {%- if storages|length > 1 %}
+    on_value:
+      then:
+        - script.execute: b2500_update_total_daily_energy_out
+    {%- endif %}
 {%- endfor %}
-
+{%- if storages|length > 1 %}
   - platform: template
     name: "Total Power In"
     id: b2500_total_in_power
@@ -751,6 +793,24 @@ sensor:
     device_class: power
     retain: false
 
+  - platform: template
+    name: "Total Daily Energy In"
+    id: b2500_total_daily_energy_in
+    state_topic: "{{ yaml_string(mqtt_topic) }}/S/pv/energy"
+    accuracy_decimals: 0
+    unit_of_measurement: kWh
+    device_class: energy
+    retain: false
+
+  - platform: template
+    name: "Total Daily Energy Out"
+    id: b2500_total_daily_energy_out
+    state_topic: "{{ yaml_string(mqtt_topic) }}/S/power/energy"
+    accuracy_decimals: 0
+    unit_of_measurement: kWh
+    device_class: energy
+    retain: false
+{%- endif %}
 {%- if enable_powerzero %}
 ### power zero - mqtt grid power sensor ( any who publish the grid power to mqtt )
   - platform: mqtt_subscribe
@@ -761,22 +821,39 @@ sensor:
       then:    
         - script.execute: power_zero
 {%- endif %}
-
+{% if enable_powerzero or storages|length > 1 %}
 script:
+{%- endif %}
+{%- if storages|length > 1 %}
   - id: b2500_update_total_power_in
     then:
       - sensor.template.publish:
           id: b2500_total_in_power
           state: !lambda |-
             return {% for storage in storages -%}
-              {%- if loop.index > 1 %} + {% endif %}id(b2500_total_power_in_{{ loop.index }}).state{%- endfor %}
+              {%- if loop.index > 1 %} + {% endif %}id(b2500_total_power_in_{{ loop.index }}).state{%- endfor %};
   - id: b2500_update_total_power_out
     then:
       - sensor.template.publish:
           id: b2500_total_out_power
           state: !lambda |-
             return {% for storage in storages -%}
-              {%- if loop.index > 1 %} + {% endif %}id(b2500_total_power_out_{{ loop.index }}).state{%- endfor %}
+              {%- if loop.index > 1 %} + {% endif %}id(b2500_total_power_out_{{ loop.index }}).state{%- endfor %};
+  - id: b2500_update_total_daily_energy_in
+    then:
+      - sensor.template.publish:
+          id: b2500_total_daily_energy_in
+          state: !lambda |-
+            return {% for storage in storages -%}
+              {%- if loop.index > 1 %} + {% endif %}id(b2500_total_daily_energy_in_{{ loop.index }}).state{%- endfor %};
+  - id: b2500_update_total_daily_energy_out
+    then:
+      - sensor.template.publish:
+          id: b2500_total_daily_energy_out
+          state: !lambda |-
+            return {% for storage in storages -%}
+              {%- if loop.index > 1 %} + {% endif %}id(b2500_total_daily_energy_out_{{ loop.index }}).state{%- endfor %};
+{%- endif %}
 {%- if enable_powerzero %}
   - id: power_zero
     then:
