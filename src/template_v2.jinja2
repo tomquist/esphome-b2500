@@ -12,9 +12,6 @@
 {%- set wifi_ssid = wifi.ssid %}
 {%- set wifi_password = wifi.password %}
 {%- set board = board or 'esp32dev' %}
-{%- set enable_auto_restart = enable_auto_restart or False %}
-{%- set auto_restart = auto_restart or {} %}
-{%- set auto_restart_after_error_count = auto_restart.restart_after_error_count or 8 %}
 {%- set manual_ip = manual_ip or {} %}
 {%- set enable_manual_ip = enable_manual_ip or False %}
 {%- set timezone = timezone or 'Europe/Berlin' %}
@@ -56,13 +53,13 @@
 {%- macro sensor_prefix(loopindex, storage) %}B2500 - {{ loopindex }} - {{ yaml_string(storage.name) }}:{% endmacro %}
 {%- set hasV1 = false %}
 {%- set hasV2 = false %}
-{% for storage in storages %}
+{%- for storage in storages %}
   {%- if storage.version == 1 %}
     {%- set hasV1 = true %}
   {%- elif storage.version >= 2 %}
     {%- set hasV2 = true %}
   {%- endif %}
-{% endfor %}
+{%- endfor %}
 {%- if enable_timer_query and not hasV2 %}
   {%- set enable_timer_query = false %}
 {%- endif %}
@@ -127,6 +124,7 @@ external_components:
       type: git
       url: https://github.com/tomquist/esphome-b2500
       ref: main
+    refresh: 0s
     components: [b2500]
 
 wifi:
@@ -451,6 +449,7 @@ text_sensor:
       id: b2500_device_time_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/time"
       icon: mdi:clock
+      retain: false
 {% endif %}
     firmware_version:
       name: "{{ sensor_prefix(loop.index, storage) }} Device Firmware Version"
@@ -487,12 +486,14 @@ text_sensor:
       id: b2500_device_last_response_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/last_response"
       icon: mdi:update
+      retain: false
     cell_voltage:
       name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage"
       id: b2500_device_cell_voltage_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/cell_voltage"
       disabled_by_default: true
       icon: mdi:battery
+      retain: false
 {%- endfor %}
 
 binary_sensor:
@@ -581,6 +582,7 @@ sensor:
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
     unit_of_measurement: "°C"
     icon: "mdi:thermometer"
+    retain: false
 {%- endif %}
 {%- if enable_esp_temperature and esp_temperature_variant == 'ntc' %}
   - platform: ntc
@@ -590,6 +592,7 @@ sensor:
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     icon: "mdi:thermometer"
+    retain: false
     calibration:
       b_constant: 3350
       reference_resistance: 10kOhm
@@ -637,6 +640,7 @@ sensor:
     unit_of_measurement: "hours"
     accuracy_decimals: 2
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/uptime"
+    retain: false
   
 {%- for storage in storages %}
   - platform: b2500
@@ -648,53 +652,63 @@ sensor:
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv1/power"
       device_class: power
       icon: mdi:solar-power
+      retain: false
     in2_power:
       name: "{{ sensor_prefix(loop.index, storage) }} In 2 - Power"
       id: b2500_in2_power_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/power"
       device_class: power
       icon: mdi:solar-power
+      retain: false
     in_total_power:
       name: "{{ sensor_prefix(loop.index, storage) }} Total Power In"
       id: b2500_total_power_in_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv/power"
       device_class: power
+      retain: false
     out1_power:
       name: "{{ sensor_prefix(loop.index, storage) }} Out 1 - Power"
       id: b2500_out1_power_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power1/power"
       device_class: power
+      retain: false
     out2_power:
       name: "{{ sensor_prefix(loop.index, storage) }} Out 2 - Power"
       id: b2500_out2_power_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power2/power"
       device_class: power
+      retain: false
     out_total_power:
       name: "{{ sensor_prefix(loop.index, storage) }} Total Power Out"
       id: b2500_total_power_out_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power/power"
       device_class: power
+      retain: false
     soc:
       name: "{{ sensor_prefix(loop.index, storage) }} Battery Level"
       id: b2500_battery_remaining_percent_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/remaining_percent"
+      retain: false
     capacity:
       name: "{{ sensor_prefix(loop.index, storage) }} Battery Capacity"
       id: b2500_battery_remaining_capacity_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/remaining_capacity"
       device_class: energy
+      retain: false
     temperature_low:
       name: "{{ sensor_prefix(loop.index, storage) }} Temperature 1"
       id: b2500_device_temperature1_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/temp1"
       device_class: temperature
       icon: mdi:thermometer
+      retain: false
     temperature_high:
       name: "{{ sensor_prefix(loop.index, storage) }} Temperature 2"
       id: b2500_device_temperature2_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/temp2"
       device_class: temperature
       icon: mdi:thermometer
+      retain: false
   {%- if storage.version >= 2 %}
     adaptive_power_out:
       name: "{{ sensor_prefix(loop.index, storage) }} Smartmeter Power Out"
@@ -702,12 +716,14 @@ sensor:
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/out"
       device_class: power
       icon: mdi:home-lightning-bolt
+      retain: false
     smart_meter_reading:
       name: "{{ sensor_prefix(loop.index, storage) }} Smartmeter Value"
       id: b2500_smartmeter_value_{{ loop.index }}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/value"
       device_class: power
       icon: mdi:meter-electric
+      retain: false
   {%- endif %}
 {%- endfor %}
 
@@ -718,6 +734,7 @@ sensor:
     accuracy_decimals: 0
     unit_of_measurement: W
     device_class: power
+    retain: false
 
   - platform: template
     name: "Total Power Out"
@@ -726,6 +743,7 @@ sensor:
     accuracy_decimals: 0
     unit_of_measurement: W
     device_class: power
+    retain: false
 
 {%- if enable_powerzero %}
 ### power zero - mqtt grid power sensor ( any who publish the grid power to mqtt )
