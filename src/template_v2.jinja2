@@ -746,6 +746,7 @@ sensor:
   - platform: total_daily_energy
     name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy In"
     id: b2500_total_daily_energy_in_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv/energy"
     power_id: b2500_total_power_in_{{ loop.index }}
     unit_of_measurement: kWh
     state_class: total_increasing
@@ -761,6 +762,7 @@ sensor:
   - platform: total_daily_energy
     name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy Out"
     id: b2500_total_daily_energy_out_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power/energy"
     power_id: b2500_total_power_out_{{ loop.index }}
     unit_of_measurement: kWh
     state_class: total_increasing
