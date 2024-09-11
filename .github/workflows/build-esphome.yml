@@ -56,7 +56,7 @@ jobs:
           zip -P "$PASSWORD" firmware.zip ${{ steps.esphome-build.outputs.name }}/*
 
       - name: Upload firmware artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: esphome-firmware-${{ github.event.client_payload.identifier }}
           path: firmware.zip
