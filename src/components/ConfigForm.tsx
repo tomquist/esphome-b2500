@@ -135,10 +135,10 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
           onChange={handleSelectChange}
         >
           <MenuItem key={1} value={'v1'}>
-            v1
+            v1 (deprecated)
           </MenuItem>
           <MenuItem key={2} value={'v2'}>
-            v2 (beta)
+            v2
           </MenuItem>
         </Select>
         <FormHelperText>

@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { FormValues } from '../types';
 
 export const defaultFormValues: FormValues = {
-  template_version: 'v1',
+  template_version: 'v2',
   name: 'b2500',
   friendly_name: 'B2500',
   poll_interval_seconds: 5,
