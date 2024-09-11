@@ -728,6 +728,7 @@ switch:
             ble_device_nr: {{ storage_loop.index }}
 {%- endfor %}
 {%- elif storage.version >= 2 %}
+{%- if enable_timer_query %}
 {%- for _ in range(3) %}
   - platform: template
     id: b2500_timer{{ loop.index }}_enabled_{{ storage_loop.index }}
@@ -759,6 +760,7 @@ switch:
                 timer: {{ loop.index }}
                 enable: 0
 {%- endfor %}
+{%- endif %}
 {%- endif %}
 {%- endfor %}
 
@@ -804,6 +806,7 @@ switch:
             ble_device_nr: {{ loop.index }}
             switch_cmd: 0
 
+{%- if enable_timer_query %}
   - platform: template
     id: b2500_smartmeter_enabled_{{ loop.index }}
     name: "{{ sensor_prefix(loop.index, storage) }} SmartMeter Enabled"
@@ -825,6 +828,7 @@ switch:
             ble_device_nr: {{ loop.index }}
             timer: -1
             enable: 1
+{%- endif %}
 
 {%- endif %}
 {%- endfor %}
