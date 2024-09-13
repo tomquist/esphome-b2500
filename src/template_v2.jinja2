@@ -634,6 +634,7 @@ sensor:
     name: "Energy Daily"
     power_id: power
     unit_of_measurement: kWh
+    method: left
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
@@ -749,6 +750,7 @@ sensor:
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv/energy"
     power_id: b2500_total_power_in_{{ loop.index }}
     unit_of_measurement: kWh
+    method: left
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
@@ -765,6 +767,7 @@ sensor:
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power/energy"
     power_id: b2500_total_power_out_{{ loop.index }}
     unit_of_measurement: kWh
+    method: left
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
