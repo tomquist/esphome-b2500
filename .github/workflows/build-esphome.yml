@@ -1,4 +1,4 @@
-name: Build ESPHome Firmware
+name: Build ESPHome Firmware 2
 run-name: >
   B2500 [${{
     github.event.client_payload.identifier &&
