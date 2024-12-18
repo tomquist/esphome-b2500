@@ -285,7 +285,7 @@ void B2500ComponentBase::interpret_runtime_info() {
 
 void B2500ComponentBase::dump_config() {
   ESP_LOGCONFIG(TAG, "B2500:");
-  ESP_LOGCONFIG(TAG, "  Update Interval: %d ms", this->update_interval_);
+  ESP_LOGCONFIG(TAG, "  Update Interval: %lu ms", this->update_interval_);
 }
 
 B2500ComponentBase::B2500ComponentBase(int generation) {
