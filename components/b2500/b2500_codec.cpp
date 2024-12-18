@@ -216,33 +216,12 @@ bool B2500Codec::parse_timer_info(uint8_t *data, uint16_t data_len, TimerInfoPac
   const size_t header_size = sizeof(B2500PacketHeader);
   const size_t payload_size = sizeof(TimerInfoPacket);
 
-  bool is_small_packet = false
   if (data_len < header_size + payload_size) {
-    if (data_len < header_size + sizeof(TimerInfoPacketSmall)) {
-      ESP_LOGW(TAG, "Packet too short for CMD_TIMER_INFO, expected %d, got %d", header_size + payload_size, data_len);
-      ESP_LOGW(TAG, "data: %s", format_hex_pretty(data, data_len).c_str());
-      return false;
-    } else {
-      is_small_packet = true;
-    }
+    ESP_LOGW(TAG, "Packet too short for CMD_TIMER_INFO, expected %d, got %d", header_size + payload_size, data_len);
+    ESP_LOGW(TAG, "data: %s", format_hex_pretty(data, data_len).c_str());
+    return false;
   }
 
-  if (is_small_packet) {
-    const size_t payload_size = sizeof(TimerInfoPacketSmall);
-    uint8_t aligned_buffer[payload_size];
-    std::memcpy(aligned_buffer, data + header_size, payload_size);
-    TimerInfoPacketSmall small_payload = *reinterpret_cast<TimerInfoPacketSmall *>(aligned_buffer);
-    // Convert the small packet to a full packet
-    payload.adaptive_mode_enabled = small_payload.adaptive_mode_enabled;
-    for (int i = 0; i < 3; i++) {
-      payload.timer[i] = small_payload.timer[i];
-    }
-    payload.timer[3].enabled = 0;
-    payload.timer[4].enabled = 0;
-    payload.smart_meter = small_payload.smart_meter;
-    return true;
-  }
-  
   // Ensure the memory is properly aligned
   uint8_t aligned_buffer[payload_size];
   std::memcpy(aligned_buffer, data + header_size, payload_size);
