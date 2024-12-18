@@ -116,6 +116,12 @@ struct SmartMeterInfo {
 
 struct TimerInfoPacket {
   uint8_t adaptive_mode_enabled;
+  TimerInfo timer[5];
+  SmartMeterInfo smart_meter;
+} __attribute__((packed));
+
+struct TimerInfoPacketSmall {
+  uint8_t adaptive_mode_enabled;
   TimerInfo timer[3];
   SmartMeterInfo smart_meter;
 } __attribute__((packed));

@@ -286,7 +286,7 @@ datetime:
   - platform: b2500
     b2500_id: b2500_{{ storage_loop.index }}
     generation: {{ storage.version }}
-  {%- for _ in range(3) %}
+  {%- for _ in range(5) %}
     timer{{ loop.index }}_start:
       id: b2500_timer{{ loop.index }}_time_start_{{ storage_loop.index }}
       name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Start Time"
@@ -321,7 +321,7 @@ number:
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/dod/set"
   {%- if storage.version >= 2 %}
   {%- set storage_loop = loop %}
-  {%- for _ in range(3) %}
+  {%- for _ in range(5) %}
     timer{{ loop.index }}_output_power:
       id: b2500_timer{{ loop.index }}_power_{{ storage_loop.index }}
       name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Output Power"
@@ -390,7 +390,7 @@ switch:
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled/set"
 {%- endfor %}
 {%- elif storage.version >= 2 %}
-{%- for _ in range(3) %}
+{%- for _ in range(5) %}
     timer{{ loop.index }}_enabled:
       id: b2500_timer{{ loop.index }}_enabled_{{ storage_loop.index }}
       name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Enabled"
