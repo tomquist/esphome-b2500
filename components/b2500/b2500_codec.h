@@ -74,8 +74,8 @@ struct RuntimeInfoPacket {
   uint8_t extern2_connected;           // 29
   enum DeviceRegion device_region;     // 30
   TimeInfo time;                      // 31 - 32
-  uint16_t temperature_low;            // 33 - 34
-  uint16_t temperature_high;           // 35 - 36
+  int16_t temperature_low;            // 33 - 34
+  int16_t temperature_high;           // 35 - 36
 } __attribute__((packed));
 
 struct DeviceInfoPacket {
@@ -86,8 +86,8 @@ struct DeviceInfoPacket {
 
 struct CellInfoPacket {
   uint16_t soc;
-  uint16_t temperature1;
-  uint16_t temperature2;
+  int16_t temperature1;
+  int16_t temperature2;
   uint16_t cell_voltages[14];
 };
 
