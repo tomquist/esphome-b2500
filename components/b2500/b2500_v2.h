@@ -28,10 +28,10 @@ class B2500ComponentV2 : public B2500ComponentBase {
   bool set_adaptive_mode_enabled(bool enabled);
 
  protected:
-  switch_::Switch *timer_enabled_switch_[3]{nullptr};
+  switch_::Switch *timer_enabled_switch_[5]{nullptr};
   switch_::Switch *adaptive_mode_switch_{nullptr};
 
-  number::Number *timer_output_power_number_[3]{nullptr};
+  number::Number *timer_output_power_number_[5]{nullptr};
 
   void poll_runtime_info_() override;
   void interpret_message(B2500Message message) override;

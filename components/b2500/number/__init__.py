@@ -66,7 +66,7 @@ CONFIG_SCHEMA = cv.Any(
                     ),
                     key=CONF_NAME,
                 )
-                for x in range(3)
+                for x in range(5)
             },
         }
     ).extend(BASE_SCHEMA),
@@ -91,7 +91,7 @@ async def to_code(config):
             await cg.register_parented(btn, config[CONF_B2500_ID])
             cg.add(getattr(b2500_component, f"set_{switch_type}_number")(btn))
 
-    for x in range(3):
+    for x in range(5):
         switch_type = f"timer{x + 1}_output_power"
         if conf := config.get(switch_type):
             number_attrs = NUMBER_ATTRS.get(switch_type, {})

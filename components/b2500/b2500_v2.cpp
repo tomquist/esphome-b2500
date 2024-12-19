@@ -102,20 +102,21 @@ void B2500ComponentV2::interpret_message(B2500Message message) {
       this->charge_mode_select_->publish_state(charge_mode);
     }
   } else if (message == B2500_MSG_TIMER_INFO) {
-    auto timers = this->state_->get_timer_info();
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < this->state_->get_number_of_timers(); i++) {
+      auto timer = this->state_->get_timer(i);
       if (this->timer_enabled_switch_[i] != nullptr &&
-          this->timer_enabled_switch_[i]->state != timers.timer[i].enabled) {
-        this->timer_enabled_switch_[i]->publish_state(timers.timer[i].enabled);
+          this->timer_enabled_switch_[i]->state != timer.enabled) {
+        this->timer_enabled_switch_[i]->publish_state(timer.enabled);
       }
       if (this->timer_output_power_number_[i] != nullptr &&
-          this->timer_output_power_number_[i]->state != timers.timer[i].output_power) {
-        this->timer_output_power_number_[i]->publish_state(timers.timer[i].output_power);
+          this->timer_output_power_number_[i]->state != timer.output_power) {
+        this->timer_output_power_number_[i]->publish_state(timer.output_power);
       }
-      if (this->adaptive_mode_switch_ != nullptr &&
-          this->adaptive_mode_switch_->state != timers.adaptive_mode_enabled) {
-        this->adaptive_mode_switch_->publish_state(timers.adaptive_mode_enabled);
-      }
+    }
+    auto timers = this->state_->get_timer_info();
+    if (this->adaptive_mode_switch_ != nullptr &&
+        this->adaptive_mode_switch_->state != timers.base.adaptive_mode_enabled) {
+      this->adaptive_mode_switch_->publish_state(timers.base.adaptive_mode_enabled);
     }
   }
 }

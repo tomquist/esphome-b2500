@@ -69,12 +69,12 @@ void B2500Sensor::on_message(B2500Message message) {
   } else if (message == B2500_MSG_TIMER_INFO) {
     auto timer_info = this->state_->get_timer_info();
     if (this->adaptive_power_out_sensor_ != nullptr &&
-        this->adaptive_power_out_sensor_->state != timer_info.smart_meter.power_out) {
-      this->adaptive_power_out_sensor_->publish_state(timer_info.smart_meter.power_out);
+        this->adaptive_power_out_sensor_->state != timer_info.base.smart_meter.power_out) {
+      this->adaptive_power_out_sensor_->publish_state(timer_info.base.smart_meter.power_out);
     }
     if (this->smart_meter_reading_sensor_ != nullptr &&
-        this->smart_meter_reading_sensor_->state != timer_info.smart_meter.meter_reading) {
-      this->smart_meter_reading_sensor_->publish_state(timer_info.smart_meter.meter_reading);
+        this->smart_meter_reading_sensor_->state != timer_info.base.smart_meter.meter_reading) {
+      this->smart_meter_reading_sensor_->publish_state(timer_info.base.smart_meter.meter_reading);
     }
   }
 }

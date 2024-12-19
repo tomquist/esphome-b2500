@@ -204,7 +204,7 @@ bool B2500Codec::parse_fc41d_info(uint8_t *data, uint16_t data_len, FC41DInfoPac
   return true;
 }
 
-bool B2500Codec::parse_timer_info(uint8_t *data, uint16_t data_len, TimerInfoPacket &payload) {
+bool B2500Codec::parse_timer_info_base(uint8_t *data, uint16_t data_len, void* payload, size_t payload_size) {
   B2500Command command;
   if (!this->parse_command(data, data_len, command)) {
     return false;
@@ -214,7 +214,6 @@ bool B2500Codec::parse_timer_info(uint8_t *data, uint16_t data_len, TimerInfoPac
     return false;
   }
   const size_t header_size = sizeof(B2500PacketHeader);
-  const size_t payload_size = sizeof(TimerInfoPacket);
 
   if (data_len < header_size + payload_size) {
     ESP_LOGW(TAG, "Packet too short for CMD_TIMER_INFO, expected %d, got %d", header_size + payload_size, data_len);
@@ -225,9 +224,51 @@ bool B2500Codec::parse_timer_info(uint8_t *data, uint16_t data_len, TimerInfoPac
   // Ensure the memory is properly aligned
   uint8_t aligned_buffer[payload_size];
   std::memcpy(aligned_buffer, data + header_size, payload_size);
-  payload = *reinterpret_cast<TimerInfoPacket *>(aligned_buffer);
+  std::memcpy(payload, aligned_buffer, payload_size);
 
   return true;
+}
+
+bool B2500Codec::parse_timer_info3(uint8_t *data, uint16_t data_len, TimerInfoPacket3 &payload) {
+  return this->parse_timer_info_base(data, data_len, &payload, sizeof(TimerInfoPacket3));
+}
+
+bool B2500Codec::parse_timer_info5(uint8_t *data, uint16_t data_len, TimerInfoPacket &payload) {
+  return this->parse_timer_info_base(data, data_len, &payload, sizeof(TimerInfoPacket));
+}
+
+bool B2500Codec::parse_timer_info(uint8_t *data, uint16_t data_len, TimerInfoPacket &payload) {
+  const size_t size_timer_info_packet3 = sizeof(TimerInfoPacket3);
+  const size_t size_timer_info_packet5 = sizeof(TimerInfoPacket);
+
+  if (data_len < sizeof(B2500PacketHeader) + size_timer_info_packet3) {
+    ESP_LOGW(TAG, "Packet too short to be a valid TimerInfoPacket");
+    ESP_LOGW(TAG, "data: %s", format_hex_pretty(data, data_len).c_str());
+    return false;
+  }
+
+  if (data_len >= sizeof(B2500PacketHeader) + size_timer_info_packet5) {
+    // Handle TimerInfoPacket
+    return this->parse_timer_info5(data, data_len, payload);
+  } else if (data_len >= sizeof(B2500PacketHeader) + size_timer_info_packet3) {
+    // Handle TimerInfoPacket3 and populate TimerInfoPacket
+    if (!this->parse_timer_info3(data, data_len, payload.base)) {
+      return false;
+    }
+
+    // Zero out additional timers
+    std::memset(payload.additional_timers, 0, sizeof(payload.additional_timers));
+    for (size_t i = 0; i < sizeof(payload.additional_timers) / sizeof(payload.additional_timers[0]); i++) {
+      // Set End time to 23:59 and power to 800W (default values)
+      payload.additional_timers[i].end.hour = 23;
+      payload.additional_timers[i].end.minute = 59;
+      payload.additional_timers[i].output_power = 800;
+    }
+    return true;
+  }
+
+  ESP_LOGW(TAG, "Unexpected packet size: %d", data_len);
+  return false;
 }
 
 bool B2500Codec::encode_command(B2500Command command, const uint8_t *data, uint16_t data_len,
@@ -291,8 +332,8 @@ bool B2500Codec::encode_dod(uint8_t dod, std::vector<uint8_t> &payload) {
   return this->encode_command(CMD_SET_DOD, &dod, sizeof(dod), payload);
 }
 
-bool B2500Codec::encode_timers(const TimerInfo timer[3], std::vector<uint8_t> &payload) {
-  return this->encode_command(CMD_SET_TIMERS, reinterpret_cast<const uint8_t *>(timer), sizeof(TimerInfo) * 3, payload);
+bool B2500Codec::encode_timers(const TimerInfo *timers, size_t count, std::vector<uint8_t> &payload) {
+    return this->encode_command(CMD_SET_TIMERS, reinterpret_cast<const uint8_t *>(timers), sizeof(TimerInfo) * count, payload);
 }
 
 bool B2500Codec::encode_set_datetime(const DateTimePacket &datetime, std::vector<uint8_t> &payload) {
