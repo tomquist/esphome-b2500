@@ -122,6 +122,7 @@ struct TimerInfoPacket3 {
 
 struct TimerInfoPacket {
     struct TimerInfoPacket3 base;
+    uint8_t reserved[10];
     TimerInfo additional_timers[2];
 } __attribute__((packed));
 
