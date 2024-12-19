@@ -72,54 +72,67 @@ bool B2500State::set_dod(int dod, std::vector<uint8_t> &payload) {
   return true;
 }
 
+uint8_t B2500State::get_number_of_timers() const {
+  if (this->runtime_info_.dev_version < 218) {
+    return 3;
+  }
+  return 5;
+}
+
 bool B2500State::set_timer_enabled(int timer, bool enabled, std::vector<uint8_t> &payload) {
   if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
     return false;
   }
-  if (timer < 0 || timer > 3) {
+  if (timer < 0 || timer >= 5) {
     return false;
   }
-  this->timer_info_.timer[timer].enabled = enabled;
-  if (!this->codec_->encode_timers(this->timer_info_.timer, payload)) {
-    return false;
+  if (timer < 3) {
+    this->timer_info_.base.timer[timer].enabled = enabled;
+  } else {
+    this->timer_info_.additional_timers[timer - 3].enabled = enabled;
   }
-  return true;
+  return this->encode_timers(payload);
 }
 
 bool B2500State::set_timer_output_power(int timer, int output_power, std::vector<uint8_t> &payload) {
   if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
     return false;
   }
-  if (timer < 0 || timer > 3) {
+  if (timer < 0 || timer >= 5) {
     return false;
   }
-  this->timer_info_.timer[timer].output_power = output_power;
-  if (!this->codec_->encode_timers(this->timer_info_.timer, payload)) {
-    return false;
+  if (timer < 3) {
+    this->timer_info_.base.timer[timer].output_power = output_power;
+  } else {
+    this->timer_info_.additional_timers[timer - 3].output_power = output_power;
   }
-  return true;
+  return this->encode_timers(payload);
 }
 
 bool B2500State::set_timer_start(int timer, uint8_t hour, uint8_t minute, std::vector<uint8_t> &payload) {
   if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
     return false;
   }
-  if (timer < 0 || timer > 3) {
+  if (timer < 0 || timer >= 5) {
     return false;
   }
-  this->timer_info_.timer[timer].start.hour = hour % 24;
-  this->timer_info_.timer[timer].start.minute = minute % 60;
-  if (!this->codec_->encode_timers(this->timer_info_.timer, payload)) {
-    return false;
+  hour = hour % 24;
+  minute = minute % 60;
+  if (timer < 3) {
+    this->timer_info_.base.timer[timer].start.hour = hour;
+    this->timer_info_.base.timer[timer].start.minute = minute;
+  } else {
+    this->timer_info_.additional_timers[timer - 3].start.hour = hour;
+    this->timer_info_.additional_timers[timer - 3].start.minute = minute;
   }
-  return true;
+  return this->encode_timers(payload);
 }
 
 bool B2500State::set_timer_end(int timer, uint8_t hour, uint8_t minute, std::vector<uint8_t> &payload) {
   if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
     return false;
   }
-  if (timer < 0 || timer > 3) {
+  if (timer < 0 || timer >= 5) {
     return false;
   }
   // The end time must be after the start time
@@ -127,25 +140,39 @@ bool B2500State::set_timer_end(int timer, uint8_t hour, uint8_t minute, std::vec
   if (hour == 0 && minute == 0) {
     hour = 24;
   }
-  this->timer_info_.timer[timer].end.hour = hour;
-  this->timer_info_.timer[timer].end.minute = minute % 60;
-  if (!this->codec_->encode_timers(this->timer_info_.timer, payload)) {
-    return false;
+  minute = minute % 60;
+  if (timer < 3) {
+    this->timer_info_.base.timer[timer].end.hour = hour;
+    this->timer_info_.base.timer[timer].end.minute = minute;
+  } else {
+    this->timer_info_.additional_timers[timer - 3].end.hour = hour;
+    this->timer_info_.additional_timers[timer - 3].end.minute = minute;
   }
-  return true;
+  return this->encode_timers(payload);
+}
+
+bool B2500State::encode_timers(std::vector<uint8_t> &payload) {
+  if (this->is_message_received(B2500_MSG_RUNTIME_INFO) && this->runtime_info_.dev_version < 218) {
+    return this->codec_->encode_timers(this->timer_info_.base.timer, 3, payload);
+  } else {
+    TimerInfo timer[5];
+    std::memcpy(timer, this->timer_info_.base.timer, sizeof(TimerInfo) * 3);
+    std::memcpy(timer + 3, this->timer_info_.additional_timers, sizeof(TimerInfo) * 2);
+    return this->codec_->encode_timers(timer, 5, payload);
+  }
 }
 
 bool B2500State::set_adaptive_mode_enabled(bool enabled, std::vector<uint8_t> &payload) {
   if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
     return false;
   }
-  this->timer_info_.adaptive_mode_enabled = enabled;
+  this->timer_info_.base.adaptive_mode_enabled = enabled;
   if (enabled) {
     if (!this->codec_->encode_simple_command(CMD_ENABLE_ADAPTIVE_MODE, payload)) {
       return false;
     }
   } else {
-    if (!this->codec_->encode_timers(this->timer_info_.timer, payload)) {
+    if (!this->encode_timers(payload)) {
       return false;
     }
   }
@@ -175,6 +202,14 @@ bool B2500State::set_mqtt(bool ssl, const std::string &host, uint16_t port, cons
 
 bool B2500State::get_simple_command(B2500Command command, std::vector<uint8_t> &payload) {
   return this->codec_->encode_simple_command(command, payload);
+}
+
+const TimerInfo B2500State::get_timer(int timer) const {
+  if (timer < 3) {
+    return this->timer_info_.base.timer[timer];
+  } else {
+    return this->timer_info_.additional_timers[timer - 3];
+  }
 }
 
 bool B2500State::receive_packet(uint8_t *data, uint16_t data_len, time_t timestamp) {

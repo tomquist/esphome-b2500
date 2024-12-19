@@ -114,10 +114,16 @@ struct SmartMeterInfo {
   uint16_t unknown;
 } __attribute__((packed));
 
-struct TimerInfoPacket {
+struct TimerInfoPacket3 {
   uint8_t adaptive_mode_enabled;
   TimerInfo timer[3];
   SmartMeterInfo smart_meter;
+} __attribute__((packed));
+
+struct TimerInfoPacket {
+    struct TimerInfoPacket3 base;
+    uint8_t reserved[10];
+    TimerInfo additional_timers[2];
 } __attribute__((packed));
 
 struct DateTimePacket {
@@ -145,7 +151,7 @@ class B2500Codec {
   bool encode_out_active(const DisChargeSetting &discharge_setting, std::vector<uint8_t> &payload);
   bool encode_discharge_threshold(uint16_t threshold, std::vector<uint8_t> &payload);
   bool encode_dod(uint8_t dod, std::vector<uint8_t> &payload);
-  bool encode_timers(const TimerInfo timer[3], std::vector<uint8_t> &payload);
+  bool encode_timers(const TimerInfo *timers, size_t count, std::vector<uint8_t> &payload);
   bool encode_set_datetime(const DateTimePacket &datetime, std::vector<uint8_t> &payload);
   bool encode_set_wifi(const std::string &ssid, const std::string &password, std::vector<uint8_t> &payload);
   bool encode_set_mqtt(bool ssl, const std::string &host, uint16_t port, const std::string &username,
@@ -153,6 +159,9 @@ class B2500Codec {
 
  protected:
   bool encode_command(B2500Command command, const uint8_t *data, uint16_t data_len, std::vector<uint8_t> &payload);
+  bool parse_timer_info_base(uint8_t *data, uint16_t data_len, void* payload, size_t payload_size);
+  bool parse_timer_info3(uint8_t *data, uint16_t data_len, TimerInfoPacket3 &payload);
+  bool parse_timer_info5(uint8_t *data, uint16_t data_len, TimerInfoPacket &payload);
 };
 
 }  // namespace b2500

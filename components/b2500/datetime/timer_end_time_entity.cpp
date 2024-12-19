@@ -23,9 +23,9 @@ void TimerEndTimeEntity::setup() {
 
 void TimerEndTimeEntity::on_message(B2500Message message) {
   if (message == B2500_MSG_TIMER_INFO) {
-    auto timers = this->parent_->get_state()->get_timer_info();
-    uint8_t end_hour = timers.timer[this->timer_].end.hour % 24;
-    uint8_t end_minute = timers.timer[this->timer_].end.minute % 60;
+    auto timer = this->parent_->get_state()->get_timer(this->timer_);
+    uint8_t end_hour = timer.end.hour % 24;
+    uint8_t end_minute = timer.end.minute % 60;
     if (this->hour != end_hour || this->minute != end_minute) {
       auto call = this->make_call();
       call.set_hour(end_hour);
