@@ -11,24 +11,13 @@ import {
 } from '@mui/material';
 import { ContentCopy } from '@mui/icons-material';
 import axios from 'axios';
-import crypto from 'crypto';
 import {
   getAllSecrets,
   generateRandomIdentifier,
   generatePassword,
   newIssueLink,
 } from '../utils';
-import { aesEncrypt } from '../crypto';
-
-const publicKey = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvvRsA62G+HxFVteRvo9R
-at3tt1hLzO1C//n0PgE0ljrc4Y5p+xfIrMe9lgo0Y0+/I5xtpOyzI6cCGiQfmpH8
-v1/ZPwRJjG5Oezj910p7B90Z+bg2lS1H2BBPEq2CiDbUCtcd5RKZBiVv9Yjmwm/J
-9DOGfiAB8lgmVReqe5fAc8IiZUnljp01LdCoxesp6HKSSEalet1pydj0joTR2xWy
-80m58r69liFdLiZBzXYIlbpJRt91KSUyFEeRginm6mkrEjzu8bPKiZlXA3ZvbcSa
-JSumPOJxYkcpse3uabXIEYRV3CL35R6CQN9YEYDYoGBrrQeAO5xgmgf76mMUBSWP
-qQIDAQAB
------END PUBLIC KEY-----`;
+import { encryptConfig, encryptPassword } from '../crypto';
 
 interface BuildModalProps {
   closeModal: () => void;
@@ -48,26 +37,12 @@ const BuildModal: React.FC<BuildModalProps> = ({
     if (!debouncedFormValues) return;
     setIsLoading(true);
 
-    const encryptedPassword = crypto
-      .publicEncrypt(
-        {
-          key: publicKey,
-          padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-          oaepHash: 'sha256',
-        },
-        Buffer.from(password)
-      )
-      .toString('base64');
-
-    const stringifiedConfig = JSON.stringify({
+    const encryptedPassword = encryptPassword(password);
+    const configData = {
       secrets: getAllSecrets(debouncedFormValues),
       config: debouncedFormValues,
-    });
-    const cipher = aesEncrypt({
-      password,
-      input: Buffer.from(stringifiedConfig),
-    });
-    const encryptedConfig = cipher.toString('base64');
+    };
+    const encryptedConfig = encryptConfig(configData, password);
 
     try {
       await axios.post(

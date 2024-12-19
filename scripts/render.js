@@ -17,7 +17,9 @@ const configJSON = Buffer.concat([
   decipher.final(),
 ]).toString('utf-8');
 
-nunjucks.configure({ autoescape: false });
+nunjucks
+  .configure({ autoescape: false })
+  .addGlobal('git_sha', process.env.GITHUB_SHA);
 const { config, secrets } = JSON.parse(configJSON);
 
 // Mask all secrets
