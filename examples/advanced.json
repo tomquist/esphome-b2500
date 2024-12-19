@@ -1,0 +1,91 @@
+{
+  "template_version": "v2",
+  "name": "b2500",
+  "friendly_name": "B2500",
+  "poll_interval_seconds": 5,
+  "log_level": "INFO",
+  "mqtt": {
+    "topic": "b2500",
+    "broker": "mqttbroker.local",
+    "port": 1883,
+    "username": "",
+    "password": "",
+    "discovery": true
+  },
+  "wifi": {
+    "ssid": "MyWifi",
+    "password": "MyPassword"
+  },
+  "board": "esp32dev",
+  "variant": "auto",
+  "flash_size": "4MB",
+  "idf_platform_version": "",
+  "enable_auto_restart": true,
+  "auto_restart": {
+    "restart_after_error_count": 8
+  },
+  "enable_cellquery": false,
+  "enable_timer_query": true,
+  "enable_cmd30": false,
+  "enable_esp_temperature": true,
+  "esp_temperature": {
+    "variant": "internal"
+  },
+  "enable_powermeter": false,
+  "enable_experimental_commands": false,
+  "enable_hexdump": false,
+  "enable_set_wifi": true,
+  "set_wifi": {
+    "ssid": "MyWifi",
+    "password": "MyPassword"
+  },
+  "enable_set_mqtt": true,
+  "powermeter": {
+    "tx_pin": "GPIO6",
+    "rx_pin": "GPIO7",
+    "baud_rate": 9600,
+    "stop_bits": 1
+  },
+  "enable_enforce_dod": false,
+  "enable_powerzero": true,
+  "powerzero": {
+    "grid_power_topic": "tibber-esp/sensor/power/state",
+    "limit_cmd_topic": "openDTU/XXXXXXXXXXXX/cmd/limit_persistent_relative",
+    "limit_state_topic": "openDTU/XXXXXXXXXXXX/state/limit_relative"
+  },
+  "enable_manual_ip": true,
+  "manual_ip": {
+    "ip": "192.168.1.100",
+    "gateway": "192.168.1.1",
+    "subnet": "255.255.255.0",
+    "dns": "192.168.1.1"
+  },
+  "enable_web_server": true,
+  "web_server": {
+    "port": 80,
+    "js_include": "./v2/www.js"
+  },
+  "enable_ota": true,
+  "ota": {
+    "password": "my_ota_password",
+    "enable_unprotected_writes": false
+  },
+  "enable_fallback_hotspot": true,
+  "fallback_hotspot": {
+    "ssid": "ESPHome-b2500",
+    "enable_captive_portal": true
+  },
+  "enable_dio_flash_mode": true,
+  "storages": [
+    {
+      "name": "B2500_V1",
+      "version": 1,
+      "mac_address": "00:00:00:00:00:00"
+    },
+    {
+      "name": "B2500_V2",
+      "version": 2,
+      "mac_address": "11:11:11:11:11:11"
+    }
+  ]
+}

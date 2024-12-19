@@ -119,11 +119,15 @@ ota:
 {%- endif %}
 {%- endif %}
 
+{%- set ref = 'main' %}
+{%- if git_sha %}
+  {%- set ref = git_sha %}
+{%- endif %}
 external_components:
   - source:
       type: git
       url: https://github.com/tomquist/esphome-b2500
-      ref: main
+      ref: "{{ ref }}"
     refresh: 0s
     components: [b2500]
 
@@ -205,7 +209,7 @@ time:
 
 ble_client:
 {%- for storage in storages %}
-  - mac_address: {{ storage.mac_address | default('!secret hm2500_' ~ loop.index ~ '_mac') }}
+  - mac_address: "{{ storage.mac_address | default('!secret hm2500_' ~ loop.index ~ '_mac') }}"
     id: b2500_ble_client_{{ loop.index }}
     on_connect:
       then:

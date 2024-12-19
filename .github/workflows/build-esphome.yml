@@ -42,7 +42,7 @@ jobs:
       - name: Render ESPHome configuration
         id: generate_config
         run: |
-          node render.js
+          node scripts/render.js
 
       - name: Build firmware
         id: esphome-build

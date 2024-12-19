@@ -1,0 +1,63 @@
+name: PR Build
+
+on:
+  pull_request:
+    paths:
+      - 'examples/**/*.json'
+      - '.github/workflows/pr.yml'
+      - 'src/**/*.jinja2'
+
+jobs:
+  build_examples:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: 
+          - basic-v1
+          - basic-v2
+          - advanced
+      fail-fast: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Generate build password
+        id: generate_password
+        run: |
+          PASSWORD=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")
+          echo "PASSWORD=$PASSWORD" >> $GITHUB_ENV
+          echo "::add-mask::$PASSWORD"
+
+      - name: Encrypt configuration
+        run: |
+          echo "ENCRYPTED_CONFIG=$(npx ts-node ./scripts/encrypt-config.ts examples/${{ matrix.example }}.json "${PASSWORD}")" >> $GITHUB_ENV
+
+      - name: Render configuration
+        run: node scripts/render.js
+
+      - name: Build firmware
+        id: esphome-build
+        uses: esphome/build-action@v3.1.0
+        with:
+          yaml_file: device.yaml
+
+      - name: Create zip with password
+        run: |
+          zip -P "$PASSWORD" firmware.zip ${{ steps.esphome-build.outputs.name }}/*
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}
+          path: firmware.zip
