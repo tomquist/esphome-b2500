@@ -67,11 +67,11 @@ template<typename... Ts> class SetChargeModeAction : public Action<Ts...>, publi
 };
 
 template<typename... Ts> class SetOutActiveAction : public Action<Ts...>, public Parented<B2500ComponentV1> {
-  TEMPLATABLE_VALUE(int, out)
+  TEMPLATABLE_VALUE(int, output)
   TEMPLATABLE_VALUE(bool, active)
 
  public:
-  void play(Ts... x) override { this->parent_->set_out_active(this->out_.value(x...), this->active_.value(x...)); }
+  void play(Ts... x) override { this->parent_->set_out_active(this->output_.value(x...), this->active_.value(x...)); }
 };
 
 template<typename... Ts> class SetDischargeThresholdAction : public Action<Ts...>, public Parented<B2500ComponentV1> {
