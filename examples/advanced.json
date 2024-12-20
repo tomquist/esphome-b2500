@@ -40,6 +40,7 @@
     "password": "MyPassword"
   },
   "enable_set_mqtt": true,
+  "enable_reset_mqtt": true,
   "powermeter": {
     "tx_pin": "GPIO6",
     "rx_pin": "GPIO7",

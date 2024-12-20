@@ -28,6 +28,11 @@ template<typename... Ts> class SetMqttAction : public Action<Ts...>, public Pare
   }
 };
 
+template<typename... Ts> class ResetMqttAction : public Action<Ts...>, public Parented<B2500ComponentBase> {
+  public:
+    void play(Ts... x) override { this->parent_->reset_mqtt(); }
+};
+
 template<typename... Ts> class SetDatetimeAction : public Action<Ts...>, public Parented<B2500ComponentBase> {
   TEMPLATABLE_VALUE(ESPTime, datetime)
 

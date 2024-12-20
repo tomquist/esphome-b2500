@@ -118,6 +118,7 @@ export interface FormValues {
   enable_esp_temperature: boolean;
   esp_temperature: EspTemperatureSettings;
   enable_set_mqtt: boolean;
+  enable_reset_mqtt: boolean;
   enable_hexdump: boolean;
 
   enable_powermeter: boolean;

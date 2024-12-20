@@ -43,6 +43,7 @@ export const defaultFormValues: FormValues = {
     password: 'MyPassword',
   },
   enable_set_mqtt: false,
+  enable_reset_mqtt: false,
   powermeter: {
     tx_pin: 'GPIO6',
     rx_pin: 'GPIO7',

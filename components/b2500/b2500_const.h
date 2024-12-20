@@ -17,6 +17,8 @@ enum B2500Command : uint8_t {
   CMD_POWER_OUT = 0x0E,
   CMD_CELL_INFO = 0x0F,
   CMD_SET_MQTT = 0x20,
+  // Firmware version > 212
+  CMD_RESET_MQTT = 0x21,
   // Firmware Version > 133
   CMD_FC41D_INFO = 0x23,
   CMD_REBOOT = 0x25,

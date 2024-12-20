@@ -227,6 +227,13 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
         <BooleanField
           value={formValues}
           onChange={handleInputChange}
+          prop="enable_reset_mqtt"
+          label="Enable Reset MQTT"
+          helperText="This will reset the MQTT configuration to the default values."
+        />
+        <BooleanField
+          value={formValues}
+          onChange={handleInputChange}
           prop="enable_set_wifi"
           label="Enable Set Wifi"
         />

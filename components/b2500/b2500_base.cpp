@@ -136,6 +136,16 @@ bool B2500ComponentBase::set_mqtt(bool ssl, const std::string &host, uint16_t po
   return true;
 }
 
+bool B2500ComponentBase::reset_mqtt() {
+  std::vector<uint8_t> payload;
+  if (!this->state_->reset_mqtt(payload)) {
+    ESP_LOGW(TAG, "Failed to reset mqtt");
+    return false;
+  }
+  this->send_command(payload);
+  return true;
+}
+
 bool B2500ComponentBase::set_datetime(ESPTime datetime) {
   std::vector<uint8_t> payload;
   if (!this->state_->set_datetime(datetime.year, datetime.month, datetime.day_of_month, datetime.hour, datetime.minute,
