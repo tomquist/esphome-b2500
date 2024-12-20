@@ -151,6 +151,32 @@ bool B2500State::set_timer_end(int timer, uint8_t hour, uint8_t minute, std::vec
   return this->encode_timers(payload);
 }
 
+bool B2500State::set_timer(int timer, bool enabled, float output_power, uint8_t start_hour, uint8_t start_minute,
+                           uint8_t end_hour, uint8_t end_minute, std::vector<uint8_t> &payload) {
+  if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
+    return false;
+  }
+  if (timer < 0 || timer >= 5) {
+    return false;
+  }
+  if (timer < 3) {
+    this->timer_info_.base.timer[timer].enabled = enabled;
+    this->timer_info_.base.timer[timer].output_power = output_power;
+    this->timer_info_.base.timer[timer].start.hour = start_hour % 24;
+    this->timer_info_.base.timer[timer].start.minute = start_minute % 60;
+    this->timer_info_.base.timer[timer].end.hour = end_hour % 24;
+    this->timer_info_.base.timer[timer].end.minute = end_minute % 60;
+  } else {
+    this->timer_info_.additional_timers[timer - 3].enabled = enabled;
+    this->timer_info_.additional_timers[timer - 3].output_power = output_power;
+    this->timer_info_.additional_timers[timer - 3].start.hour = start_hour % 24;
+    this->timer_info_.additional_timers[timer - 3].start.minute = start_minute % 60;
+    this->timer_info_.additional_timers[timer - 3].end.hour = end_hour % 24;
+    this->timer_info_.additional_timers[timer - 3].end.minute = end_minute % 60;
+  }
+  return this->encode_timers(payload);
+}
+
 bool B2500State::encode_timers(std::vector<uint8_t> &payload) {
   if (this->is_message_received(B2500_MSG_RUNTIME_INFO) && this->runtime_info_.dev_version < 218) {
     return this->codec_->encode_timers(this->timer_info_.base.timer, 3, payload);

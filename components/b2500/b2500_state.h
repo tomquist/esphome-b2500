@@ -38,6 +38,8 @@ class B2500State {
   bool set_timer_output_power(int timer, int output_power, std::vector<uint8_t> &payload);
   bool set_timer_start(int timer, uint8_t hour, uint8_t minute, std::vector<uint8_t> &payload);
   bool set_timer_end(int timer, uint8_t hour, uint8_t minute, std::vector<uint8_t> &payload);
+  bool set_timer(int timer, bool enabled, float output_power, uint8_t start_hour, uint8_t start_minute, uint8_t end_hour,
+                 uint8_t end_minute, std::vector<uint8_t> &payload);
   bool set_adaptive_mode_enabled(bool enabled, std::vector<uint8_t> &payload);
   bool set_datetime(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second,
                     std::vector<uint8_t> &payload);

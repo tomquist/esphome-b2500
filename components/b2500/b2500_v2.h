@@ -25,6 +25,8 @@ class B2500ComponentV2 : public B2500ComponentBase {
   bool set_charge_mode(const std::string &charge_mode) override;
   bool set_timer_start(int timer, uint8_t hour, uint8_t minute);
   bool set_timer_end(int timer, uint8_t hour, uint8_t minute);
+  bool set_timer(int timer, bool enabled, float output_power, uint8_t start_hour, uint8_t start_minute, uint8_t end_hour,
+                 uint8_t end_minute);
   bool set_adaptive_mode_enabled(bool enabled);
 
  protected:

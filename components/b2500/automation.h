@@ -79,5 +79,27 @@ template<typename... Ts> class SetDischargeThresholdAction : public Action<Ts...
   void play(Ts... x) override { this->parent_->set_discharge_threshold(this->threshold_.value(x...)); }
 };
 
+template<typename... Ts> class SetTimerAction : public Action<Ts...>, public Parented<B2500ComponentV2> {
+  TEMPLATABLE_VALUE(int, timer)
+  TEMPLATABLE_VALUE(optional<bool>, enabled)
+  TEMPLATABLE_VALUE(optional<int>, output_power)
+  TEMPLATABLE_VALUE(optional<int>, start_hour)
+  TEMPLATABLE_VALUE(optional<int>, start_minute)
+  TEMPLATABLE_VALUE(optional<int>, end_hour)
+  TEMPLATABLE_VALUE(optional<int>, end_minute)
+
+ public:
+  void play(Ts... x) override {
+    auto timer = this->parent_->get_state()->get_timer(this->timer_.value(x...));
+    auto enabled = this->enabled_.value_or(x..., timer.enabled).value_or(timer.enabled);
+    auto output_power = this->output_power_.value_or(x..., timer.output_power).value_or(timer.output_power);
+    auto start_hour = this->start_hour_.value_or(x..., timer.start.hour).value_or(timer.start.hour);
+    auto start_minute = this->start_minute_.value_or(x..., timer.start.minute).value_or(timer.start.minute);
+    auto end_hour = this->end_hour_.value_or(x..., timer.end.hour).value_or(timer.end.hour);
+    auto end_minute = this->end_minute_.value_or(x..., timer.end.minute).value_or(timer.end.minute);
+    this->parent_->set_timer(this->timer_.value(x...), enabled, output_power, start_hour, start_minute, end_hour, end_minute);
+  }
+};
+
 }  // namespace b2500
 }  // namespace esphome

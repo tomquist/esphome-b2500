@@ -53,6 +53,7 @@ SetOutActiveAction = b2500_ns.class_("SetOutActiveAction", automation.Action)
 SetDischargeThresholdAction = b2500_ns.class_(
     "SetDischargeThresholdAction", automation.Action
 )
+SetTimerAction = b2500_ns.class_("SetTimerAction", automation.Action)
 
 B2500_COMPONENT_SCHEMA = cv.Schema(
     {
@@ -331,4 +332,57 @@ async def b2500_set_discharge_threshold(config, action_id, template_arg, args):
     await cg.register_parented(action_var, config[CONF_ID])
 
     cg.add(action_var.set_threshold(config["threshold"]))
+    return action_var
+
+
+@automation.register_action(
+    "b2500.set_timer",
+    SetTimerAction,
+    cv.Schema(
+        {
+            cv.Required(CONF_ID): cv.use_id(B2500ComponentV2),
+            cv.Required(CONF_B2500_GENERATION): cv.int_(2),
+            cv.Required("timer"): cv.templatable(cv.int_range(0, 4)),
+            cv.Optional("enabled"): cv.templatable(cv.boolean),
+            cv.Optional("output_power"): cv.templatable(cv.int_),
+            cv.Optional("start_hour"): cv.templatable(cv.int_),
+            cv.Optional("start_minute"): cv.templatable(cv.int_),
+            cv.Optional("end_hour"): cv.templatable(cv.int_),
+            cv.Optional("end_minute"): cv.templatable(cv.int_),
+        },
+    ).add_extra(
+        cv.has_at_least_one_key(
+            "enabled",
+            "output_power",
+            "start_hour",
+            "start_minute",
+            "end_hour",
+            "end_minute",
+        )
+    )
+)
+async def b2500_set_timer(config, action_id, template_arg, args):
+    action_var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(action_var, config[CONF_ID])
+
+    template_ = await cg.templatable(config["timer"], args, cg.std_string)
+    cg.add(action_var.set_timer(template_))
+    if "enabled" in config:
+        template_ = await cg.templatable(config["enabled"], args, cg.optional.template(bool))
+        cg.add(action_var.set_enabled(template_))
+    if "output_power" in config:
+        template_ = await cg.templatable(config["output_power"], args, cg.optional.template(cg.int_))
+        cg.add(action_var.set_output_power(template_))
+    if "start_hour" in config:
+        template_ = await cg.templatable(config["start_hour"], args, cg.optional.template(cg.int_))
+        cg.add(action_var.set_start_hour(template_))
+    if "start_minute" in config:
+        template_ = await cg.templatable(config["start_minute"], args, cg.optional.template(cg.int_))
+        cg.add(action_var.set_start_minute(template_))
+    if "end_hour" in config:
+        template_ = await cg.templatable(config["end_hour"], args, cg.optional.template(cg.int_))
+        cg.add(action_var.set_end_hour(template_))
+    if "end_minute" in config:
+        template_ = await cg.templatable(config["end_minute"], args, cg.optional.template(cg.int_))
+        cg.add(action_var.set_end_minute(template_))
     return action_var
