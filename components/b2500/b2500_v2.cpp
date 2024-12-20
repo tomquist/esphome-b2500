@@ -58,6 +58,17 @@ bool B2500ComponentV2::set_timer_end(int timer, uint8_t hour, uint8_t minute) {
   return true;
 }
 
+bool B2500ComponentV2::set_timer(int timer, bool enabled, float output_power, uint8_t start_hour, uint8_t start_minute,
+                                 uint8_t end_hour, uint8_t end_minute) {
+  std::vector<uint8_t> payload;
+  if (!this->state_->set_timer(timer, enabled, output_power, start_hour, start_minute, end_hour, end_minute, payload)) {
+    ESP_LOGW(TAG, "Failed to set timer");
+    return false;
+  }
+  this->send_command(payload);
+  return true;
+}
+
 bool B2500ComponentV2::set_charge_mode(const std::string &charge_mode) {
   std::vector<uint8_t> payload;
   if (charge_mode == "LoadFirst") {
