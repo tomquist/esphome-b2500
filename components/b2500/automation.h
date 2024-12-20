@@ -1,6 +1,8 @@
 #include "b2500_base.h"
 #include "b2500_v1.h"
 #include "b2500_v2.h"
+#include "b2500_codec.h"
+#include "b2500_state.h"
 #include "esphome/core/automation.h"
 
 namespace esphome {
@@ -106,6 +108,78 @@ template<typename... Ts> class SetAdaptiveModeEnabledAction : public Action<Ts..
 
  public:
   void play(Ts... x) override { this->parent_->set_adaptive_mode_enabled(this->enabled_.value(x...)); }
+};
+
+class DeviceInfoTrigger : public Trigger<DeviceInfoPacket> {
+ public:
+  explicit DeviceInfoTrigger(B2500State *state) {
+    state->add_on_message_callback([this, state](B2500Message message) { 
+      if (message == B2500Message::B2500_MSG_DEVICE_INFO) {
+        ESP_LOGD("b2500.automation", "Device info trigger");
+        this->trigger(state->get_device_info());
+      }
+    });
+  }
+};
+
+class RuntimeInfoTrigger : public Trigger<RuntimeInfoPacket> {
+ public:
+  explicit RuntimeInfoTrigger(B2500State *state) {
+    state->add_on_message_callback([this, state](B2500Message message) { 
+      if (message == B2500Message::B2500_MSG_RUNTIME_INFO) {
+        ESP_LOGD("b2500.automation", "RuntimeInfoTrigger");
+        this->trigger(state->get_runtime_info());
+      }
+    });
+  }
+};
+
+class CellInfoTrigger : public Trigger<CellInfoPacket> {
+ public:
+  explicit CellInfoTrigger(B2500State *state) {
+    state->add_on_message_callback([this, state](B2500Message message) { 
+      if (message == B2500Message::B2500_MSG_CELL_INFO) {
+        ESP_LOGD("b2500.automation", "CellInfoTrigger");
+        this->trigger(state->get_cell_info());
+      }
+    });
+  }
+};
+
+class WifiInfoTrigger : public Trigger<WifiInfoPacket> {
+ public:
+  explicit WifiInfoTrigger(B2500State *state) {
+    state->add_on_message_callback([this, state](B2500Message message) { 
+      if (message == B2500Message::B2500_MSG_WIFI_INFO) {
+        ESP_LOGD("b2500.automation", "WifiInfoTrigger");
+        this->trigger(state->get_wifi_info());
+      }
+    });
+  }
+};
+
+class FC41DInfoTrigger : public Trigger<FC41DInfoPacket> {
+ public:
+  explicit FC41DInfoTrigger(B2500State *state) {
+    state->add_on_message_callback([this, state](B2500Message message) { 
+      if (message == B2500Message::B2500_MSG_FC41D_INFO) {
+        ESP_LOGD("b2500.automation", "FC41DInfoTrigger");
+        this->trigger(state->get_fc41d_info());
+      }
+    });
+  }
+};
+
+class TimerInfoTrigger : public Trigger<TimerInfoPacket> {
+ public:
+  explicit TimerInfoTrigger(B2500State *state) {
+    state->add_on_message_callback([this, state](B2500Message message) { 
+      if (message == B2500Message::B2500_MSG_TIMER_INFO) {
+        ESP_LOGD("b2500.automation", "TimerInfoTrigger");
+        this->trigger(state->get_timer_info());
+      }
+    });
+  }
 };
 
 }  // namespace b2500

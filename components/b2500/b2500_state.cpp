@@ -13,6 +13,7 @@ void B2500State::add_on_message_callback(std::function<void(B2500Message)> &&cal
 void B2500State::message_received(B2500Message message, time_t timestamp) {
   info_timestamps_[message] = timestamp;
   this->last_message_received_timestamp_ = timestamp;
+  ESP_LOGD(TAG, "Calling %d message callbacks", this->message_callback_.size());
   this->message_callback_.call(message);
 }
 

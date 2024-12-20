@@ -16,6 +16,7 @@ from esphome.const import (
     CONF_SECOND,
     CONF_SSID,
     CONF_TIME_ID,
+    CONF_TRIGGER_ID,
     CONF_UPDATE_INTERVAL,
     CONF_USERNAME,
     CONF_YEAR,
@@ -29,8 +30,14 @@ CONF_B2500_GENERATION = "generation"
 CONF_HOST = "host"
 CONF_SSL = "ssl"
 CONF_CHARGE_MODE = "charge_mode"
+CONF_ON_DEVICE_INFO = "on_device_info"
+CONF_ON_RUNTIME_INFO = "on_runtime_info"
+CONF_ON_CELL_INFO = "on_cell_info"
+CONF_ON_WIFI_INFO = "on_wifi_info"
+CONF_ON_FC41D_INFO = "on_fc41d_info"
+CONF_ON_TIMER_INFO = "on_timer_info"
 
-AUTO_LOAD = ["b2500", "binary_sensor", "switch"]
+AUTO_LOAD = ["b2500", "binary_sensor", "switch", "number", "select"]
 MULTI_CONF = 3
 
 b2500_ns = cg.esphome_ns.namespace("b2500")
@@ -56,6 +63,20 @@ SetDischargeThresholdAction = b2500_ns.class_(
 SetTimerAction = b2500_ns.class_("SetTimerAction", automation.Action)
 SetAdaptiveModeEnabledAction = b2500_ns.class_("SetAdaptiveModeEnabledAction", automation.Action)
 
+DeviceInfoPacket = b2500_ns.struct("DeviceInfoPacket")
+RuntimeInfoPacket = b2500_ns.struct("RuntimeInfoPacket")
+CellInfoPacket = b2500_ns.struct("CellInfoPacket")
+WifiInfoPacket = b2500_ns.struct("WifiInfoPacket")
+FC41DInfoPacket = b2500_ns.struct("FC41DInfoPacket")
+TimerInfoPacket = b2500_ns.struct("TimerInfoPacket")
+
+DeviceInfoTrigger = b2500_ns.class_("DeviceInfoTrigger", automation.Trigger.template(DeviceInfoPacket))
+RuntimeInfoTrigger = b2500_ns.class_("RuntimeInfoTrigger", automation.Trigger.template(RuntimeInfoPacket))
+CellInfoTrigger = b2500_ns.class_("CellInfoTrigger", automation.Trigger.template(CellInfoPacket))
+WifiInfoTrigger = b2500_ns.class_("WifiInfoTrigger", automation.Trigger.template(WifiInfoPacket))
+FC41DInfoTrigger = b2500_ns.class_("FC41DInfoTrigger", automation.Trigger.template(FC41DInfoPacket))
+TimerInfoTrigger = b2500_ns.class_("TimerInfoTrigger", automation.Trigger.template(TimerInfoPacket))
+
 B2500_COMPONENT_SCHEMA = cv.Schema(
     {
         cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentBase),
@@ -67,6 +88,31 @@ BASE_SCHEMA = (
         {
             cv.Optional(CONF_UPDATE_INTERVAL, default="10s"): cv.update_interval,
             cv.GenerateID(CONF_TIME_ID): cv.use_id(time.RealTimeClock),
+            cv.Optional(CONF_ON_DEVICE_INFO): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(DeviceInfoTrigger),
+                }
+            ),
+            cv.Optional(CONF_ON_RUNTIME_INFO): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(RuntimeInfoTrigger),
+                }
+            ),
+            cv.Optional(CONF_ON_CELL_INFO): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(CellInfoTrigger),
+                }
+            ),
+            cv.Optional(CONF_ON_WIFI_INFO): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(WifiInfoTrigger),
+                }
+            ),
+            cv.Optional(CONF_ON_FC41D_INFO): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(FC41DInfoTrigger),
+                }
+            ),
         }
     )
     .extend(ble_client.BLE_CLIENT_SCHEMA)
@@ -90,6 +136,11 @@ CONFIG_SCHEMA = cv.Any(
                 ),
                 key=CONF_NAME,
             ),
+            cv.Optional(CONF_ON_TIMER_INFO): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(TimerInfoTrigger),
+                }
+            ),
         }
     ).extend(BASE_SCHEMA),
 )
@@ -102,6 +153,25 @@ async def to_code(config):
     if time_id_config := config.get(CONF_TIME_ID):
         time_id = await cg.get_variable(time_id_config)
         cg.add(var.set_time(time_id))
+    
+    for conf in config.get(CONF_ON_DEVICE_INFO, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var.get_state())
+        await automation.build_automation(trigger, [(DeviceInfoPacket, "x")], conf)
+    for conf in config.get(CONF_ON_RUNTIME_INFO, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var.get_state())
+        await automation.build_automation(trigger, [(RuntimeInfoPacket, "x")], conf)
+    for conf in config.get(CONF_ON_CELL_INFO, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var.get_state())
+        await automation.build_automation(trigger, [(CellInfoPacket, "x")], conf)
+    for conf in config.get(CONF_ON_WIFI_INFO, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var.get_state())
+        await automation.build_automation(trigger, [(WifiInfoPacket, "x")], conf)
+    for conf in config.get(CONF_ON_FC41D_INFO, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var.get_state())
+        await automation.build_automation(trigger, [(FC41DInfoPacket, "x")], conf)
+    for conf in config.get(CONF_ON_TIMER_INFO, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var.get_state())
+        await automation.build_automation(trigger, [(TimerInfoPacket, "x")], conf)
 
     await cg.register_component(var, config)
     await ble_client.register_ble_node(var, config)
