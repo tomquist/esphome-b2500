@@ -198,12 +198,14 @@ B2500_BASE_ACTION_SCHEMA = maybe_simple_id(
 async def b2500_set_wifi(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
-    cg.add(var.set_ssid(await cg.templatable(config[CONF_SSID], args, cg.std_string)))
-    cg.add(
-        var.set_password(
-            await cg.templatable(config[CONF_PASSWORD], args, cg.std_string)
-        )
+    template_ = await cg.templatable(config[CONF_SSID], args, cg.std_string)
+    cg.add(var.set_ssid(template_))
+    template_ = await cg.templatable(
+        config[CONF_PASSWORD],
+        args,
+        cg.std_string,
     )
+    cg.add(var.set_password(template_))
     return var
 
 
@@ -225,18 +227,21 @@ async def b2500_set_mqtt(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
     cg.add(var.set_ssl(config[CONF_SSL]))
-    cg.add(var.set_host(await cg.templatable(config[CONF_HOST], args, cg.std_string)))
-    cg.add(var.set_port(await cg.templatable(config[CONF_PORT], args, cg.int_)))
-    cg.add(
-        var.set_username(
-            await cg.templatable(config[CONF_USERNAME], args, cg.std_string)
-        )
+    cg.add(var.set_host(await cg.templatable(
+        config[CONF_HOST],
+        args,
+        cg.std_string,
+    )))
+    template_ = await cg.templatable(config[CONF_PORT], args, cg.int_)
+    cg.add(var.set_port(template_))
+    template_ = await cg.templatable(
+        config[CONF_USERNAME], args, cg.std_string
     )
-    cg.add(
-        var.set_password(
-            await cg.templatable(config[CONF_PASSWORD], args, cg.std_string)
-        )
+    cg.add(var.set_username(template_))
+    template_ = await cg.templatable(
+        config[CONF_PASSWORD], args, cg.std_string
     )
+    cg.add(var.set_password(template_))
     return var
 
 @automation.register_action(
@@ -316,7 +321,7 @@ async def b2500_factory_reset(config, action_id, template_arg, args):
     cv.Schema(
         {
             cv.Required(CONF_ID): cv.use_id(B2500ComponentBase),
-            cv.Required("dod"): cv.int_,
+            cv.Required("dod"): cv.templatable(cv.int_),
         },
     ),
 )
@@ -324,7 +329,8 @@ async def b2500_set_dod(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(action_var, config[CONF_ID])
 
-    cg.add(action_var.set_dod(config["dod"]))
+    template_ = await cg.templatable(config["dod"], args, cg.int_)
+    cg.add(action_var.set_dod(template_))
     return action_var
 
 
@@ -333,30 +339,15 @@ async def b2500_set_dod(config, action_id, template_arg, args):
     SetChargeModeAction,
     cv.Schema(
         {
-            cv.Required(CONF_ID): cv.use_id(B2500ComponentV1),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(1),
-            cv.Required(CONF_CHARGE_MODE): cv.enum(
+            cv.Required(CONF_ID): cv.use_id(B2500ComponentBase),
+            cv.Required(CONF_CHARGE_MODE): cv.templatable(cv.enum(
                 {
                     "load_first": "LoadFirst",
                     "pv2_passthrough": "PV2Passthrough",
+                    "simultaneous_charge_and_discharge":
+                        "SimultaneousChargeAndDischarge",
                 }
-            ),
-        },
-    ),
-)
-@automation.register_action(
-    "b2500.set_charge_mode",
-    SetChargeModeAction,
-    cv.Schema(
-        {
-            cv.Required(CONF_ID): cv.use_id(B2500ComponentV2),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(2),
-            cv.Required(CONF_CHARGE_MODE): cv.enum(
-                {
-                    "load_first": "LoadFirst",
-                    "simultaneous_charge_and_discharge": "SimultaneousChargeAndDischarge",
-                }
-            ),
+            )),
         },
     ),
 )
@@ -364,7 +355,12 @@ async def b2500_set_charge_mode(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(action_var, config[CONF_ID])
 
-    cg.add(action_var.set_charge_mode(config["charge_mode"]))
+    template_ = await cg.templatable(
+        config["charge_mode"],
+        args,
+        cg.std_string,
+    )
+    cg.add(action_var.set_charge_mode(template_))
     return action_var
 
 
@@ -374,8 +370,9 @@ async def b2500_set_charge_mode(config, action_id, template_arg, args):
     cv.Schema(
         {
             cv.Required(CONF_ID): cv.use_id(B2500ComponentV1),
-            cv.Required("out"): cv.int_,
-            cv.Required("active"): cv.boolean,
+            cv.Required(CONF_B2500_GENERATION): cv.int_(1),
+            cv.Required("output"): cv.templatable(cv.int_),
+            cv.Required("active"): cv.templatable(cv.boolean),
         },
     ),
 )
@@ -383,8 +380,10 @@ async def b2500_set_out_active(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(action_var, config[CONF_ID])
 
-    cg.add(action_var.set_out(config["out"]))
-    cg.add(action_var.set_active(config["active"]))
+    template_ = await cg.templatable(config["output"], args, cg.int_)
+    cg.add(action_var.set_output(template_))
+    template_ = await cg.templatable(config["active"], args, bool)
+    cg.add(action_var.set_active(template_))
     return action_var
 
 
@@ -394,7 +393,8 @@ async def b2500_set_out_active(config, action_id, template_arg, args):
     cv.Schema(
         {
             cv.Required(CONF_ID): cv.use_id(B2500ComponentV1),
-            cv.Required("threshold"): cv.int_,
+            cv.Required(CONF_B2500_GENERATION): cv.int_(1),
+            cv.Required("threshold"): cv.templatable(cv.int_),
         },
     ),
 )
@@ -402,7 +402,8 @@ async def b2500_set_discharge_threshold(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(action_var, config[CONF_ID])
 
-    cg.add(action_var.set_threshold(config["threshold"]))
+    template_ = await cg.templatable(config["threshold"], args, cg.int_)
+    cg.add(action_var.set_threshold(template_))
     return action_var
 
 
@@ -439,22 +440,46 @@ async def b2500_set_timer(config, action_id, template_arg, args):
     template_ = await cg.templatable(config["timer"], args, cg.std_string)
     cg.add(action_var.set_timer(template_))
     if "enabled" in config:
-        template_ = await cg.templatable(config["enabled"], args, cg.optional.template(bool))
+        template_ = await cg.templatable(
+            config["enabled"],
+            args,
+            cg.optional.template(bool),
+        )
         cg.add(action_var.set_enabled(template_))
     if "output_power" in config:
-        template_ = await cg.templatable(config["output_power"], args, cg.optional.template(cg.int_))
+        template_ = await cg.templatable(
+            config["output_power"],
+            args,
+            cg.optional.template(cg.int_),
+        )
         cg.add(action_var.set_output_power(template_))
     if "start_hour" in config:
-        template_ = await cg.templatable(config["start_hour"], args, cg.optional.template(cg.int_))
+        template_ = await cg.templatable(
+            config["start_hour"],
+            args,
+            cg.optional.template(cg.int_),
+        )
         cg.add(action_var.set_start_hour(template_))
     if "start_minute" in config:
-        template_ = await cg.templatable(config["start_minute"], args, cg.optional.template(cg.int_))
+        template_ = await cg.templatable(
+            config["start_minute"],
+            args,
+            cg.optional.template(cg.int_),
+        )
         cg.add(action_var.set_start_minute(template_))
     if "end_hour" in config:
-        template_ = await cg.templatable(config["end_hour"], args, cg.optional.template(cg.int_))
+        template_ = await cg.templatable(
+            config["end_hour"],
+            args,
+            cg.optional.template(cg.int_),
+        )
         cg.add(action_var.set_end_hour(template_))
     if "end_minute" in config:
-        template_ = await cg.templatable(config["end_minute"], args, cg.optional.template(cg.int_))
+        template_ = await cg.templatable(
+            config["end_minute"],
+            args,
+            cg.optional.template(cg.int_),
+        )
         cg.add(action_var.set_end_minute(template_))
     return action_var
 
@@ -470,7 +495,12 @@ async def b2500_set_timer(config, action_id, template_arg, args):
         },
     ),
 )
-async def b2500_set_adaptive_mode_enabled(config, action_id, template_arg, args):
+async def b2500_set_adaptive_mode_enabled(
+    config,
+    action_id,
+    template_arg,
+    args
+):
     action_var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(action_var, config[CONF_ID])
 
