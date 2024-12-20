@@ -14,6 +14,7 @@ import { FileCopy, Download, Build } from '@mui/icons-material';
 import nunjucks from 'nunjucks';
 import template from './template.jinja2';
 import templateV2 from './template_v2.jinja2';
+import templateV2Minimal from './template_v2_minimal.jinja2';
 import FileSaver from 'file-saver';
 import { FormValues } from './types';
 import { useDebounce } from './hooks/useDebounce';
@@ -64,8 +65,18 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!debouncedFormValues) return;
-    const templateToUse =
-      debouncedFormValues?.template_version === 'v2' ? templateV2 : template;
+    let templateToUse;
+    switch (debouncedFormValues?.template_version ?? 'v1') {
+      case 'v1':
+        templateToUse = template;
+        break;
+      case 'v2':
+        templateToUse = templateV2;
+        break;
+      case 'v2-minimal':
+        templateToUse = templateV2Minimal;
+        break;
+    }
     const renderedConfig = nunjucks.renderString(
       templateToUse,
       debouncedFormValues

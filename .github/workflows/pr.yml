@@ -17,6 +17,10 @@ jobs:
           - basic-v1
           - basic-v2
           - advanced
+        template: 
+          - v1
+          - v2
+          - v2-minimal
       fail-fast: false
     
     steps:
@@ -39,10 +43,11 @@ jobs:
           PASSWORD=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")
           echo "PASSWORD=$PASSWORD" >> $GITHUB_ENV
           echo "::add-mask::$PASSWORD"
-
+      
       - name: Encrypt configuration
         run: |
-          echo "ENCRYPTED_CONFIG=$(npx ts-node ./scripts/encrypt-config.ts examples/${{ matrix.example }}.json "${PASSWORD}")" >> $GITHUB_ENV
+          cat examples/${{ matrix.example }}.json | jq --arg template_version ${{ matrix.template }} '.template_version = $template_version' > config.json
+          echo "ENCRYPTED_CONFIG=$(npx ts-node ./scripts/encrypt-config.ts config.json "${PASSWORD}")" >> $GITHUB_ENV
 
       - name: Render configuration
         run: node scripts/render.js
@@ -60,5 +65,5 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}
+          name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}-${{ matrix.template }}
           path: firmware.zip

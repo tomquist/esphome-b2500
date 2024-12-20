@@ -1,5 +1,5 @@
 // src/types.ts
-export type TemplateVersion = 'v1' | 'v2';
+export type TemplateVersion = 'v1' | 'v2' | 'v2-minimal';
 
 export interface MQTTSettings {
   topic: string;
