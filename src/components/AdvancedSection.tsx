@@ -97,7 +97,7 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
         <Typography variant="h6">Advanced</Typography>
       </AccordionSummary>
       <AccordionDetails>
-        {formValues.template_version === 'v2' && (
+        {['v2', 'v2-minimal'].includes(formValues.template_version) && (
           <FormControl fullWidth margin="normal">
             <InputLabel id="log-level-label">Log Level</InputLabel>
             <Select
@@ -296,23 +296,25 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
                   error={webserverPortInvalid}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="JS Include"
-                  name="js_include"
-                  value={formValues.web_server.js_include}
-                  onChange={handleWebServerChange}
-                  fullWidth
-                  margin="normal"
-                  helperText={
-                    <>
-                      Note that the file must be in the same directory as the
-                      config file. If you intend to use the automatic build
-                      system, this must be set to <code>./v2/www.js</code>.
-                    </>
-                  }
-                />
-              </Grid>
+              {formValues.template_version !== 'v2-minimal' && (
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="JS Include"
+                    name="js_include"
+                    value={formValues.web_server.js_include}
+                    onChange={handleWebServerChange}
+                    fullWidth
+                    margin="normal"
+                    helperText={
+                      <>
+                        Note that the file must be in the same directory as the
+                        config file. If you intend to use the automatic build
+                        system, this must be set to <code>./v2/www.js</code>.
+                      </>
+                    }
+                  />
+                </Grid>
+              )}
             </Grid>
           </Box>
         )}

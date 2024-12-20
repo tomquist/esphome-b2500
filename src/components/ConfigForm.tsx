@@ -134,25 +134,31 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
           value={formValues.template_version}
           onChange={handleSelectChange}
         >
-          <MenuItem key={1} value={'v1'}>
-            v1 (deprecated)
-          </MenuItem>
-          <MenuItem key={2} value={'v2'}>
-            v2
+          <MenuItem value={'v1'}>Legacy</MenuItem>
+          <MenuItem value={'v2'}>Native ESPHome component</MenuItem>
+          <MenuItem value={'v2-minimal'}>
+            Minimal native ESPHome component
           </MenuItem>
         </Select>
         <FormHelperText>
           You can choose between two different configuration versions:
           <ul>
             <li>
-              v1 - Old config based on{' '}
+              Legacy - Old config based on{' '}
               <a href="https://github.com/noone2k/hm2500pub/tree/master">
                 noone2k's ESPHome config
               </a>
             </li>
             <li>
-              v2 (beta) - A new config that uses a native ESPHome component.
-              It's less resource-intensive but some features are unavailable.
+              Native ESPHome component - A new config that uses a native ESPHome
+              component. Slightly less resource-intensive and more stable.
+            </li>
+            <li>
+              Minimal native ESPHome component - A minimal version of the native
+              ESPHome component. Exposes storage data through a smaller number
+              of MQTT topics without using ESPHome sensors. Use this for
+              low-power devices or if you manually integrate the storage into
+              your home automation system using MQTT.
             </li>
           </ul>
         </FormHelperText>

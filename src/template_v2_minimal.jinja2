@@ -1,0 +1,820 @@
+{%- set name = name or 'b2500' %}
+{%- set friendly_name = friendly_name or name %}
+{%- set mqtt = mqtt or {} %}
+{%- set mqtt_topic = mqtt.topic or 'b2500' %}
+{%- set mqtt_broker = mqtt.broker %}
+{%- set mqtt_port = mqtt.port or 1883 %}
+{%- set mqtt_user = mqtt.username %}
+{%- set mqtt_password = mqtt.password %}
+{%- set mqtt_discovery = mqtt.discovery or False %}
+{%- set wifi = wifi or {} %}
+{%- set wifi_ssid = wifi.ssid %}
+{%- set wifi_password = wifi.password %}
+{%- set board = board or 'esp32dev' %}
+{%- set manual_ip = manual_ip or {} %}
+{%- set enable_manual_ip = enable_manual_ip or False %}
+{%- set timezone = timezone or 'Europe/Berlin' %}
+{%- set enable_powerzero = enable_powerzero or False %}
+{%- set enable_esp_temperature = enable_esp_temperature or False %}
+{%- set esp_temperature = esp_temperature or {} %}
+{%- set esp_temperature_variant = esp_temperature.variant or 'internal' %}
+{%- set enable_powermeter = enable_powermeter or False %}
+{%- set powermeter_tx_pin = powermeter.tx_pin or 'GPIO6' %}
+{%- set powermeter_rx_pin = powermeter.rx_pin or 'GPIO7' %}
+{%- set powermeter_baud_rate = powermeter.baud_rate or 9600 %}
+{%- set powermeter_stop_bits = powermeter.stop_bits or 1 %}
+{%- set set_wifi_ssid = set_wifi.ssid or '' %}
+{%- set set_wifi_password = set_wifi.password or '' %}
+{%- set powerzero = powerzero or {} %}
+{%- set powerzero_grid_power_topic = powerzero.grid_power_topic or 'tibber-esp/sensor/power/state' %}
+{%- set powerzero_limit_cmd_topic = powerzero.limit_cmd_topic or 'openDTU/XXXXXXXXXXXX/cmd/limit_persistent_relative' %}
+{%- set powerzero_limit_state_topic = powerzero.limit_state_topic or 'openDTU/XXXXXXXXXXXX/state/limit_relative' %}
+{%- set storages = storages or [] %}
+{%- set enable_web_server = enable_web_server or False %}
+{%- set web_server_port = web_server.port or 80 %}
+{%- set web_server_ota = web_server.ota or False %}
+{%- set enable_ota = enable_ota %}
+{%- set ota = ota or {} %}
+{%- set ota_password = ota.password or '' %}
+{%- set ota_enable_unprotected_writes = ota.enable_unprotected_writes or False %}
+{%- set esphome_version = esphome_version or 'latest' %}
+{%- set use_modern_ota = (esphome_version == 'latest' or esphome_version >= '2024.6.0') %}
+{%- set fallback_hotspot = fallback_hotspot or {} %}
+{%- set fallback_hotspot_ssid = fallback_hotspot.ssid or '' %}
+{%- set fallback_hotspot_enable_captive_portal = fallback_hotspot.enable_captive_portal or False %}
+{%- macro isV2(deviceNr) %}({%- for storage in storages -%}
+            {%- if storage.version >= 2 %}ble_device_nr=={{ loop.index }}{% else %}false{% endif %}
+            {%- if not loop.last %} || {% endif -%}
+            {%- endfor %}){% endmacro %}
+{%- macro yaml_string(value) %}{% set escaped_value = value | replace('\\', '\\\\') | replace('"', '\\"') %}{{ escaped_value }}{% endmacro %}
+{%- macro yaml_lambda_string(value) %}{% set escaped_value = yaml_string(value) | replace('#', '\\#') %}{{ escaped_value }}{% endmacro %}
+{%- macro sensor_prefix(loopindex, storage) %}B2500 - {{ loopindex }} - {{ yaml_string(storage.name) }}:{% endmacro %}
+{%- set hasV1 = false %}
+{%- set hasV2 = false %}
+{%- for storage in storages %}
+  {%- if storage.version == 1 %}
+    {%- set hasV1 = true %}
+  {%- elif storage.version >= 2 %}
+    {%- set hasV2 = true %}
+  {%- endif %}
+{%- endfor %}
+{%- if enable_timer_query and not hasV2 %}
+  {%- set enable_timer_query = false %}
+{%- endif %}
+{%- set _ = '' -%}
+esphome:
+  name: "{{ yaml_string(name) }}"
+  friendly_name: "{{ yaml_string(friendly_name) }}"
+{%- if enable_dio_flash_mode %}
+  platformio_options:
+    board_build.flash_mode: dio
+{%- endif %}
+{%- if enable_powerzero %}
+  on_boot:
+    priority: -100
+    then:
+      - switch.turn_on: b2500_npw_enabled
+{%- endif %}
+
+esp32:
+  board: "{{ yaml_string(board or 'esp32dev') }}"
+  {%- if variant != 'auto' %}
+  variant: "{{ yaml_string(variant) }}"
+  {%- endif %}
+  flash_size: {{ flash_size or '4MB' }}
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_FREERTOS_UNICORE: y
+      COMPILER_OPTIMIZATION_SIZE: y
+    {%- if idf_platform_version %}
+    platform_version: "{{ yaml_string(idf_platform_version) }}"
+    {%- endif %}
+
+# Enable logging
+logger:
+  level: {{ log_level or 'INFO' }}
+
+{%- if enable_ota %}
+ota:
+{%- if use_modern_ota %}
+  - platform: esphome
+    password: "{{ yaml_string(ota_password) }}"
+    {%- if ota_enable_unprotected_writes %}
+    unprotected_writes: True # This is mandatory if you want to flash the partition table or bootloader on a Shelly!
+    {%- endif %}
+{%- else %}
+  password: "{{ yaml_string(ota_password) }}"
+  {%- if ota_enable_unprotected_writes %}
+  unprotected_writes: True # This is mandatory if you want to flash the partition table or bootloader on a Shelly!
+  {%- endif %}
+{%- endif %}
+{%- endif %}
+
+{%- set ref = 'main' %}
+{%- if git_sha %}
+  {%- set ref = git_sha %}
+{%- endif %}
+external_components:
+  - source:
+      type: git
+      url: https://github.com/tomquist/esphome-b2500
+      ref: "{{ ref }}"
+    refresh: 0s
+    components: [b2500]
+
+wifi:
+  ssid: "{{ yaml_string(wifi_ssid) }}"
+  password: "{{ yaml_string(wifi_password) }}"
+  reboot_timeout: 0s
+  fast_connect: True
+{%- if enable_manual_ip %}
+  manual_ip:
+    static_ip: "{{ yaml_string(manual_ip.ip) }}"
+    gateway: "{{ yaml_string(manual_ip.gateway) }}"
+    subnet: "{{ yaml_string(manual_ip.subnet or '255.255.255.0') }}"
+    dns1: "{{ yaml_string(manual_ip.dns or manual_ip.gateway) }}"
+{%- endif %}
+  on_connect:
+    - logger.log:
+        level: INFO
+        format: "Connected to WiFi. Starting BLE scan."
+  on_disconnect:
+    - logger.log:
+        level: INFO
+        format: "Disconnected from WiFi. Stopping BLE scan."
+
+{%- if enable_fallback_hotspot %}
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "{{ fallback_hotspot_ssid }}"
+{%- endif %}
+
+{%- if enable_web_server %}
+web_server:
+  port: {{ web_server_port }}
+  version: 3
+{%- endif %}
+
+{%- if enable_fallback_hotspot and fallback_hotspot_enable_captive_portal %}
+captive_portal:
+{%- endif %}
+
+mqtt:
+  id: mqtt_client
+  broker: "{{ yaml_string(mqtt_broker) }}"
+  port: {{ mqtt_port }}
+{%- if mqtt_user %}
+  username: "{{ yaml_string(mqtt_user) }}"
+{%- endif %}
+{%- if mqtt_password %}
+  password: "{{ yaml_string(mqtt_password) }}"
+{%- endif %}
+  discovery: {% if mqtt_discovery %}True{% else %}False{% endif %}
+  reboot_timeout: 0s
+  topic_prefix: "{{ yaml_string(mqtt_topic) }}"
+  log_topic: "{{ yaml_string(mqtt_topic) }}/debug"
+  on_connect:
+    - logger.log:
+        level: INFO
+        format: "MQTT connected"
+  on_disconnect:
+    - logger.log:
+        level: INFO
+        format: "MQTT disconnected"
+  on_message:
+{%- for storage in storages %}
+{%- set storage_loop = loop %}
+    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/charge_mode/set"
+      then:
+        - b2500.set_charge_mode:
+            id: b2500_{{ storage_loop.index }}
+            charge_mode: !lambda "return x;"
+{%- if storage.version == 1 %}
+    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/discharge_threshold/set"
+      then:
+        - b2500.set_discharge_threshold:
+            id: b2500_{{ storage_loop.index }}
+            generation: {{ storage.version }}
+            threshold: !lambda "return atoi(x.c_str());"
+    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/dod/set"
+      then:
+        - b2500.set_dod:
+            id: b2500_{{ storage_loop.index }}
+            dod: !lambda "return atoi(x.c_str());"
+{%- for _ in range(2) %}
+    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled/set"
+      then:
+        - b2500.set_out_active:
+            id: b2500_{{ storage_loop.index }}
+            generation: {{ storage.version }}
+            output: {{ loop.index }}
+            active: !lambda 'return x == "ON";'
+{%- endfor %}
+{%- elif storage.version >= 2 %}
+    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/smartmeter/enabled/set"
+      then:
+        - b2500.set_adaptive_mode_enabled:
+            id: b2500_{{ storage_loop.index }}
+            generation: {{ storage.version }}
+            enabled: !lambda 'return x == "ON";'
+{%- endif %}
+{%- endfor %}
+{%- if (hasV2 and enable_timer_query) or enable_set_wifi or enable_set_mqtt %}
+  on_json_message: 
+{%- for storage in storages %}
+{%- set storage_loop = loop %}
+{%- if storage.version >= 2 %}
+{%- if enable_timer_query %}
+{%- for _ in range(5) %}
+    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/timer/set"
+      then:
+        - b2500.set_timer:
+            id: b2500_{{ storage_loop.index }}
+            generation: {{ storage.version }}
+            timer: {{ loop.index0 }}
+            enabled: !lambda 'return x["enabled"].is<bool>() ? make_optional(x["enabled"].as<bool>()) : optional<bool>();'
+            output_power: !lambda 'return x["outputPower"].is<int>() ? x["outputPower"].as<int>() : optional<int>();'
+            start_hour: !lambda 'return x["start"]["hour"].is<int>() ? x["start"]["hour"].as<int>() : optional<int>();'
+            start_minute: !lambda 'return x["start"]["minute"].is<int>() ? x["start"]["minute"].as<int>() : optional<int>();'
+            end_hour: !lambda 'return x["end"]["hour"].is<int>() ? x["end"]["hour"].as<int>() : optional<int>();'
+            end_minute: !lambda 'return x["end"]["minute"].is<int>() ? x["end"]["minute"].as<int>() : optional<int>();'
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+{%- if enable_set_wifi %}
+    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/wifi/set"
+      then:
+        - b2500.set_wifi:
+            id: b2500_{{ storage_loop.index }}
+            ssid: !lambda 'return x["ssid"].as<std::string>();'
+            password: !lambda 'return x["password"].as<std::string>();'
+{%- endif %}
+{%- if enable_set_mqtt %}
+    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/mqtt/set"
+      then:
+        - b2500.set_mqtt:
+            id: b2500_{{ storage_loop.index }}
+            host: !lambda 'return x["host"].as<std::string>();'
+            port: !lambda 'return x["port"].as<int>();'
+            username: !lambda 'return x["username"].as<std::string>();'
+            password: !lambda 'return x["password"].as<std::string>();'
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+
+b2500:
+{%- for storage in storages %}
+  - id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+    update_interval: {{ poll_interval_seconds or '5' }}s
+    ble_client_id: b2500_ble_client_{{ loop.index }}
+    on_device_info:
+      then:
+        - lambda: |-
+            auto device_info_json = json::build_json([x](JsonObject root) {
+              root["type"] = x.type;
+              root["id"] = x.id;
+              root["mac"] = x.mac;
+            });
+            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/device", device_info_json);
+    on_runtime_info:
+      then:
+        - lambda: |-
+            auto runtime_info_json = json::build_json([x](JsonObject root) {
+              auto in1 = root.createNestedObject("in1");
+              in1["active"] = x.in1_active.active == 1;
+              in1["transparent"] = x.in1_active.transparent == 1;
+              in1["power"] = x.in1_power;
+              
+              auto in2 = root.createNestedObject("in2");
+              in2["active"] = x.in2_active.active == 1;
+              in2["transparent"] = x.in2_active.transparent == 1;
+              in2["power"] = x.in2_power;
+
+              root["soc"] = x.soc;
+              root["capacity"] = x.remaining_capacity;
+
+              root["deviceVersion"] = x.dev_version;
+              if (x.charge_mode.load_first) {
+                root["chargeMode"] = "LoadFirst";
+              } else {
+{%- if storage.version >= 2 %}
+                root["chargeMode"] = "SimultaneousChargeAndDischarge";
+{%- else %}
+                root["chargeMode"] = "PV2Passthrough";
+{%- endif %}
+              }
+
+              auto out1 = root.createNestedObject("out1");
+              out1["active"] = x.out1_active == 1;
+              out1["power"] = x.out1_power;
+              out1["enabled"] = x.discharge_setting.out1_enable == 1;
+              
+              auto out2 = root.createNestedObject("out2");
+              out2["active"] = x.out2_active == 1;
+              out2["power"] = x.out2_power;
+              out2["enabled"] = x.discharge_setting.out2_enable == 1;
+
+              root["dod"] = x.dod;
+              root["wifiConnected"] = x.wifi_mqtt_state.wifi_connected == 1;
+              root["mqttConnected"] = x.wifi_mqtt_state.mqtt_connected == 1;
+
+              root["dischargeThreshold"] = x.discharge_threshold;
+              switch (x.device_scene) {
+                case DeviceScene::SCENE_DAY:
+                  root["scene"] = "DAY";
+                  break;
+                case DeviceScene::SCENE_NIGHT:
+                  root["scene"] = "NIGHT";
+                  break;
+                case DeviceScene::SCENE_DUSK_DAWN:
+                  root["scene"] = "DUSK_DAWN";
+                  break;
+                case DeviceScene::SCENE_UNKNOWN:
+                  root["scene"] = "UNKNOWN";
+                  break;
+              }
+
+              switch (x.device_region) {
+                case DeviceRegion::REGION_EU:
+                  root["region"] = "EU";
+                  break;
+                case DeviceRegion::REGION_CHINA:
+                  root["region"] = "CHINA";
+                  break;
+                case DeviceRegion::REGION_NON_EU:
+                  root["region"] = "NON_EU";
+                  break;
+                case DeviceRegion::REGION_NOT_SET:
+                  root["region"] = "NOT_SET";
+                  break;
+                case DeviceRegion::REGION_UNKNOWN:
+                  root["region"] = "UNKNOWN";
+                  break;
+              }
+
+              auto ext = root.createNestedObject("extern");
+              ext["connected1"] = x.extern1_connected == 1;
+              ext["connected2"] = x.extern2_connected == 1;
+
+              auto hour = x.time.hour;
+              auto minute = x.time.minute;
+              char buffer[8];
+              sprintf(buffer, "%02d:%02d", hour, minute);
+              auto time_str = std::string(buffer);
+              root["time"] = time_str;
+
+              auto temperature = root.createNestedObject("temperature");
+              temperature["low"] = x.temperature_low;
+              temperature["high"] = x.temperature_high;
+            });
+            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/runtime", runtime_info_json);
+    on_cell_info:
+      then:
+        - lambda: |-
+            auto cell_info_json = json::build_json([x](JsonObject root) {
+              auto cell_info = x;
+              auto min = cell_info.cell_voltages[0];
+              auto max = cell_info.cell_voltages[0];
+              int sum = 0;
+              JsonArray cells = root.createNestedArray("cells");
+              for (int i = 0; i < 14; i++) {
+                cells.add(cell_info.cell_voltages[i] / 1000.0);
+                if (cell_info.cell_voltages[i] < min) {
+                  min = cell_info.cell_voltages[i];
+                }
+                if (cell_info.cell_voltages[i] > max) {
+                  max = cell_info.cell_voltages[i];
+                }
+                sum += cell_info.cell_voltages[i];
+              }
+              root["min"] = (min / 1000.0);
+              root["max"] = (max / 1000.0);
+              root["avg"] = ((sum / 14.0) / 1000.0);
+              root["sum"] = (sum / 1000.0);
+              root["delta"] = ((max - min) / 1000.0);
+            });
+            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/cell", cell_info_json);
+    on_wifi_info:
+      then:
+        - lambda: |-
+            auto wifi_info_json = json::build_json([x](JsonObject root) {
+              root["ssid"] = x.ssid;
+              root["rssi"] = x.signal;
+            });
+            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/wifi", wifi_info_json);
+    on_fc41d_info:
+      then:
+        - lambda: |-
+            auto fc41d_info_json = json::build_json([x](JsonObject root) {
+              root["version"] = x.firmware;
+            });
+            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/fc41d", fc41d_info_json);
+{%- if storage.version >= 2 %}
+    on_timer_info:
+      then:
+        - lambda: |-
+            auto timer_info_json = json::build_json([x](JsonObject root) {
+              root["adaptiveModeEnabled"] = x.base.adaptive_mode_enabled == 1;
+              auto smart_meter = root.createNestedObject("smartMeter");
+              smart_meter["connected"] = x.base.smart_meter.connected == 1;
+              smart_meter["reading"] = x.base.smart_meter.meter_reading;
+              smart_meter["power"] = x.base.smart_meter.power_out;
+              smart_meter["unknown"] = x.base.smart_meter.unknown;
+
+              for (int i = 0; i < 5; i++) {
+                auto timer_json = root.createNestedObject("timer" + std::to_string(i + 1));
+                const esphome::b2500::TimerInfo* timer;
+                if (i < 3) {
+                  timer = &x.base.timer[i];
+                } else {
+                  timer = &x.additional_timers[i - 3];
+                }
+                timer_json["enabled"] = timer->enabled == 1;
+                timer_json["outputPower"] = timer->output_power;
+                auto start = timer_json.createNestedObject("start");
+                start["hour"] = timer->start.hour;
+                start["minute"] = timer->start.minute;
+                auto end = timer_json.createNestedObject("end");
+                end["hour"] = timer->end.hour;
+                end["minute"] = timer->end.minute;
+              }
+            });
+            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/timer", timer_info_json);
+{%- endif %}
+{%- endfor %}
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: "{{ yaml_string(timezone) }}"
+
+ble_client:
+{%- for storage in storages %}
+  - mac_address: "{{ storage.mac_address | default('!secret hm2500_' ~ loop.index ~ '_mac') }}"
+    id: b2500_ble_client_{{ loop.index }}
+    on_connect:
+      then:
+        - logger.log:
+            level: INFO
+            format: "Connected to BLE device {{ loop.index }} ({{ yaml_string(storage.name) }})"
+        - binary_sensor.template.publish:
+            id: b2500_device_ble_ok_{{ loop.index }}
+            state: ON
+        - delay: 1s
+        - b2500.set_datetime:
+            id: b2500_{{ loop.index }}
+            datetime: !lambda 'return id(sntp_time).now();'
+
+    on_disconnect:
+      then:
+        - logger.log:
+            level: INFO
+            format: "Disconnected from BLE device {{ loop.index }} ({{ yaml_string(storage.name) }})"
+        - binary_sensor.template.publish:
+            id: b2500_device_ble_ok_{{ loop.index }}
+            state: OFF
+{%- endfor %}
+
+button:
+  - platform: restart
+    id: controller_restart
+    name: "Restart Controller"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/restart/set"
+{%- for storage in storages %}
+  - platform: b2500
+    b2500_id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+    reboot:
+      id: b2500_button_reboot_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Reboot B2500"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/reboot/set"
+    factory_reset:
+      id: b2500_button_factory_reset_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Reset to Factory Settings"
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/factory_settings/set"
+      disabled_by_default: True
+{%- if storage.version >= 2 %}
+{%- if enable_reset_mqtt %}
+  - platform: template
+    id: b2500_button_reset_mqtt_{{ loop.index }}
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/mqtt/reset"
+    name: "{{ sensor_prefix(loop.index, storage) }} Reset MQTT"
+    disabled_by_default: True
+    on_press:
+      then:
+        - b2500.reset_mqtt:
+            id: b2500_{{ loop.index }}
+{%- endif %}
+{%- endif %}
+{%- endfor %}
+
+{%- if enable_powerzero %}
+number:
+  ### power zero
+  - platform: template
+    name: "PowerZero: Grid Power"
+    id: b2500_mqtt_opendtu_limit
+    internal: False
+    state_topic: "{{ yaml_string(powerzero_limit_cmd_topic) }}"
+    command_topic: "{{ yaml_string(powerzero_limit_state_topic) }}"
+    optimistic: True
+    min_value: 1
+    max_value: 100
+    step: 1
+    restore_value: True
+
+  - platform: template
+    name: "PowerZero: Max Limit"
+    id: b2500_mqtt_opendtu_limit_max
+    state_topic: "{{ yaml_string(mqtt_topic) }}/npw/max_limit"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/npw/max_limit/set"
+    internal: False
+    optimistic: True
+    min_value: 1
+    max_value: 100
+    step: 1
+    restore_value: True
+
+  - platform: template
+    name: "PowerZero: Max Power Config"
+    id: max_power_config
+    min_value: 100
+    max_value: 2000
+    step: 100
+    initial_value: 600
+    optimistic: true
+{%- endif %}
+
+
+switch:
+{%- for storage in storages %}
+  - platform: ble_client
+    ble_client_id: b2500_ble_client_{{ loop.index }}
+    name: "{{ sensor_prefix(loop.index, storage) }} Bluetooth Enabled"
+    id: b2500_bluetooth_enabled_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/bluetooth/enabled"
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/bluetooth/enabled/set"
+    icon: mdi:bluetooth-connect
+{%- endfor %}
+{%- if enable_powerzero %}
+  - platform: template
+    id: b2500_npw_enabled
+    name: "PowerZero Enabled"
+    optimistic: True
+    command_topic: "{{ yaml_string(mqtt_topic) }}/npw/enabled/set"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/npw/enabled"
+    #restore_mode: RESTORE_DEFAULT_ON
+    #assumed_state: True
+{%- endif %}
+
+binary_sensor:
+{%- for storage in storages %}
+  - platform: template
+    name: "{{ sensor_prefix(loop.index, storage) }} BLE Connected"
+    id: b2500_device_ble_ok_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/ble_ok"
+    icon: mdi:bluetooth
+{%- endfor %}
+
+{%- if enable_powermeter %}
+uart:
+  id: uart_bus
+  tx_pin: {{ powermeter_tx_pin }}
+  rx_pin: {{ powermeter_rx_pin }}
+  baud_rate: {{ powermeter_baud_rate }}
+  stop_bits: {{ powermeter_stop_bits }}
+{%- endif %}
+
+sensor:
+{%- if enable_esp_temperature and esp_temperature_variant == 'internal' %}
+  - platform: internal_temperature
+    name: "Temperature"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+    retain: false
+{%- endif %}
+{%- if enable_esp_temperature and esp_temperature_variant == 'ntc' %}
+  - platform: ntc
+    sensor: temp_resistance_reading
+    name: "Temperature"
+    state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    icon: "mdi:thermometer"
+    retain: false
+    calibration:
+      b_constant: 3350
+      reference_resistance: 10kOhm
+      reference_temperature: 298.15K
+  - platform: resistance
+    id: temp_resistance_reading
+    sensor: temp_analog_reading
+    configuration: DOWNSTREAM
+    resistor: 10kOhm
+  - platform: adc
+    id: temp_analog_reading
+    pin: GPIO3
+    attenuation: 11db
+{%- endif %}
+{%- if enable_powermeter %}
+  - platform: bl0942
+    uart_id: uart_bus
+    voltage:
+      name: 'Voltage'
+    current:
+      name: 'Current'
+    power:
+      name: 'Power'
+      id: power
+    frequency:
+      name: "Frequency"
+      accuracy_decimals: 2
+    update_interval: 5s
+  - platform: total_daily_energy
+    name: "Energy Daily"
+    power_id: power
+    unit_of_measurement: kWh
+    method: left
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
+
+{%- endif %}
+  - platform: uptime
+    name: Uptime Sensor
+    filters:
+      - lambda: return x / 3600.0;
+    unit_of_measurement: "hours"
+    accuracy_decimals: 2
+    state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/uptime"
+    retain: false
+  
+{%- for storage in storages %}
+  - platform: b2500
+    b2500_id: b2500_{{ loop.index }}
+    generation: {{ storage.version }}
+    in1_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} In 1 - Power"
+      id: b2500_in1_power_{{ loop.index }}
+      device_class: power
+      icon: mdi:solar-power
+      retain: false
+      internal: true
+    in2_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} In 2 - Power"
+      id: b2500_in2_power_{{ loop.index }}
+      device_class: power
+      icon: mdi:solar-power
+      retain: false
+      internal: true
+    in_total_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} Total Power In"
+      id: b2500_total_power_in_{{ loop.index }}
+      device_class: power
+      retain: false
+      internal: true
+    out1_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} Out 1 - Power"
+      id: b2500_out1_power_{{ loop.index }}
+      device_class: power
+      retain: false
+      internal: true
+    out2_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} Out 2 - Power"
+      id: b2500_out2_power_{{ loop.index }}
+      device_class: power
+      retain: false
+      internal: true
+    out_total_power:
+      name: "{{ sensor_prefix(loop.index, storage) }} Total Power Out"
+      id: b2500_total_power_out_{{ loop.index }}
+      device_class: power
+      retain: false
+      internal: true
+  - platform: total_daily_energy
+    name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy In"
+    id: b2500_total_daily_energy_in_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv/energy"
+    power_id: b2500_total_power_in_{{ loop.index }}
+    unit_of_measurement: kWh
+    method: left
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
+    {%- if storages|length > 1 %}
+    on_value:
+      then:
+        - script.execute: b2500_update_total_daily_energy_in
+    {%- endif %}
+  - platform: total_daily_energy
+    name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy Out"
+    id: b2500_total_daily_energy_out_{{ loop.index }}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power/energy"
+    power_id: b2500_total_power_out_{{ loop.index }}
+    unit_of_measurement: kWh
+    method: left
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
+    {%- if storages|length > 1 %}
+    on_value:
+      then:
+        - script.execute: b2500_update_total_daily_energy_out
+    {%- endif %}
+{%- endfor %}
+{%- if storages|length > 1 %}
+  - platform: template
+    name: "Total Daily Energy In"
+    id: b2500_total_daily_energy_in
+    state_topic: "{{ yaml_string(mqtt_topic) }}/S/pv/energy"
+    accuracy_decimals: 3
+    unit_of_measurement: kWh
+    device_class: energy
+    retain: false
+
+  - platform: template
+    name: "Total Daily Energy Out"
+    id: b2500_total_daily_energy_out
+    state_topic: "{{ yaml_string(mqtt_topic) }}/S/power/energy"
+    accuracy_decimals: 3
+    unit_of_measurement: kWh
+    device_class: energy
+    retain: false
+{%- endif %}
+{%- if enable_powerzero %}
+### power zero - mqtt grid power sensor ( any who publish the grid power to mqtt )
+  - platform: mqtt_subscribe
+    name: "MQTT: Grid Power"
+    id: mqtt_grid_power
+    topic: "{{ yaml_string(powerzero_grid_power_topic) }}"
+    on_value:
+      then:    
+        - script.execute: power_zero
+{%- endif %}
+{% if enable_powerzero or storages|length > 1 %}
+script:
+{%- endif %}
+{%- if storages|length > 1 %}
+  - id: b2500_update_total_daily_energy_in
+    then:
+      - sensor.template.publish:
+          id: b2500_total_daily_energy_in
+          state: !lambda |-
+            return {% for storage in storages -%}
+              {%- if loop.index > 1 %} + {% endif %}id(b2500_total_daily_energy_in_{{ loop.index }}).state{%- endfor %};
+  - id: b2500_update_total_daily_energy_out
+    then:
+      - sensor.template.publish:
+          id: b2500_total_daily_energy_out
+          state: !lambda |-
+            return {% for storage in storages -%}
+              {%- if loop.index > 1 %} + {% endif %}id(b2500_total_daily_energy_out_{{ loop.index }}).state{%- endfor %};
+{%- endif %}
+{%- if enable_powerzero %}
+  - id: power_zero
+    then:
+    ###   Nulleinspeisung - Powerzero by neromatrix
+    ###                   - mqtt only adaption by noone2k
+    ###   first attempt, use at your own risk !
+    ###   Ver. 0.01m
+    - lambda: |- 
+          if(id(b2500_npw_enabled).state) 
+          {
+            int ptu_min_value =     5;
+            int ptu_max_value =     id(b2500_mqtt_opendtu_limit_max).state;
+            int ptu_limit =         0;
+            int ptu_max_power =     id(max_power_config).state;
+            int grid_to_ptu_ratio = ptu_max_power/100;
+            int grid_min_value =    20;
+            static int ptu_old_limit = 0;
+            /*
+              <- actual power mqtt -> prev. int(id(npw2500_grid_power).state);
+              keep over grid_min_value
+            */ 
+            int grid_value = int(id(mqtt_grid_power).state) - grid_min_value;;
+
+            ptu_limit = grid_value / grid_to_ptu_ratio + ptu_old_limit;
+            
+            if(ptu_limit > ptu_max_value) ptu_limit = ptu_max_value;
+            if(ptu_limit < ptu_min_value) ptu_limit = ptu_min_value;
+
+            // change only if diff more than +/-1%
+            if ( ptu_limit - ptu_old_limit > 1 || ptu_old_limit - ptu_limit > 1 ) {
+              ESP_LOGD("npw2500","PowerZero PTU old limit  %d, PTU new limit %d, Grid value %d " ,ptu_old_limit, ptu_limit, grid_value);
+              ptu_old_limit = ptu_limit;  
+              //char mtopic[64];
+              //snprintf(mtopic, 64,"openDTU/116482876939/cmd/limit_persistent_relative");
+              //id(mqtt_client).publish(mtopic,to_string(ptu_limit));
+              id(b2500_mqtt_opendtu_limit).publish_state(ptu_limit);
+             }
+          }
+{%- endif %}
