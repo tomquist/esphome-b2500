@@ -54,6 +54,7 @@ SetDischargeThresholdAction = b2500_ns.class_(
     "SetDischargeThresholdAction", automation.Action
 )
 SetTimerAction = b2500_ns.class_("SetTimerAction", automation.Action)
+SetAdaptiveModeEnabledAction = b2500_ns.class_("SetAdaptiveModeEnabledAction", automation.Action)
 
 B2500_COMPONENT_SCHEMA = cv.Schema(
     {
@@ -385,4 +386,24 @@ async def b2500_set_timer(config, action_id, template_arg, args):
     if "end_minute" in config:
         template_ = await cg.templatable(config["end_minute"], args, cg.optional.template(cg.int_))
         cg.add(action_var.set_end_minute(template_))
+    return action_var
+
+
+@automation.register_action(
+    "b2500.set_adaptive_mode_enabled",
+    SetAdaptiveModeEnabledAction,
+    cv.Schema(
+        {
+            cv.Required(CONF_ID): cv.use_id(B2500ComponentV2),
+            cv.Required(CONF_B2500_GENERATION): cv.int_(2),
+            cv.Required("enabled"): cv.templatable(cv.boolean),
+        },
+    ),
+)
+async def b2500_set_adaptive_mode_enabled(config, action_id, template_arg, args):
+    action_var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(action_var, config[CONF_ID])
+
+    template_ = await cg.templatable(config["enabled"], args, bool)
+    cg.add(action_var.set_enabled(template_))
     return action_var

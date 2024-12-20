@@ -6,6 +6,7 @@ on:
       - 'examples/**/*.json'
       - '.github/workflows/pr.yml'
       - 'src/**/*.jinja2'
+      - 'components/**/*'
 
 jobs:
   build_examples:
