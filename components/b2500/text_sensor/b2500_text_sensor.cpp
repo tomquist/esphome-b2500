@@ -141,6 +141,8 @@ void B2500TextSensor::on_message(B2500Message message) {
         root["min"] = (min / 1000.0);
         root["max"] = (max / 1000.0);
         root["avg"] = ((sum / 14.0) / 1000.0);
+        root["sum"] = (sum / 1000.0);
+        root["delta"] = ((max - min) / 1000.0);
       });
       this->cell_voltage_text_sensor_->publish_state(cellInfo);
     }
