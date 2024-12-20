@@ -101,5 +101,12 @@ template<typename... Ts> class SetTimerAction : public Action<Ts...>, public Par
   }
 };
 
+template<typename... Ts> class SetAdaptiveModeEnabledAction : public Action<Ts...>, public Parented<B2500ComponentV2> {
+  TEMPLATABLE_VALUE(bool, enabled)
+
+ public:
+  void play(Ts... x) override { this->parent_->set_adaptive_mode_enabled(this->enabled_.value(x...)); }
+};
+
 }  // namespace b2500
 }  // namespace esphome
