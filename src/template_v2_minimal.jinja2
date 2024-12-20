@@ -220,6 +220,7 @@ mqtt:
             enabled: !lambda 'return x == "ON";'
 {%- endif %}
 {%- endfor %}
+{%- if (hasV2 and enable_timer_query) or enable_set_wifi or enable_set_mqtt %}
   on_json_message: 
 {%- for storage in storages %}
 {%- set storage_loop = loop %}
@@ -260,6 +261,7 @@ mqtt:
             password: !lambda 'return x["password"].as<std::string>();'
 {%- endif %}
 {%- endfor %}
+{%- endif %}
 
 b2500:
 {%- for storage in storages %}
