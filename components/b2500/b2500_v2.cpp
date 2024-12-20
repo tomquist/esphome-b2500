@@ -98,7 +98,7 @@ void B2500ComponentV2::interpret_message(B2500Message message) {
     } else {
       charge_mode = CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE;
     }
-    if (this->charge_mode_select_->state != charge_mode) {
+    if (this->charge_mode_select_ != nullptr && this->charge_mode_select_->state != charge_mode) {
       this->charge_mode_select_->publish_state(charge_mode);
     }
   } else if (message == B2500_MSG_TIMER_INFO) {
