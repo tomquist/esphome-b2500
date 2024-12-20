@@ -200,6 +200,10 @@ bool B2500State::set_mqtt(bool ssl, const std::string &host, uint16_t port, cons
   return this->codec_->encode_set_mqtt(ssl, host, port, username, password, payload);
 }
 
+bool B2500State::reset_mqtt(std::vector<uint8_t> &payload) {
+  return this->codec_->encode_simple_command(CMD_RESET_MQTT, payload);
+}
+
 bool B2500State::get_simple_command(B2500Command command, std::vector<uint8_t> &payload) {
   return this->codec_->encode_simple_command(command, payload);
 }

@@ -44,6 +44,7 @@ class B2500State {
   bool set_wifi(const std::string &ssid, const std::string &password, std::vector<uint8_t> &payload);
   bool set_mqtt(bool ssl, const std::string &host, uint16_t port, const std::string &username,
                 const std::string &password, std::vector<uint8_t> &payload);
+  bool reset_mqtt(std::vector<uint8_t> &payload);
 
   // State Accessors
   const DeviceInfoPacket &get_device_info() const { return this->device_info_; }

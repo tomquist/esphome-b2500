@@ -43,6 +43,7 @@ B2500ComponentV2 = b2500_ns.class_("B2500ComponentV2", B2500ComponentBase)
 
 SetWifiAction = b2500_ns.class_("SetWifiAction", automation.Action)
 SetMqttAction = b2500_ns.class_("SetMqttAction", automation.Action)
+ResetMqttAction = b2500_ns.class_("ResetMqttAction", automation.Action)
 SetDatetimeAction = b2500_ns.class_("SetDatetimeAction", automation.Action)
 RebootAction = b2500_ns.class_("RebootAction", automation.Action)
 FactoryResetAction = b2500_ns.class_("FactoryResetAction", automation.Action)
@@ -164,6 +165,20 @@ async def b2500_set_mqtt(config, action_id, template_arg, args):
             await cg.templatable(config[CONF_PASSWORD], args, cg.std_string)
         )
     )
+    return var
+
+@automation.register_action(
+    "b2500.reset_mqtt",
+    ResetMqttAction,
+    cv.Schema(
+        {
+            cv.Required(CONF_ID): cv.use_id(B2500ComponentBase),
+        }
+    ),
+)
+async def b2500_reset_mqtt(config, action_id, template_arg, args):
+    var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(var, config[CONF_ID])
     return var
 
 

@@ -2,7 +2,6 @@
 {%- set friendly_name = friendly_name or name %}
 {%- set mqtt = mqtt or {} %}
 {%- set mqtt_topic = mqtt.topic or 'b2500' %}
-{%- set mqtt_enable_set = mqtt.enable_set or False %}
 {%- set mqtt_broker = mqtt.broker %}
 {%- set mqtt_port = mqtt.port or 1883 %}
 {%- set mqtt_user = mqtt.username %}
@@ -277,6 +276,19 @@ button:
             port: {{ mqtt_port }}
             username: "{{ yaml_string(mqtt_user) }}"
             password: "{{ yaml_string(mqtt_password) }}"
+{%- endif %}
+{%- if storage.version >= 2 %}
+{%- if enable_reset_mqtt %}
+  - platform: template
+    id: b2500_button_reset_mqtt_{{ loop.index }}
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/mqtt/reset"
+    name: "{{ sensor_prefix(loop.index, storage) }} Reset MQTT"
+    disabled_by_default: True
+    on_press:
+      then:
+        - b2500.reset_mqtt:
+            id: b2500_{{ loop.index }}
+{%- endif %}
 {%- endif %}
 {%- endfor %}
 

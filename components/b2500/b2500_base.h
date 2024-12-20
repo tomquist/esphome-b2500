@@ -53,6 +53,7 @@ class B2500ComponentBase : public PollingComponent, public ble_client::BLEClient
   bool set_wifi(const std::string &ssid, const std::string &password);
   bool set_mqtt(bool ssl, const std::string &host, uint16_t port, const std::string &username,
                 const std::string &password);
+  bool reset_mqtt();
   bool set_datetime(ESPTime datetime);
 
  protected:
