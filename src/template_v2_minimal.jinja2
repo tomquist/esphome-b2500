@@ -189,7 +189,6 @@ mqtt:
       then:
         - b2500.set_charge_mode:
             id: b2500_{{ storage_loop.index }}
-            generation: {{ storage.version }}
             charge_mode: !lambda "return x;"
 {%- if storage.version == 1 %}
     - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/discharge_threshold/set"

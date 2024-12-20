@@ -348,7 +348,7 @@ esp32_ble_tracker:
 
 ble_client:
 {%- for storage in storages %}
-  - mac_address: {{ storage.mac_address | default('!secret hm2500_' ~ loop.index ~ '_mac') }}
+  - mac_address: "{{ storage.mac_address | default('!secret hm2500_' ~ loop.index ~ '_mac') }}"
     id: b2500_ble_client_{{ loop.index }}
     on_connect:
       then:
