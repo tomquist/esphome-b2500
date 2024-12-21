@@ -46,7 +46,15 @@ This project is a React-based application that generates ESPHome configuration f
 
 ## MQTT Topics
 
-The base topic prefix is `b2500`, unless you changed it via "MQTT > Topic". Replace `{storage}` with `1`, `2` or `3` for the respective device, and `{timer}` with a number from `1` to `5` for timer settings.
+Find a list of all MQTT topics, depending on the selected configuration version:
+<details>
+   <summary>Legacy</summary>
+   Find a detailed list of topics [here](https://github.com/noone2k/hm2500pub/wiki/ESP32-MQTT-TOPICS).
+</details>
+<details>
+<summary>Native ESPHome component</summary>
+   
+  The base topic prefix is `b2500`, unless you changed it via "MQTT > Topic". Replace `{storage}` with `1`, `2` or `3` for the respective device, and `{timer}` with a number from `1` to `5` for timer settings.
 
 ### System-wide Topics
 
@@ -163,6 +171,7 @@ The base topic prefix is `b2500`, unless you changed it via "MQTT > Topic". Repl
 | Device Reboot | - | b2500/{storage}/reboot/set | v1, v2 |
 | Factory Reset | - | b2500/{storage}/factory_settings/set | v1, v2 |
 
+
 ### Value Formats
 
 - Cell Voltage Data (`b2500/{storage}/battery/cell_voltage`):
@@ -176,6 +185,172 @@ The base topic prefix is `b2500`, unless you changed it via "MQTT > Topic". Repl
     "delta": 0.002
 }
 ```
+</details>
+<details>
+<summary>Minimal native ESPHome component</summary>
+
+The base topic prefix is configurable via `mqtt.topic`, defaulting to `b2500`. All device-specific topics start with `{topic_prefix}/{storage}/`:
+- Replace `{topic_prefix}` with the configured MQTT topic prefix (defaults to "b2500")
+- Replace `{storage}` with device number (1, 2, etc.)
+- Replace `{output}` with output number (1 or 2)
+- `{grid_power_topic}`, `{limit_state_topic}`, and `{limit_cmd_topic}` are configurable for PowerZero feature
+- Power meter topics are only available when the feature is enabled in configuration
+- PowerZero features are only available when enabled in configuration
+
+### System-wide Topics
+
+| Description | Read Topic | Write Topic | Available in version |
+|------------|------------|-------------|---------------------|
+| Debug Logs | {topic_prefix}/debug | - | v1, v2 |
+| ESP32 Temperature | {topic_prefix}/esp32/temperature | - | v1, v2 |
+| ESP32 Uptime | {topic_prefix}/esp32/uptime | - | v1, v2 |
+| Total System Energy In | {topic_prefix}/S/pv/energy | - | v1, v2 |
+| Total System Energy Out | {topic_prefix}/S/power/energy | - | v1, v2 |
+| Controller Restart | - | {topic_prefix}/restart/set | v1, v2 |
+
+### Device Information
+
+| Description | Read Topic | Write Topic | Available in version |
+|------------|------------|-------------|---------------------|
+| Device Info | {topic_prefix}/{storage}/device | - | v1, v2 |
+| Runtime Info | {topic_prefix}/{storage}/runtime | - | v1, v2 |
+| Cell Info | {topic_prefix}/{storage}/cell | - | v1, v2 |
+| WiFi Info | {topic_prefix}/{storage}/wifi | - | v1, v2 |
+| FC41D Info | {topic_prefix}/{storage}/fc41d | - | v1, v2 |
+| Timer Info | {topic_prefix}/{storage}/timer | - | v2 only |
+
+### Connection Status
+
+| Description | Read Topic | Write Topic | Value Format Example | Available in version |
+|------------|------------|-------------|---------------------|---------------------|
+| Bluetooth Status | {topic_prefix}/{storage}/bluetooth/enabled | {topic_prefix}/{storage}/bluetooth/enabled/set | "ON" or "OFF" | v1, v2 |
+| WiFi Configuration | - | {topic_prefix}/{storage}/wifi/set | `{"ssid": "network_name", "password": "wifi_password"}` | v1, v2 |
+| MQTT Configuration | - | {topic_prefix}/{storage}/mqtt/set | `{"host": "mqtt.local", "port": 1883, "username": "user", "password": "pass"}` | v1, v2 |
+| MQTT Reset | - | {topic_prefix}/{storage}/mqtt/reset | - | v2 only |
+
+### Timer Control (V2 Only)
+
+| Description | Read Topic | Write Topic | Value Format Example | Available in version |
+|------------|------------|-------------|---------------------|---------------------|
+| Set Timer Configuration | - | {topic_prefix}/{storage}/timer/set | `{"enabled": true, "outputPower": 500, "start": {"hour": 8, "minute": 0}, "end": {"hour": 17, "minute": 0}}` | v2 only |
+
+### Device Control
+
+| Description | Read Topic | Write Topic | Value Format Example | Available in version |
+|------------|------------|-------------|---------------------|---------------------|
+| Device Reboot | - | {topic_prefix}/{storage}/reboot/set | - | v1, v2 |
+| Factory Reset | - | {topic_prefix}/{storage}/factory_settings/set | - | v1, v2 |
+| Charge Mode | - | {topic_prefix}/{storage}/charge_mode/set | "LoadFirst" or "SimultaneousChargeAndDischarge" (V2) or "PV2Passthrough" (V1) | v1, v2 |
+| Discharge Threshold | - | {topic_prefix}/{storage}/discharge_threshold/set | Integer value | v1 only |
+| Depth of Discharge | - | {topic_prefix}/{storage}/dod/set | Integer value | v1 only |
+| Output Enable | - | {topic_prefix}/{storage}/power{output}/enabled/set | "ON" or "OFF" | v1 only |
+
+### PowerZero Features (Optional)
+
+| Description | Read Topic | Write Topic | Available in version |
+|------------|------------|-------------|---------------------|
+| PowerZero Enable | {topic_prefix}/npw/enabled | {topic_prefix}/npw/enabled/set | v1, v2 |
+| Maximum Limit | {topic_prefix}/npw/max_limit | {topic_prefix}/npw/max_limit/set | v1, v2 |
+| Grid Power Subscription | {grid_power_topic} | - | v1, v2 |
+| OpenDTU Limit | {limit_state_topic} | {limit_cmd_topic} | v1, v2 |
+
+### Power Meter Features (Optional)
+
+| Description | Read Topic | Write Topic | Available in version |
+|------------|------------|-------------|---------------------|
+| Voltage | {topic_prefix}/voltage | - | v1, v2 |
+| Current | {topic_prefix}/current | - | v1, v2 |
+| Power | {topic_prefix}/power | - | v1, v2 |
+| Frequency | {topic_prefix}/frequency | - | v1, v2 |
+| Daily Energy | {topic_prefix}/energy_daily | - | v1, v2 |
+
+
+### Value Formats
+
+#### Cell Voltage Data (b2500/{storage}/cell):
+```json
+{
+    "cells": [3.325, 3.324, 3.324, 3.324, 3.324, 3.325, 3.325, 3.324, 3.323, 3.324, 3.324, 3.323, 3.325, 3.323],
+    "min": 3.323,
+    "max": 3.325,
+    "avg": 3.324071429,
+    "sum": 46.537,
+    "delta": 0.002
+}
+```
+
+#### Runtime Info (b2500/{storage}/runtime):
+```json
+{
+    "in1": {
+        "active": true,
+        "transparent": false,
+        "power": 120
+    },
+    "in2": {
+        "active": true,
+        "transparent": false,
+        "power": 80
+    },
+    "soc": 85,
+    "capacity": 2000,
+    "deviceVersion": "1.2.3",
+    "chargeMode": "LoadFirst",
+    "out1": {
+        "active": true,
+        "power": 100,
+        "enabled": true
+    },
+    "out2": {
+        "active": true,
+        "power": 50,
+        "enabled": true
+    },
+    "dod": 80,
+    "wifiConnected": true,
+    "mqttConnected": true,
+    "dischargeThreshold": 20,
+    "scene": "DAY",
+    "region": "EU",
+    "extern": {
+        "connected1": false,
+        "connected2": false
+    },
+    "time": "14:30",
+    "temperature": {
+        "low": 25,
+        "high": 35
+    }
+}
+```
+
+#### Timer Info (b2500/{storage}/timer) - V2 Only:
+```json
+{
+    "adaptiveModeEnabled": true,
+    "smartMeter": {
+        "connected": true,
+        "reading": 1500,
+        "power": 800,
+        "unknown": 0
+    },
+    "timer1": {
+        "enabled": true,
+        "outputPower": 500,
+        "start": {
+            "hour": 8,
+            "minute": 0
+        },
+        "end": {
+            "hour": 17,
+            "minute": 0
+        }
+    }
+    // timer2 through timer5 follow same format
+}
+```
+
+</details>
 
 ## Acknowledgments
 
