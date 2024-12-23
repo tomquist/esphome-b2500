@@ -42,7 +42,6 @@ CONFIG_SCHEMA = cv.Schema(
 
 
 async def to_code(config):
-    b2500_component = await cg.get_variable(config[CONF_B2500_ID])
     for x in range(5):
         switch_type = f"timer{x + 1}_start"
         if conf := config.get(switch_type):

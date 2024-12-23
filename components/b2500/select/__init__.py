@@ -48,10 +48,7 @@ CONFIG_SCHEMA = cv.Any(
 
 
 async def to_code(config):
-    b2500_component = await cg.get_variable(config[CONF_B2500_ID])
-
     if conf := config.get(CONF_CHARGE_MODE):
         btn = await select.new_select(conf, options=[])
         await cg.register_parented(btn, config[CONF_B2500_ID])
-        cg.add(getattr(b2500_component, f"set_{CONF_CHARGE_MODE}_select")(btn))
         await cg.register_component(btn, config)

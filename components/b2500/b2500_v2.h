@@ -18,6 +18,7 @@ class B2500ComponentV2 : public B2500ComponentBase {
   void set_timer_output_power_number(int timer, number::Number *number) {
     this->timer_output_power_number_[timer] = number;
   }
+  std::string get_charge_mode() override;
 
   // Actions
   bool set_timer_enabled(int timer, bool enabled);

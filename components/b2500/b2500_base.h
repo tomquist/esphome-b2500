@@ -7,7 +7,6 @@
 #include "esphome/components/ble_client/ble_client.h"
 #include "esphome/components/number/number.h"
 #include "esphome/components/switch/switch.h"
-#include "esphome/components/select/select.h"
 #include "esphome/components/time/real_time_clock.h"
 
 #include "b2500_state.h"
@@ -25,7 +24,6 @@ static const esp32_ble_tracker::ESPBTUUID B2500_COMMAND_UUID =
 
 class B2500ComponentBase : public PollingComponent, public ble_client::BLEClientNode {
   SUB_NUMBER(dod)
-  SUB_SELECT(charge_mode)
 
  public:
   B2500ComponentBase(int generation);
@@ -42,6 +40,7 @@ class B2500ComponentBase : public PollingComponent, public ble_client::BLEClient
                            esp_ble_gattc_cb_param_t *param) override;
 
   virtual std::vector<std::string> get_valid_charge_modes() { return {}; }
+  virtual std::string get_charge_mode() = 0;
 
   void set_time(time::RealTimeClock *time) { this->time_ = time; }
 

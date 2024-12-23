@@ -89,6 +89,15 @@ bool B2500ComponentV2::set_charge_mode(const std::string &charge_mode) {
   return true;
 }
 
+std::string B2500ComponentV2::get_charge_mode() {
+  auto runtime_info = this->state_->get_runtime_info();
+  if (runtime_info.charge_mode.load_first) {
+    return CHARGE_MODE_LOAD_FIRST;
+  } else {
+    return CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE;
+  }
+}
+
 bool B2500ComponentV2::set_adaptive_mode_enabled(bool enabled) {
   std::vector<uint8_t> payload;
   if (!this->state_->set_adaptive_mode_enabled(enabled, payload)) {
@@ -101,18 +110,7 @@ bool B2500ComponentV2::set_adaptive_mode_enabled(bool enabled) {
 
 void B2500ComponentV2::interpret_message(B2500Message message) {
   B2500ComponentBase::interpret_message(message);
-  if (message == B2500_MSG_RUNTIME_INFO) {
-    auto runtime_info = this->state_->get_runtime_info();
-    std::string charge_mode;
-    if (runtime_info.charge_mode.load_first) {
-      charge_mode = CHARGE_MODE_LOAD_FIRST;
-    } else {
-      charge_mode = CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE;
-    }
-    if (this->charge_mode_select_ != nullptr && this->charge_mode_select_->state != charge_mode) {
-      this->charge_mode_select_->publish_state(charge_mode);
-    }
-  } else if (message == B2500_MSG_TIMER_INFO) {
+  if (message == B2500_MSG_TIMER_INFO) {
     for (int i = 0; i < this->state_->get_number_of_timers(); i++) {
       auto timer = this->state_->get_timer(i);
       if (this->timer_enabled_switch_[i] != nullptr &&
