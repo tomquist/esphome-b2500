@@ -50,6 +50,19 @@ jobs:
         with:
           yaml_file: device.yaml
           version: ${{ github.event.client_payload.esphome_version || 'latest' }}
+        continue-on-error: true
+
+      - name: Debug on failure
+        if: steps.esphome-build.outcome == 'failure'
+        run: |
+          echo "Build failed"
+          echo "::group::Original Config File"
+          cat config.json
+          echo "::endgroup::"
+
+      - name: Exit on build failure  
+        if: steps.esphome-build.outcome == 'failure'
+        run: exit 1
 
       - name: Zip the firmware with a password
         run: |
