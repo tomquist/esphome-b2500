@@ -37,7 +37,7 @@ CONF_ON_WIFI_INFO = "on_wifi_info"
 CONF_ON_FC41D_INFO = "on_fc41d_info"
 CONF_ON_TIMER_INFO = "on_timer_info"
 
-AUTO_LOAD = ["b2500", "binary_sensor"]
+AUTO_LOAD = ["b2500"]
 MULTI_CONF = 3
 
 b2500_ns = cg.esphome_ns.namespace("b2500")
@@ -130,12 +130,6 @@ CONFIG_SCHEMA = cv.Any(
         {
             cv.GenerateID(): cv.declare_id(B2500ComponentV2),
             cv.Required(CONF_B2500_GENERATION): cv.int_(2),
-            cv.Optional("timer"): cv.maybe_simple_value(
-                binary_sensor.binary_sensor_schema(
-                    entity_category=ENTITY_CATEGORY_CONFIG,
-                ),
-                key=CONF_NAME,
-            ),
             cv.Optional(CONF_ON_TIMER_INFO): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(TimerInfoTrigger),
