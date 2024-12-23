@@ -5,7 +5,6 @@
 #include <esp_gattc_api.h>
 #include "esphome/core/component.h"
 #include "esphome/components/ble_client/ble_client.h"
-#include "esphome/components/number/number.h"
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/time/real_time_clock.h"
 
@@ -23,8 +22,6 @@ static const esp32_ble_tracker::ESPBTUUID B2500_COMMAND_UUID =
     esp32_ble_tracker::ESPBTUUID::from_raw("0000ff01-0000-1000-8000-00805f9b34fb");
 
 class B2500ComponentBase : public PollingComponent, public ble_client::BLEClientNode {
-  SUB_NUMBER(dod)
-
  public:
   B2500ComponentBase(int generation);
 

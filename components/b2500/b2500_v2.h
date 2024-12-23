@@ -15,9 +15,6 @@ class B2500ComponentV2 : public B2500ComponentBase {
 
   void set_timer_enabled_switch(int timer, switch_::Switch *switch_) { this->timer_enabled_switch_[timer] = switch_; }
   void set_adaptive_mode_switch(switch_::Switch *switch_) { this->adaptive_mode_switch_ = switch_; }
-  void set_timer_output_power_number(int timer, number::Number *number) {
-    this->timer_output_power_number_[timer] = number;
-  }
   std::string get_charge_mode() override;
 
   // Actions
@@ -33,8 +30,6 @@ class B2500ComponentV2 : public B2500ComponentBase {
  protected:
   switch_::Switch *timer_enabled_switch_[5]{nullptr};
   switch_::Switch *adaptive_mode_switch_{nullptr};
-
-  number::Number *timer_output_power_number_[5]{nullptr};
 
   void poll_runtime_info_() override;
   void interpret_message(B2500Message message) override;

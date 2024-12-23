@@ -6,7 +6,10 @@
 namespace esphome {
 namespace b2500 {
 
-class DischargeThresholdNumber : public number::Number, public Parented<B2500ComponentV1> {
+class DischargeThresholdNumber : public Component, public number::Number, public Parented<B2500ComponentV1> {
+ public:
+  void setup() override;
+
  protected:
   void control(float value) override;
 };
