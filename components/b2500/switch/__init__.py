@@ -14,9 +14,9 @@ from .. import (
 DEPENDENCIES = ["b2500"]
 CODEOWNERS = ["@tomquist"]
 
-OutActiveSwitch = b2500_ns.class_("OutActiveSwitch", switch.Switch)
-TimerEnabledSwitch = b2500_ns.class_("TimerEnabledSwitch", switch.Switch)
-AdaptiveModeSwitch = b2500_ns.class_("AdaptiveModeSwitch", switch.Switch)
+OutActiveSwitch = b2500_ns.class_("OutActiveSwitch", switch.Switch, cg.Component, cg.Parented)
+TimerEnabledSwitch = b2500_ns.class_("TimerEnabledSwitch", switch.Switch, cg.Component, cg.Parented)
+AdaptiveModeSwitch = b2500_ns.class_("AdaptiveModeSwitch", switch.Switch, cg.Component, cg.Parented)
 
 
 CONF_ADAPTIVE_MODE = "adaptive_mode"
@@ -67,20 +67,19 @@ CONFIG_SCHEMA = cv.Any(
 
 
 async def to_code(config):
-    b2500_component = await cg.get_variable(config[CONF_B2500_ID])
     if conf := config.get(CONF_ADAPTIVE_MODE):
         btn = await switch.new_switch(conf)
         await cg.register_parented(btn, config[CONF_B2500_ID])
-        cg.add(b2500_component.set_adaptive_mode_switch(btn))
+        await cg.register_component(btn, config)
     for x in range(2):
         switch_type = f"out{x + 1}"
         if conf := config.get(switch_type):
             btn = await switch.new_switch(conf, x)
             await cg.register_parented(btn, config[CONF_B2500_ID])
-            cg.add(getattr(b2500_component, f"set_{switch_type}_switch")(btn))
+            await cg.register_component(btn, config)
     for x in range(5):
         switch_type = f"timer{x + 1}_enabled"
         if conf := config.get(switch_type):
             btn = await switch.new_switch(conf, x)
             await cg.register_parented(btn, config[CONF_B2500_ID])
-            cg.add(b2500_component.set_timer_enabled_switch(x, btn))
+            await cg.register_component(btn, config)

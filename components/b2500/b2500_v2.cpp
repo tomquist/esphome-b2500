@@ -108,24 +108,6 @@ bool B2500ComponentV2::set_adaptive_mode_enabled(bool enabled) {
   return true;
 }
 
-void B2500ComponentV2::interpret_message(B2500Message message) {
-  B2500ComponentBase::interpret_message(message);
-  if (message == B2500_MSG_TIMER_INFO) {
-    for (int i = 0; i < this->state_->get_number_of_timers(); i++) {
-      auto timer = this->state_->get_timer(i);
-      if (this->timer_enabled_switch_[i] != nullptr &&
-          this->timer_enabled_switch_[i]->state != timer.enabled) {
-        this->timer_enabled_switch_[i]->publish_state(timer.enabled);
-      }
-    }
-    auto timers = this->state_->get_timer_info();
-    if (this->adaptive_mode_switch_ != nullptr &&
-        this->adaptive_mode_switch_->state != timers.base.adaptive_mode_enabled) {
-      this->adaptive_mode_switch_->publish_state(timers.base.adaptive_mode_enabled);
-    }
-  }
-}
-
 }  // namespace b2500
 }  // namespace esphome
 #endif  // USE_ESP32

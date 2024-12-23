@@ -62,19 +62,6 @@ std::string B2500ComponentV1::get_charge_mode() {
   }
 }
 
-void B2500ComponentV1::interpret_message(B2500Message message) {
-  B2500ComponentBase::interpret_message(message);
-  if (message == B2500_MSG_RUNTIME_INFO) {
-    auto runtime_info = this->state_->get_runtime_info();
-    if (this->out1_switch_ != nullptr && this->out1_switch_->state != runtime_info.discharge_setting.out1_enable) {
-      this->out1_switch_->publish_state(runtime_info.discharge_setting.out1_enable);
-    }
-    if (this->out2_switch_ != nullptr && this->out2_switch_->state != runtime_info.discharge_setting.out2_enable) {
-      this->out2_switch_->publish_state(runtime_info.discharge_setting.out2_enable);
-    }
-  }
-}
-
 }  // namespace b2500
 }  // namespace esphome
 #endif  // USE_ESP32

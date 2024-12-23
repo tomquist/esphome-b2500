@@ -13,8 +13,6 @@ class B2500ComponentV2 : public B2500ComponentBase {
 
   std::vector<std::string> get_valid_charge_modes() override;
 
-  void set_timer_enabled_switch(int timer, switch_::Switch *switch_) { this->timer_enabled_switch_[timer] = switch_; }
-  void set_adaptive_mode_switch(switch_::Switch *switch_) { this->adaptive_mode_switch_ = switch_; }
   std::string get_charge_mode() override;
 
   // Actions
@@ -28,11 +26,7 @@ class B2500ComponentV2 : public B2500ComponentBase {
   bool set_adaptive_mode_enabled(bool enabled);
 
  protected:
-  switch_::Switch *timer_enabled_switch_[5]{nullptr};
-  switch_::Switch *adaptive_mode_switch_{nullptr};
-
   void poll_runtime_info_() override;
-  void interpret_message(B2500Message message) override;
 };
 
 }  // namespace b2500
