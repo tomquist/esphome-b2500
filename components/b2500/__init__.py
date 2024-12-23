@@ -37,7 +37,7 @@ CONF_ON_WIFI_INFO = "on_wifi_info"
 CONF_ON_FC41D_INFO = "on_fc41d_info"
 CONF_ON_TIMER_INFO = "on_timer_info"
 
-AUTO_LOAD = ["b2500", "binary_sensor", "switch", "number"]
+AUTO_LOAD = ["b2500", "binary_sensor", "switch"]
 MULTI_CONF = 3
 
 b2500_ns = cg.esphome_ns.namespace("b2500")

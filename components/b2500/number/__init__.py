@@ -18,11 +18,13 @@ CONF_DISCHARGE_THRESHOLD = "discharge_threshold"
 CONF_DOD = "dod"
 
 DischargeThresholdNumber = b2500_ns.class_(
-    "DischargeThresholdNumber", number.Number, cg.Parented
+    "DischargeThresholdNumber", number.Number, cg.Component, cg.Parented
 )
-DodNumber = b2500_ns.class_("DodNumber", number.Number)
+DodNumber = b2500_ns.class_(
+    "DodNumber", number.Number, cg.Component, cg.Parented
+)
 TimerOutputPowerNumber = b2500_ns.class_(
-    "TimerOutputPowerNumber", number.Number, cg.Parented
+    "TimerOutputPowerNumber", number.Number, cg.Component, cg.Parented
 )
 
 BASE_SCHEMA = cv.Schema(
@@ -79,7 +81,6 @@ NUMBER_ATTRS = {
 
 
 async def to_code(config):
-    b2500_component = await cg.get_variable(config[CONF_B2500_ID])
     for switch_type in [
         CONF_DISCHARGE_THRESHOLD,
         CONF_DOD,
@@ -89,7 +90,7 @@ async def to_code(config):
             args = []
             btn = await number.new_number(conf, *args, **number_attrs)
             await cg.register_parented(btn, config[CONF_B2500_ID])
-            cg.add(getattr(b2500_component, f"set_{switch_type}_number")(btn))
+            await cg.register_component(btn, config)
 
     for x in range(5):
         switch_type = f"timer{x + 1}_output_power"
@@ -100,4 +101,4 @@ async def to_code(config):
                 conf, *args, min_value=50, max_value=800, step=1
             )
             await cg.register_parented(btn, config[CONF_B2500_ID])
-            cg.add(b2500_component.set_timer_output_power_number(x, btn))
+            await cg.register_component(btn, config)

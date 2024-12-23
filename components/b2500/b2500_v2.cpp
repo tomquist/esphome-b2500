@@ -117,10 +117,6 @@ void B2500ComponentV2::interpret_message(B2500Message message) {
           this->timer_enabled_switch_[i]->state != timer.enabled) {
         this->timer_enabled_switch_[i]->publish_state(timer.enabled);
       }
-      if (this->timer_output_power_number_[i] != nullptr &&
-          this->timer_output_power_number_[i]->state != timer.output_power) {
-        this->timer_output_power_number_[i]->publish_state(timer.output_power);
-      }
     }
     auto timers = this->state_->get_timer_info();
     if (this->adaptive_mode_switch_ != nullptr &&

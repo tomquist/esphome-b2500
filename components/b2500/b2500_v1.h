@@ -8,7 +8,6 @@ namespace esphome {
 namespace b2500 {
 
 class B2500ComponentV1 : public B2500ComponentBase {
-  SUB_NUMBER(discharge_threshold)
   SUB_SWITCH(out1)
   SUB_SWITCH(out2)
 

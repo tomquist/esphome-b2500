@@ -72,10 +72,6 @@ void B2500ComponentV1::interpret_message(B2500Message message) {
     if (this->out2_switch_ != nullptr && this->out2_switch_->state != runtime_info.discharge_setting.out2_enable) {
       this->out2_switch_->publish_state(runtime_info.discharge_setting.out2_enable);
     }
-    if (this->discharge_threshold_number_ != nullptr &&
-        this->discharge_threshold_number_->state != runtime_info.discharge_threshold) {
-      this->discharge_threshold_number_->publish_state(runtime_info.discharge_threshold);
-    }
   }
 }
 

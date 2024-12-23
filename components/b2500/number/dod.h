@@ -6,7 +6,10 @@
 namespace esphome {
 namespace b2500 {
 
-class DodNumber : public number::Number, public Parented<B2500ComponentBase> {
+class DodNumber : public Component, public number::Number, public Parented<B2500ComponentBase> {
+ public:
+  void setup() override;
+
  protected:
   void control(float value) override;
 };

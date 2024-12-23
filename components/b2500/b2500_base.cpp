@@ -273,7 +273,7 @@ void B2500ComponentBase::interpret_cell_info() {
 
 void B2500ComponentBase::interpret_runtime_info() {
   auto payload = this->state_->get_runtime_info();
-  // For nor just dump the values
+  // For now just dump the values
   ESP_LOGD(TAG,
            "in1_active: %d, pv_in2_state: %d, in1_power: %d, in2_power: %d, soc: %d, dev_version: %d, "
            "charge_mode: %d, wifi_connected: %d, mqtt_connected: %d, out1_active: %d, out2_active: %d, out1_enabled: "
@@ -288,10 +288,6 @@ void B2500ComponentBase::interpret_runtime_info() {
            payload.discharge_setting.out1_enable, payload.discharge_setting.out2_enable, payload.discharge_threshold,
            payload.dod, payload.remaining_capacity, payload.device_scene, payload.out1_power, payload.out2_power,
            payload.device_region, payload.extern1_connected, payload.extern2_connected, payload.time.hour, payload.time.minute);
-
-  if (this->dod_number_ != nullptr && this->dod_number_->state != payload.dod) {
-    this->dod_number_->publish_state(payload.dod);
-  }
 }
 
 void B2500ComponentBase::dump_config() {

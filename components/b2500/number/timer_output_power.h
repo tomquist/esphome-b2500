@@ -6,9 +6,10 @@
 namespace esphome {
 namespace b2500 {
 
-class TimerOutputPowerNumber : public number::Number, public Parented<B2500ComponentV2> {
+class TimerOutputPowerNumber : public Component, public number::Number, public Parented<B2500ComponentV2> {
  public:
   TimerOutputPowerNumber(int timer) : timer_(timer) {}
+  void setup() override;
 
  protected:
   void control(float value) override;
