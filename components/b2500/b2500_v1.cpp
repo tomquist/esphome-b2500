@@ -53,19 +53,19 @@ bool B2500ComponentV1::set_charge_mode(const std::string &charge_mode) {
   return true;
 }
 
+std::string B2500ComponentV1::get_charge_mode() {
+  auto runtime_info = this->state_->get_runtime_info();
+  if (runtime_info.charge_mode.load_first) {
+    return CHARGE_MODE_LOAD_FIRST;
+  } else {
+    return CHARGE_MODE_PV2_PASSTHROUGH;
+  }
+}
+
 void B2500ComponentV1::interpret_message(B2500Message message) {
   B2500ComponentBase::interpret_message(message);
   if (message == B2500_MSG_RUNTIME_INFO) {
     auto runtime_info = this->state_->get_runtime_info();
-    std::string charge_mode;
-    if (runtime_info.charge_mode.load_first) {
-      charge_mode = CHARGE_MODE_LOAD_FIRST;
-    } else {
-      charge_mode = CHARGE_MODE_PV2_PASSTHROUGH;
-    }
-    if (charge_mode != this->charge_mode_select_->state) {
-      this->charge_mode_select_->publish_state(charge_mode);
-    }
     if (this->out1_switch_ != nullptr && this->out1_switch_->state != runtime_info.discharge_setting.out1_enable) {
       this->out1_switch_->publish_state(runtime_info.discharge_setting.out1_enable);
     }

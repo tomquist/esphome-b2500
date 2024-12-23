@@ -16,6 +16,7 @@ class B2500ComponentV1 : public B2500ComponentBase {
   B2500ComponentV1() : B2500ComponentBase(1) {}
 
   std::vector<std::string> get_valid_charge_modes() override;
+  std::string get_charge_mode() override;
 
   // Actions
   bool set_out_active(int out, bool active);
