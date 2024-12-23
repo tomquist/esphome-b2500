@@ -29,6 +29,9 @@ for (const secret of secrets) {
   }
 }
 
+// Write the config to a file for debugging
+fs.writeFileSync('config.json', JSON.stringify(config, null, 2));
+
 const templateV1 = fs.readFileSync('./src/template.jinja2', 'utf-8');
 const templateV2 = fs.readFileSync('./src/template_v2.jinja2', 'utf-8');
 const templateV2Minimal = fs.readFileSync(
