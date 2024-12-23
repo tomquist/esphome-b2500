@@ -3,13 +3,7 @@
 
 ## Overview
 
-This project is a React-based application that generates ESPHome configuration files for B2500 devices. It provides an intuitive form for users to fill out, which then creates a YAML configuration file. Users can download this configuration file or trigger a build process that generates a firmware image, which can be downloaded and uploaded to an ESP32 device.
-
-## Features
-
-- Generate ESPHome configuration files using a user-friendly form.
-- Download the generated YAML configuration file.
-- Trigger a build process to create a firmware image without having to install ESPHome.
+This tool helps you create configuration files for your B2500 device and generate the necessary firmware without requiring any technical knowledge or software installation on your computer. You can do everything through your web browser.
 
 ## Usage
 
@@ -18,31 +12,18 @@ This project is a React-based application that generates ESPHome configuration f
 1. Visit https://tomquist.github.io/esphome-b2500/
 2. Fill out the form with your desired configuration settings. The default values are provided for convenience.
 3. Once you have filled out the form, the configuration will be automatically generated and displayed.
-4. You can download the YAML configuration file by clicking the "Download YAML" button.
+4. You can download the YAML configuration file by clicking the "Download YAML" button. This configuration can directly ve ised to build an ESPHome image, e.g. through the Home Assistant ESPHome Addon. alternatively you can directly build an image for your ESP32 and föash it via the ESPHome web flasher. Read the following section for detailed instructions.
 
-### Triggering a Build
+### Build an Image on the Web
 
-1. Click the "Build Firmware" button.
-2. A modal will appear asking for a build identifier and a password.
-   - The identifier is a unique name for your build, which helps in tracking it.
-   - A password will be auto-generated for you, ensuring it meets the required length of at least 8 characters.
-3. Optionally, you can change the auto-generated password.
-4. Click the "Submit" button to trigger the build process. The submit button will display a loading indicator while the build is in progress.
-5. A new tab will open, directing you to the GitHub Actions page where you can track the build progress.
-
-### Downloading the Firmware Image
-
-1. Once the build process is complete, go to the GitHub Actions page: [GitHub Actions](https://github.com/tomquist/esphome-b2500/actions/workflows/build-esphome.yml).
-2. Find the build corresponding to your identifier.
-3. Download the generated firmware image (ZIP file).
-
-### Uploading the Firmware to an ESP32 using ESPHome Web Installer
-
-1. Extract the firmware binary from the downloaded ZIP file.
-2. Go to the ESPHome Web Installer: [ESPHome Web Installer](https://web.esphome.io/).
-3. Click the "Install" button.
-4. Select "Choose File" and upload the extracted firmware binary.
-5. Follow the on-screen instructions to select the connected ESP32 device and flash the firmware.
+1. Click the "Build Image" button.
+2. Click "Start Build" and follow tje instructions
+3. Extract the firmware binary from the downloaded ZIP file.
+4. Connect your ESP32 via USB
+5. Go to the ESPHome Web Installer: [ESPHome Web Installer](https://web.esphome.io/).
+6. Click the "Install" button.
+7. Select "Choose File" and upload the extracted firmware binary.
+8. Follow the on-screen instructions to select the connected ESP32 device and flash the firmware.
 
 ## MQTT Topics
 
