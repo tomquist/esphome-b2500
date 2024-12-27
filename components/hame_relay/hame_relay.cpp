@@ -22,6 +22,8 @@ void HameRelayComponent::add_device(const std::string &device_id, const std::str
     this->resubscribe_subscriptions_();
 }
 
+void HameRelayComponent::set_keep_alive(uint16_t keep_alive_s) { this->mqtt_backend_.set_keep_alive(keep_alive_s); }
+
 void HameRelayComponent::remove_device_by_id(const std::string &device_id) {
     auto it = std::find(device_ids_.begin(), device_ids_.end(), device_id);
     if (it != device_ids_.end()) {
@@ -94,6 +96,10 @@ void HameRelayComponent::setup() {
 
     state_ = mqtt::MQTT_CLIENT_DISCONNECTED;
     ESP_LOGI(TAG, "MQTT Client setup complete");
+}
+
+bool HameRelayComponent::can_proceed() {
+  return network::is_disabled() || this->state_ == mqtt::MQTT_CLIENT_DISABLED || this->is_connected();
 }
 
 void HameRelayComponent::start_dnslookup_() {
@@ -204,6 +210,10 @@ void HameRelayComponent::check_connected_() {
     }
 }
 
+bool HameRelayComponent::is_connected() {
+  return this->state_ == mqtt::MQTT_CLIENT_CONNECTED && this->mqtt_backend_.connected();
+}
+
 void HameRelayComponent::loop() {
     mqtt_backend_.loop();
 
@@ -214,17 +224,17 @@ void HameRelayComponent::loop() {
             return;
         case mqtt::MQTT_CLIENT_DISCONNECTED:
             if (now - connect_begin_ > 5000) {
-                start_dnslookup_();
+                this->start_dnslookup_();
             }
             break;
         case mqtt::MQTT_CLIENT_RESOLVING_ADDRESS:
-            check_dnslookup_();
+            this->check_dnslookup_();
             break;
         case mqtt::MQTT_CLIENT_CONNECTING:
-            check_connected_();
+            this->check_connected_();
             break;
         case mqtt::MQTT_CLIENT_CONNECTED:
-            if (!mqtt_backend_.connected()) {
+            if (!this->mqtt_backend_.connected()) {
                 state_ = mqtt::MQTT_CLIENT_DISCONNECTED;
                 ESP_LOGW(TAG, "Lost MQTT Client connection!");
                 // Clear subscription status on disconnect
@@ -233,14 +243,15 @@ void HameRelayComponent::loop() {
                 }
                 start_dnslookup_();
             } else {
-                // Only try to resubscribe if we haven't subscribed to all topics
-                if (std::any_of(subscribed_topics_.begin(), subscribed_topics_.end(), 
-                            [](const std::pair<const std::string, bool> &pair) { return !pair.second; })) {
-                    resubscribe_subscriptions_();
-                }
+                this->last_connected_ = now;
+                this->resubscribe_subscriptions_();
             }
             break;
+    }
 
+    if (millis() - last_connected_ > 60000) {
+        ESP_LOGE(TAG, "Can't connect to MQTT... Restarting...");
+        App.reboot();
     }
 }
 
@@ -330,6 +341,23 @@ void HameRelayComponent::resubscribe_subscriptions_() {
             }
         }
     }
+}
+
+void HameRelayComponent::enable() {
+  if (this->state_ != mqtt::MQTT_CLIENT_DISABLED)
+    return;
+  ESP_LOGD(TAG, "Enabling MQTT...");
+  this->state_ = mqtt::MQTT_CLIENT_DISCONNECTED;
+  this->last_connected_ = millis();
+  this->start_dnslookup_();
+}
+
+void HameRelayComponent::disable() {
+  if (this->state_ == mqtt::MQTT_CLIENT_DISABLED)
+    return;
+  ESP_LOGD(TAG, "Disabling MQTT...");
+  this->state_ = mqtt::MQTT_CLIENT_DISABLED;
+  this->on_shutdown();
 }
 
 } // namespace hame_relay

@@ -8,6 +8,7 @@ from esphome.const import (
     CONF_CERTIFICATE_AUTHORITY,
     CONF_CLIENT_CERTIFICATE,
     CONF_CLIENT_CERTIFICATE_KEY,
+    CONF_KEEPALIVE,
 )
 
 CODEOWNERS = ["@tomquist"]
@@ -42,6 +43,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Inclusive(CONF_CLIENT_CERTIFICATE_KEY, "cert-key-pair"): cv.All(
             cv.string, cv.only_on_esp32
         ),
+        cv.Optional(CONF_KEEPALIVE, default="15s"): cv.positive_time_period_seconds,
     }
 )
 
@@ -58,6 +60,7 @@ async def to_code(config):
 
     cg.add(var.set_broker_address(config[CONF_BROKER]))
     cg.add(var.set_broker_port(config[CONF_PORT]))
+    cg.add(var.set_keep_alive(config[CONF_KEEPALIVE]))
     cg.add(var.set_ca_certificate(config[CONF_CERTIFICATE_AUTHORITY]))
     cg.add(var.set_cl_certificate(config[CONF_CLIENT_CERTIFICATE]))
     cg.add(var.set_cl_key(config[CONF_CLIENT_CERTIFICATE_KEY]))
