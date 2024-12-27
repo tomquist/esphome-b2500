@@ -116,6 +116,10 @@ export const getAllSecrets = (debouncedFormValues: FormValues) => {
   for (const storage of debouncedFormValues.storages) {
     if (storage.mac_address) {
       secrets.push(storage.mac_address);
+      secrets.push(storage.mac_address.replace(/:/g, ''));
+    }
+    if (storage.id) {
+      secrets.push(storage.id);
     }
   }
   return secrets;
@@ -129,6 +133,9 @@ export const redactSecrets = (config: FormValues) => {
   redactedConfig.ota.password = '***';
   for (const storage of redactedConfig.storages) {
     storage.mac_address = '***';
+    if (storage.id) {
+      storage.id = '***';
+    }
   }
   return redactedConfig;
 };
