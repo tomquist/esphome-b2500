@@ -27,15 +27,20 @@ public:
     void remove_device_by_mac(const std::string &mac);
     void set_broker_address(const std::string &address) { credentials_.address = address; }
     void set_broker_port(uint16_t port) { credentials_.port = port; }
+    void set_keep_alive(uint16_t keep_alive_s);
     void set_ca_certificate(const char *cert) { mqtt_backend_.set_ca_certificate(cert); }
     void set_cl_certificate(const char *cert) { mqtt_backend_.set_cl_certificate(cert); }
     void set_cl_key(const char *key) { mqtt_backend_.set_cl_key(key); }
 
     float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
+    bool is_connected();
+
+    void enable();
+    void disable();
 
     void setup() override;
     void loop() override;
-    bool is_connected() const { return state_ == mqtt::MQTT_CLIENT_CONNECTED && mqtt_backend_.connected(); }
+    bool can_proceed() override;
 
 protected:
     /// Reconnect to the MQTT broker if not already connected.
@@ -66,6 +71,7 @@ protected:
     mqtt::MQTTBackendESP32 mqtt_backend_;
 
     uint32_t connect_begin_{0};
+    uint32_t last_connected_{0};
 };
 
 } // namespace hame_relay
