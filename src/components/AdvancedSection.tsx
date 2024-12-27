@@ -97,7 +97,9 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
         <Typography variant="h6">Advanced</Typography>
       </AccordionSummary>
       <AccordionDetails>
-        {['v2', 'v2-minimal'].includes(formValues.template_version) && (
+        {['v2', 'v2-minimal', 'mqtt-relay'].includes(
+          formValues.template_version
+        ) && (
           <FormControl fullWidth margin="normal">
             <InputLabel id="log-level-label">Log Level</InputLabel>
             <Select
@@ -119,22 +121,25 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             </FormHelperText>
           </FormControl>
         )}
-        <TextField
-          label="Poll Interval (seconds)"
-          name="poll_interval_seconds"
-          type="number"
-          value={formValues.poll_interval_seconds}
-          onChange={handleInputChange}
-          fullWidth
-          margin="normal"
-          required
-          error={formValues.poll_interval_seconds < 1}
-          helperText={
-            <>
-              The interval in seconds at which the device will poll the storage.
-            </>
-          }
-        />
+        {formValues.template_version !== 'mqtt-relay' && (
+          <TextField
+            label="Poll Interval (seconds)"
+            name="poll_interval_seconds"
+            type="number"
+            value={formValues.poll_interval_seconds}
+            onChange={handleInputChange}
+            fullWidth
+            margin="normal"
+            required
+            error={formValues.poll_interval_seconds < 1}
+            helperText={
+              <>
+                The interval in seconds at which the device will poll the
+                storage.
+              </>
+            }
+          />
+        )}
         <TextField
           label="ESP-IDF Platform Version"
           name="idf_platform_version"
@@ -218,51 +223,57 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             />
           </>
         )}
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_set_mqtt"
-          label="Enable Set MQTT"
-        />
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_reset_mqtt"
-          label="Enable Reset MQTT"
-          helperText="This will reset the MQTT configuration to the default values."
-        />
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_set_wifi"
-          label="Enable Set Wifi"
-        />
-        {formValues.enable_set_wifi && (
-          <Box mb={2} border={1} borderRadius={5} padding={2}>
-            <TextField
-              label="SSID"
-              name="ssid"
-              value={formValues.set_wifi.ssid}
-              onChange={handleSetWifiChange}
-              fullWidth
-              margin="normal"
-              required
-              error={setWifiSsidInvalid}
-              helperText={setWifiSsidInvalid ? 'SSID is required' : ''}
+        {formValues.template_version !== 'mqtt-relay' && (
+          <>
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_set_mqtt"
+              label="Enable Set MQTT"
             />
-            <TextField
-              label="Password"
-              name="password"
-              type="password"
-              value={formValues.set_wifi.password}
-              onChange={handleSetWifiChange}
-              fullWidth
-              margin="normal"
-              required
-              error={setWifiPasswordInvalid}
-              helperText={setWifiPasswordInvalid ? 'Password is required' : ''}
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_reset_mqtt"
+              label="Enable Reset MQTT"
+              helperText="This will reset the MQTT configuration to the default values."
             />
-          </Box>
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_set_wifi"
+              label="Enable Set Wifi"
+            />
+            {formValues.enable_set_wifi && (
+              <Box mb={2} border={1} borderRadius={5} padding={2}>
+                <TextField
+                  label="SSID"
+                  name="ssid"
+                  value={formValues.set_wifi.ssid}
+                  onChange={handleSetWifiChange}
+                  fullWidth
+                  margin="normal"
+                  required
+                  error={setWifiSsidInvalid}
+                  helperText={setWifiSsidInvalid ? 'SSID is required' : ''}
+                />
+                <TextField
+                  label="Password"
+                  name="password"
+                  type="password"
+                  value={formValues.set_wifi.password}
+                  onChange={handleSetWifiChange}
+                  fullWidth
+                  margin="normal"
+                  required
+                  error={setWifiPasswordInvalid}
+                  helperText={
+                    setWifiPasswordInvalid ? 'Password is required' : ''
+                  }
+                />
+              </Box>
+            )}
+          </>
         )}
 
         {formValues.template_version === 'v1' && (
@@ -296,7 +307,9 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
                   error={webserverPortInvalid}
                 />
               </Grid>
-              {formValues.template_version !== 'v2-minimal' && (
+              {!['v2-minimal', 'mqtt-relay'].includes(
+                formValues.template_version
+              ) && (
                 <Grid item xs={12} sm={6}>
                   <TextField
                     label="JS Include"
@@ -617,66 +630,72 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           helperText="This is required for some ESP32 devices to flash them. Leave this disabled unless you know what you are doing."
         />
 
-        <BooleanField
-          value={formValues}
-          onChange={handleInputChange}
-          prop="enable_powerzero"
-          label="Enable Powerzero"
-        />
-        {formValues.enable_powerzero && (
-          <Box mb={2} border={1} borderRadius={5} padding={2}>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Grid Power Topic"
-                  name="grid_power_topic"
-                  value={formValues.powerzero.grid_power_topic}
-                  onChange={handlePowerzeroChange}
-                  fullWidth
-                  margin="normal"
-                  required
-                  error={powerzeroGridPowerTopicInvalid}
-                  helperText={
-                    powerzeroGridPowerTopicInvalid
-                      ? 'Grid Power Topic is required'
-                      : ''
-                  }
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Limit CMD Topic"
-                  name="limit_cmd_topic"
-                  value={formValues.powerzero.limit_cmd_topic}
-                  onChange={handlePowerzeroChange}
-                  fullWidth
-                  margin="normal"
-                  required
-                  error={powerzeroLimitCmdTopic}
-                  helperText={
-                    powerzeroLimitCmdTopic ? 'Limit CMD Topic is required' : ''
-                  }
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Limit State Topic"
-                  name="limit_state_topic"
-                  value={formValues.powerzero.limit_state_topic}
-                  onChange={handlePowerzeroChange}
-                  fullWidth
-                  margin="normal"
-                  required
-                  error={powerzerolimitStateTopicInvalid}
-                  helperText={
-                    powerzerolimitStateTopicInvalid
-                      ? 'Limit State Topic is required'
-                      : ''
-                  }
-                />
-              </Grid>
-            </Grid>
-          </Box>
+        {formValues.template_version !== 'mqtt-relay' && (
+          <>
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_powerzero"
+              label="Enable Powerzero"
+            />
+            {formValues.enable_powerzero && (
+              <Box mb={2} border={1} borderRadius={5} padding={2}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Grid Power Topic"
+                      name="grid_power_topic"
+                      value={formValues.powerzero.grid_power_topic}
+                      onChange={handlePowerzeroChange}
+                      fullWidth
+                      margin="normal"
+                      required
+                      error={powerzeroGridPowerTopicInvalid}
+                      helperText={
+                        powerzeroGridPowerTopicInvalid
+                          ? 'Grid Power Topic is required'
+                          : ''
+                      }
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Limit CMD Topic"
+                      name="limit_cmd_topic"
+                      value={formValues.powerzero.limit_cmd_topic}
+                      onChange={handlePowerzeroChange}
+                      fullWidth
+                      margin="normal"
+                      required
+                      error={powerzeroLimitCmdTopic}
+                      helperText={
+                        powerzeroLimitCmdTopic
+                          ? 'Limit CMD Topic is required'
+                          : ''
+                      }
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Limit State Topic"
+                      name="limit_state_topic"
+                      value={formValues.powerzero.limit_state_topic}
+                      onChange={handlePowerzeroChange}
+                      fullWidth
+                      margin="normal"
+                      required
+                      error={powerzerolimitStateTopicInvalid}
+                      helperText={
+                        powerzerolimitStateTopicInvalid
+                          ? 'Limit State Topic is required'
+                          : ''
+                      }
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
+          </>
         )}
       </AccordionDetails>
     </Accordion>

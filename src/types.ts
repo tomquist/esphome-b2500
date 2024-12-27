@@ -1,5 +1,5 @@
 // src/types.ts
-export type TemplateVersion = 'v1' | 'v2' | 'v2-minimal';
+export type TemplateVersion = 'v1' | 'v2' | 'v2-minimal' | 'mqtt-relay';
 
 export interface MQTTSettings {
   topic: string;
@@ -24,6 +24,7 @@ export interface Storage {
   name: string;
   version: number;
   mac_address: string;
+  id?: string;
 }
 
 export interface ManualIP {

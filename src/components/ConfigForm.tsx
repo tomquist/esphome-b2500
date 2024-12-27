@@ -139,6 +139,7 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
           <MenuItem value={'v2-minimal'}>
             Minimal native ESPHome component
           </MenuItem>
+          <MenuItem value={'mqtt-relay'}>MQTT Relay</MenuItem>
         </Select>
         <FormHelperText>
           You can choose between two different configuration versions:
@@ -159,6 +160,16 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
               of MQTT topics without using ESPHome sensors. Use this for
               low-power devices or if you manually integrate the storage into
               your home automation system using MQTT.
+            </li>
+            <li>
+              MQTT Relay - A minimal config that relays MQTT data from the
+              storage to the Hame MQTT broker. It doesn't expose any sensors or
+              switches and doesn't connect to the storage via Bluetooth. With
+              this you can configure the storage to send data to your local MQTT
+              broker while still being able to use the Power Zero/Marstek app to
+              control the storage. Note that an image for this can only be built
+              via this tool. You won't be able to build it using the ESPHome
+              unless you know the Hame certificate and key.
             </li>
           </ul>
         </FormHelperText>
@@ -257,6 +268,7 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
       <Divider sx={{ my: 2 }} />
 
       <StorageForm
+        templateVersion={formValues.template_version}
         storages={formValues.storages}
         onChange={handleStorageChange}
         maxStorages={3}
