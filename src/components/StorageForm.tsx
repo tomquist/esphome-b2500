@@ -1,9 +1,10 @@
 // src/components/StorageForm.tsx
 import React from 'react';
 import { Button, TextField, Box, Typography, Grid } from '@mui/material';
-import { Storage } from '../types';
+import { Storage, TemplateVersion } from '../types';
 
 interface StorageFormProps {
+  templateVersion: TemplateVersion;
   storages: Storage[];
   onChange: (storages: Storage[]) => void;
   maxStorages: number;
@@ -11,6 +12,7 @@ interface StorageFormProps {
 }
 
 const StorageForm: React.FC<StorageFormProps> = ({
+  templateVersion,
   storages,
   onChange,
   maxStorages,
@@ -83,6 +85,7 @@ const StorageForm: React.FC<StorageFormProps> = ({
         let macValid = !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(
           storage.mac_address
         );
+        let idValid = !/^[0-9A-Fa-f]{24}$/.test(storage.id ?? '');
         return (
           <Box key={index} mb={2} border={1} borderRadius={5} padding={2}>
             <Typography variant="subtitle1">{index + 1}. Storage</Typography>
@@ -101,26 +104,28 @@ const StorageForm: React.FC<StorageFormProps> = ({
                   helperText={nameValid ? 'Name is required' : ''}
                 />
               </Grid>
-              <Grid item xs={4}>
-                <TextField
-                  label="Version"
-                  type="number"
-                  value={storage.version}
-                  onChange={(e) =>
-                    handleStorageChange(
-                      index,
-                      'version',
-                      parseInt(e.target.value, 10)
-                    )
-                  }
-                  fullWidth
-                  margin="normal"
-                  inputProps={{ min: 1, max: 2 }}
-                  required
-                  error={versionValid}
-                  helperText={'Version must be 1 or 2'}
-                />
-              </Grid>
+              {templateVersion !== 'mqtt-relay' && (
+                <Grid item xs={4}>
+                  <TextField
+                    label="Version"
+                    type="number"
+                    value={storage.version}
+                    onChange={(e) =>
+                      handleStorageChange(
+                        index,
+                        'version',
+                        parseInt(e.target.value, 10)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    inputProps={{ min: 1, max: 2 }}
+                    required
+                    error={versionValid}
+                    helperText={'Version must be 1 or 2'}
+                  />
+                </Grid>
+              )}
               <Grid item xs={4}>
                 <TextField
                   label="MAC Address"
@@ -136,6 +141,31 @@ const StorageForm: React.FC<StorageFormProps> = ({
                   helperText="You can find the MAC address in the PowerZero app by pressing on the device name on the top left corner of the screen."
                 />
               </Grid>
+              {templateVersion === 'mqtt-relay' && (
+                <Grid item xs={4}>
+                  <TextField
+                    label="Device ID"
+                    value={storage.id ?? ''}
+                    onChange={(e) =>
+                      handleStorageChange(index, 'id', e.target.value)
+                    }
+                    onKeyDown={handleMacAddressKeyDown(index)}
+                    fullWidth
+                    margin="normal"
+                    error={idValid}
+                    required
+                    helperText={
+                      <>
+                        24-digit device ID. Can be found below "Device
+                        Configuration" by logging into this with your account:{' '}
+                        <a href="https://eu.hamedata.com/app/AfterSales/login.html">
+                          https://eu.hamedata.com/app/AfterSales/login.html
+                        </a>
+                      </>
+                    }
+                  />
+                </Grid>
+              )}
               <Grid item xs={12}>
                 <Button
                   variant="contained"

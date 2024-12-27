@@ -15,6 +15,7 @@ import nunjucks from 'nunjucks';
 import template from './template.jinja2';
 import templateV2 from './template_v2.jinja2';
 import templateV2Minimal from './template_v2_minimal.jinja2';
+import templateMqttRelay from './template_relay.jinja2';
 import FileSaver from 'file-saver';
 import { FormValues } from './types';
 import { useDebounce } from './hooks/useDebounce';
@@ -75,6 +76,9 @@ const App: React.FC = () => {
         break;
       case 'v2-minimal':
         templateToUse = templateV2Minimal;
+        break;
+      case 'mqtt-relay':
+        templateToUse = templateMqttRelay;
         break;
     }
     const renderedConfig = nunjucks.renderString(

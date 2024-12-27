@@ -153,6 +153,12 @@ export const validateConfig = (config: FormValues) => {
     ) {
       errors.push('Storage MAC address is invalid');
     }
+    if (
+      config.template_version === 'mqtt-relay' &&
+      !/^[0-9A-Fa-f]{24}$/.test(storage.id ?? '')
+    ) {
+      errors.push('Storage ID is required');
+    }
   }
 
   let nameInvalid =

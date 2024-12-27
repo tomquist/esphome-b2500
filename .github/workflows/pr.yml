@@ -21,6 +21,7 @@ jobs:
           - v1
           - v2
           - v2-minimal
+          - mqtt-relay
       fail-fast: false
     
     steps:
@@ -36,6 +37,26 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --prefer-offline
+      
+      - name: Install yq
+        run: |
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+        shell: bash
+      
+      - name: Write certificates to secrets.yaml
+        run: |
+          echo "{}" | yq -P > secrets.yaml
+          yq -i '.hame_certificate_authority = strenv(AWS_CA)' secrets.yaml
+          yq -i '.hame_client_certificate = strenv(HAME_CERT)' secrets.yaml
+          yq -i '.hame_client_certificate_key = strenv(HAME_KEY)' secrets.yaml
+          yq -i '.hame_broker = strenv(HAME_BROKER)' secrets.yaml
+        env:
+          AWS_CA: ${{ secrets.AWS_CA }}
+          HAME_CERT: ${{ secrets.HAME_CERT }}
+          HAME_KEY: ${{ secrets.HAME_KEY }}
+          HAME_BROKER: ${{ secrets.HAME_BROKER }}
+        shell: bash
 
       - name: Generate build password
         id: generate_password
