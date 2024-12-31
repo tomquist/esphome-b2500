@@ -368,6 +368,13 @@ b2500:
               auto temperature = root.createNestedObject("temperature");
               temperature["low"] = x.temperature_low;
               temperature["high"] = x.temperature_high;
+{%- if storage.version >= 2 %}
+              auto energy = root.createNestedObject("dailyTotalEnergy");
+              energy["batteryCharge"] = x.daily_total_battery_charge;
+              energy["batteryDischarge"] = x.daily_total_battery_discharge;
+              energy["loadCharge"] = x.daily_total_load_charge;
+              energy["loadDischarge"] = x.daily_total_load_discharge;
+{%- endif %}
             });
             id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/runtime", runtime_info_json);
     on_cell_info:

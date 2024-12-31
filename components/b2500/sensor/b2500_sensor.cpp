@@ -61,6 +61,22 @@ void B2500Sensor::on_message(B2500Message message) {
     if (this->temperature_high_sensor_ != nullptr && this->temperature_high_sensor_->state != payload.temperature_high) {
       this->temperature_high_sensor_->publish_state(payload.temperature_high);
     }
+    if (this->daily_total_battery_charge_sensor_ != nullptr &&
+        this->daily_total_battery_charge_sensor_->state != payload.daily_total_battery_charge) {
+      this->daily_total_battery_charge_sensor_->publish_state(payload.daily_total_battery_charge);
+    }
+    if (this->daily_total_battery_discharge_sensor_ != nullptr &&
+        this->daily_total_battery_discharge_sensor_->state != payload.daily_total_battery_discharge) {
+      this->daily_total_battery_discharge_sensor_->publish_state(payload.daily_total_battery_discharge);
+    }
+    if (this->daily_total_load_charge_sensor_ != nullptr &&
+        this->daily_total_load_charge_sensor_->state != payload.daily_total_load_charge) {
+      this->daily_total_load_charge_sensor_->publish_state(payload.daily_total_load_charge);
+    }
+    if (this->daily_total_load_discharge_sensor_ != nullptr &&
+        this->daily_total_load_discharge_sensor_->state != payload.daily_total_load_discharge) {
+      this->daily_total_load_discharge_sensor_->publish_state(payload.daily_total_load_discharge);
+    }
   } else if (message == B2500_MSG_WIFI_INFO) {
     auto wifi_info = this->state_->get_wifi_info();
     if (this->wifi_rssi_sensor_ != nullptr && this->wifi_rssi_sensor_->state != wifi_info.signal) {

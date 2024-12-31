@@ -757,6 +757,34 @@ sensor:
       device_class: power
       icon: mdi:meter-electric
       retain: false
+    daily_total_battery_charge:
+      name: "{{ sensor_prefix(loop.index, storage) }} Daily Total Battery Charge"
+      id: b2500_daily_total_battery_charge_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/daily_total_charge"
+      device_class: energy
+      unit_of_measurement: Wh
+      accuracy_decimals: 0
+    daily_total_battery_discharge:
+      name: "{{ sensor_prefix(loop.index, storage) }} Daily Total Battery Discharge"
+      id: b2500_daily_total_battery_discharge_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/daily_total_discharge"
+      device_class: energy
+      unit_of_measurement: Wh
+      accuracy_decimals: 0
+    daily_total_load_charge:
+      name: "{{ sensor_prefix(loop.index, storage) }} Daily Total Load Charge"
+      id: b2500_daily_total_load_charge_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/load/daily_total_charge"
+      device_class: energy
+      unit_of_measurement: Wh
+      accuracy_decimals: 0
+    daily_total_load_discharge:
+      name: "{{ sensor_prefix(loop.index, storage) }} Daily Total Load Discharge"
+      id: b2500_daily_total_load_discharge_{{ loop.index }}
+      state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/load/daily_total_discharge"
+      device_class: energy
+      unit_of_measurement: Wh
+      accuracy_decimals: 0
   {%- endif %}
   - platform: total_daily_energy
     name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy In"

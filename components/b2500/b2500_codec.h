@@ -76,6 +76,12 @@ struct RuntimeInfoPacket {
   TimeInfo time;                      // 31 - 32
   int16_t temperature_low;            // 33 - 34
   int16_t temperature_high;           // 35 - 36
+  uint16_t reserved1;                 // 37 - 38
+  uint8_t device_sub_version;             // 39
+  uint32_t daily_total_battery_charge;    // 40 - 43
+  uint32_t daily_total_battery_discharge; // 44 - 47
+  uint32_t daily_total_load_charge;       // 48 - 51
+  uint32_t daily_total_load_discharge;    // 52 - 55
 } __attribute__((packed));
 
 struct DeviceInfoPacket {
