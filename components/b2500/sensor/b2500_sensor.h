@@ -25,6 +25,10 @@ class B2500Sensor : public Component {
   SUB_SENSOR(smart_meter_reading);
   SUB_SENSOR(temperature_low);
   SUB_SENSOR(temperature_high);
+  SUB_SENSOR(daily_total_battery_charge);
+  SUB_SENSOR(daily_total_battery_discharge);
+  SUB_SENSOR(daily_total_load_charge);
+  SUB_SENSOR(daily_total_load_discharge);
 
  protected:
   B2500State *state_;

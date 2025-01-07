@@ -73,12 +73,16 @@ bool B2500Codec::parse_runtime_info(uint8_t *data, uint16_t data_len, RuntimeInf
   const size_t payload_size = sizeof(RuntimeInfoPacket);
 
   if (data_len < header_size + payload_size) {
-    ESP_LOGW(TAG, "Packet too short for CMD_RUNTIME_INFO, expected %d, got %d", header_size + payload_size, data_len);
-    ESP_LOGW(TAG, "data: %s", format_hex_pretty(data, data_len).c_str());
-    return false;
+    ESP_LOGD(TAG, "Packet too short for CMD_RUNTIME_INFO, expected %d, got %d", header_size + payload_size, data_len);
+  } else if (data_len > header_size + payload_size) {
+    ESP_LOGD(TAG, "Packet too long for CMD_RUNTIME_INFO, expected %d, got %d", header_size + payload_size, data_len);
   }
 
-  std::memcpy(&payload, data + header_size, payload_size);
+  std::memcpy(&payload, data + header_size, std::min(payload_size, data_len - header_size));
+  // Fill in the rest with zeros
+  if (data_len - header_size < payload_size) {
+    std::memset(reinterpret_cast<uint8_t *>(&payload) + data_len - header_size, 0, payload_size - (data_len - header_size));
+  }
 
   return true;
 }

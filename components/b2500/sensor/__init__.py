@@ -40,6 +40,10 @@ CONF_ADAPTIVE_POWER_OUT = "adaptive_power_out"
 CONF_SMART_METER_READING = "smart_meter_reading"
 CONF_TEMPERATURE_LOW = "temperature_low"
 CONF_TEMPERATURE_HIGH = "temperature_high"
+CONF_DAILY_TOTAL_BATTERY_CHARGE = "daily_total_battery_charge"
+CONF_DAILY_TOTAL_BATTERY_DISCHARGE = "daily_total_battery_discharge"
+CONF_DAILY_TOTAL_LOAD_CHARGE = "daily_total_load_charge"
+CONF_DAILY_TOTAL_LOAD_DISCHARGE = "daily_total_load_discharge"
 
 MARKERS: list[str] = [
     CONF_SOC,
@@ -55,6 +59,10 @@ MARKERS: list[str] = [
     CONF_SMART_METER_READING,
     CONF_TEMPERATURE_LOW,
     CONF_TEMPERATURE_HIGH,
+    CONF_DAILY_TOTAL_BATTERY_CHARGE,
+    CONF_DAILY_TOTAL_BATTERY_DISCHARGE,
+    CONF_DAILY_TOTAL_LOAD_CHARGE,
+    CONF_DAILY_TOTAL_LOAD_DISCHARGE,
 ]
 
 BASE_SCHEMA = cv.Schema(
@@ -184,6 +192,38 @@ CONFIG_SCHEMA = cv.Any(
             cv.Optional(CONF_SMART_METER_READING): cv.maybe_simple_value(
                 sensor.sensor_schema(
                     unit_of_measurement=UNIT_VOLT_AMPS,
+                    state_class=STATE_CLASS_MEASUREMENT,
+                    accuracy_decimals=0,
+                ),
+                key=CONF_NAME,
+            ),
+            cv.Optional(CONF_DAILY_TOTAL_BATTERY_CHARGE): cv.maybe_simple_value(
+                sensor.sensor_schema(
+                    unit_of_measurement=UNIT_WATT_HOURS,
+                    state_class=STATE_CLASS_MEASUREMENT,
+                    accuracy_decimals=0,
+                ),
+                key=CONF_NAME,
+            ),
+            cv.Optional(CONF_DAILY_TOTAL_BATTERY_DISCHARGE): cv.maybe_simple_value(
+                sensor.sensor_schema(
+                    unit_of_measurement=UNIT_WATT_HOURS,
+                    state_class=STATE_CLASS_MEASUREMENT,
+                    accuracy_decimals=0,
+                ),
+                key=CONF_NAME,
+            ),
+            cv.Optional(CONF_DAILY_TOTAL_LOAD_CHARGE): cv.maybe_simple_value(
+                sensor.sensor_schema(
+                    unit_of_measurement=UNIT_WATT_HOURS,
+                    state_class=STATE_CLASS_MEASUREMENT,
+                    accuracy_decimals=0,
+                ),
+                key=CONF_NAME,
+            ),
+            cv.Optional(CONF_DAILY_TOTAL_LOAD_DISCHARGE): cv.maybe_simple_value(
+                sensor.sensor_schema(
+                    unit_of_measurement=UNIT_WATT_HOURS,
                     state_class=STATE_CLASS_MEASUREMENT,
                     accuracy_decimals=0,
                 ),
