@@ -728,6 +728,11 @@ sensor:
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/remaining_capacity"
       device_class: energy
       retain: false
+      {%- if storages|length > 1 %}
+      on_value:
+        then:
+          - script.execute: b2500_update_total_remaining_capacity
+      {%- endif %}
     temperature_low:
       name: "{{ sensor_prefix(loop.index, storage) }} Temperature 1"
       id: b2500_device_temperature1_{{ loop.index }}
@@ -900,6 +905,13 @@ script:
           state: !lambda |-
             return {% for storage in storages -%}
               {%- if loop.index > 1 %} + {% endif %}id(b2500_total_daily_energy_out_{{ loop.index }}).state{%- endfor %};
+  - id: b2500_update_total_remaining_capacity
+    then:
+      - sensor.template.publish:
+          id: b2500_total_remaining_capacity
+          state: !lambda |-
+            return {% for storage in storages -%}
+              {%- if loop.index > 1 %} + {% endif %}id(b2500_battery_remaining_capacity_{{ loop.index }}).state{%- endfor %};
 {%- endif %}
 {%- if enable_powerzero %}
   - id: power_zero
