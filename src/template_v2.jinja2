@@ -862,6 +862,13 @@ sensor:
     unit_of_measurement: kWh
     device_class: energy
     retain: false
+
+  - platform: template
+    name: "Total Remaining Capacity"
+    id: b2500_total_remaining_capacity
+    state_topic: "{{ yaml_string(mqtt_topic) }}/S/battery/remaining_capacity"
+    unit_of_measurement: Wh
+    device_class: energy    
 {%- endif %}
 {%- if enable_powerzero %}
 ### power zero - mqtt grid power sensor ( any who publish the grid power to mqtt )
