@@ -55,6 +55,7 @@ Find a list of all MQTT topics, depending on the selected configuration version:
 | Total System Output Power | b2500/S/power/power | - | v1, v2 |
 | Total System Daily Energy Input | b2500/S/pv/energy | - | v1, v2 |
 | Total System Daily Energy Output | b2500/S/power/energy | - | v1, v2 |
+| Total System Remaining Capacity | b2500/S/battery/remaining_capacity | - | v1, v2 |
 | Controller Restart | - | b2500/restart/set | v1, v2 |
 
 | Description | Read Topic | Write Topic | Available in version |
