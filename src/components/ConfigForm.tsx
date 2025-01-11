@@ -24,6 +24,7 @@ import MqttSection from './MqttSection';
 import WifiSection from './WifiSection';
 import AdvancedSection from './AdvancedSection';
 import { StorageForm } from './StorageForm';
+import { InfoOutlined } from '@mui/icons-material';
 
 interface ConfigFormProps {
   formValues: FormValues;
@@ -196,6 +197,31 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
         helperText="This is the name sent to the frontend. It is used by Home Assistant as the integration name, device name, and is automatically prefixed to entities where necessary."
         error={friendlyNameInvalid}
       />
+
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{
+          mt: 2,
+          mb: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
+        <InfoOutlined fontSize="small" color="info" />
+        Recommended Hardware:{' '}
+        <Link href="https://amzn.to/429OJDX" target="_blank" rel="noopener">
+          ESP32-S3 DevKitC-1
+        </Link>{' '}
+        (or{' '}
+        <Link href="https://amzn.to/3PwGRVv" target="_blank" rel="noopener">
+          buy 3x
+        </Link>
+        ). When using these boards, set Board to <code>esp32-s3-devkitc-1</code>{' '}
+        and Variant to <code>esp32s3</code>.
+      </Typography>
+
       <TextField
         label="Board"
         name="board"

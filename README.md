@@ -5,6 +5,16 @@
 
 This tool helps you create configuration files for your B2500 device and generate the necessary firmware without requiring any technical knowledge or software installation on your computer. You can do everything through your web browser.
 
+## Hardware Recommendation
+
+For the best experience with this project, I recommend using an ESP32-S3. You can purchase one from these links:
+- [1x ESP32-S3 DevKitC-1](https://amzn.to/429OJDX)
+- [3x ESP32-S3 DevKitC-1](https://amzn.to/3PwGRVv)
+
+When using these boards, set the following options:
+- Board: `esp32-s3-devkitc-1`
+- Variant: `esp32s3`
+
 ## Usage
 
 ### Creating a Configuration File
