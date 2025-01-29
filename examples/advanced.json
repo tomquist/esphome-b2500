@@ -5,12 +5,16 @@
   "poll_interval_seconds": 5,
   "log_level": "INFO",
   "mqtt": {
+    "enable": true,
     "topic": "b2500",
     "broker": "mqttbroker.local",
     "port": 1883,
     "username": "",
     "password": "",
     "discovery": true
+  },
+  "native_api": {
+    "enabled": true,
   },
   "wifi": {
     "ssid": "MyWifi",

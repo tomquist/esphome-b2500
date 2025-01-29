@@ -2,6 +2,7 @@
 import React from 'react';
 import { Button, TextField, Box, Typography, Grid } from '@mui/material';
 import { Storage, TemplateVersion } from '../types';
+import { templates } from '../templates';
 
 interface StorageFormProps {
   templateVersion: TemplateVersion;
@@ -75,6 +76,7 @@ const StorageForm: React.FC<StorageFormProps> = ({
       }
     };
 
+  const template = templates[templateVersion];
   return (
     <Box mt={2}>
       <Typography variant="h6">Storages</Typography>
@@ -104,7 +106,7 @@ const StorageForm: React.FC<StorageFormProps> = ({
                   helperText={nameValid ? 'Name is required' : ''}
                 />
               </Grid>
-              {templateVersion !== 'mqtt-relay' && (
+              {template.capabilities.requiresStorageVersion && (
                 <Grid item xs={4}>
                   <TextField
                     label="Version"
@@ -141,7 +143,7 @@ const StorageForm: React.FC<StorageFormProps> = ({
                   helperText="You can find the MAC address in the PowerZero app by pressing on the device name on the top left corner of the screen."
                 />
               </Grid>
-              {templateVersion === 'mqtt-relay' && (
+              {template.capabilities.requiresStorageId && (
                 <Grid item xs={4}>
                   <TextField
                     label="Device ID"

@@ -22,6 +22,9 @@ jobs:
           - v2
           - v2-minimal
           - mqtt-relay
+        mqtt_enabled:
+          - true
+          - false
       fail-fast: false
     
     steps:
@@ -67,7 +70,7 @@ jobs:
       
       - name: Encrypt configuration
         run: |
-          cat examples/${{ matrix.example }}.json | jq --arg template_version ${{ matrix.template }} '.template_version = $template_version' > config.json
+          cat examples/${{ matrix.example }}.json | jq --arg template_version ${{ matrix.template }} --arg mqtt_enabled ${{ matrix.mqtt_enabled }} '.template_version = $template_version | .mqtt.enabled = ($mqtt_enabled == "true")' > config.json
           echo "ENCRYPTED_CONFIG=$(npx ts-node ./scripts/encrypt-config.ts config.json "${PASSWORD}")" >> $GITHUB_ENV
 
       - name: Render configuration

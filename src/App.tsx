@@ -12,10 +12,6 @@ import {
 } from '@mui/material';
 import { FileCopy, Download, Build } from '@mui/icons-material';
 import nunjucks from 'nunjucks';
-import template from './template.jinja2';
-import templateV2 from './template_v2.jinja2';
-import templateV2Minimal from './template_v2_minimal.jinja2';
-import templateMqttRelay from './template_relay.jinja2';
 import FileSaver from 'file-saver';
 import { FormValues } from './types';
 import { useDebounce } from './hooks/useDebounce';
@@ -31,6 +27,7 @@ import {
 import GetAppOutlinedIcon from '@mui/icons-material/GetAppOutlined';
 import PublishOutlinedIcon from '@mui/icons-material/PublishOutlined';
 import { useMediaQuery } from '@mui/material';
+import { templates } from './templates';
 
 nunjucks.configure({ autoescape: false });
 
@@ -66,23 +63,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!debouncedFormValues) return;
-    let templateToUse;
-    switch (debouncedFormValues?.template_version ?? 'v1') {
-      case 'v1':
-        templateToUse = template;
-        break;
-      case 'v2':
-        templateToUse = templateV2;
-        break;
-      case 'v2-minimal':
-        templateToUse = templateV2Minimal;
-        break;
-      case 'mqtt-relay':
-        templateToUse = templateMqttRelay;
-        break;
-    }
+    let templateVersion = debouncedFormValues?.template_version ?? 'v1';
+    const templateToUse = templates[templateVersion];
     const renderedConfig = nunjucks.renderString(
-      templateToUse,
+      templateToUse.template,
       debouncedFormValues
     );
     setConfig(renderedConfig);
@@ -180,6 +164,20 @@ const App: React.FC = () => {
             />
           )}
         </Box>
+        {errors.length > 0 && (
+          <Box mt={4}>
+            <Paper elevation={3} sx={{ padding: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Errors
+              </Typography>
+              <ul>
+                {errors.map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+              </ul>
+            </Paper>
+          </Box>
+        )}
         {config && (
           <Box mt={4}>
             <Paper elevation={3} sx={{ padding: 2, position: 'relative' }}>

@@ -1,7 +1,9 @@
-// src/types.ts
-export type TemplateVersion = 'v1' | 'v2' | 'v2-minimal' | 'mqtt-relay';
+import { templates } from './templates';
+
+export type TemplateVersion = keyof typeof templates;
 
 export interface MQTTSettings {
+  enabled: boolean;
   topic: string;
   broker: string;
   port: number;
@@ -64,6 +66,10 @@ export interface OtaSettings {
 
 export interface AutoRestartSettings {
   restart_after_error_count: number;
+}
+
+export interface NativeApiSettings {
+  enabled: boolean;
 }
 
 export const validEspTemperatureVariants = ['internal', 'ntc'] as const;
@@ -139,6 +145,8 @@ export interface FormValues {
 
   enable_fallback_hotspot: boolean;
   fallback_hotspot: FallbackHotspotSettings;
+
+  native_api: NativeApiSettings;
 
   /**
    * Needed for some ESP32-S3 boards to enable DIO flash mode.

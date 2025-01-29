@@ -26,6 +26,7 @@ import {
   validFlashSized,
   validLogLevels,
 } from '../types';
+import { templates } from '../templates';
 
 interface AdvancedSectionProps {
   formValues: FormValues;
@@ -91,15 +92,14 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
     },
     [formValues, handleEspTemperatureChange]
   );
+  const currentTemplate = templates[formValues.template_version];
   return (
     <Accordion>
       <AccordionSummary expandIcon={<ExpandMore />}>
         <Typography variant="h6">Advanced</Typography>
       </AccordionSummary>
       <AccordionDetails>
-        {['v2', 'v2-minimal', 'mqtt-relay'].includes(
-          formValues.template_version
-        ) && (
+        {currentTemplate.capabilities.canChangeLoglevel && (
           <FormControl fullWidth margin="normal">
             <InputLabel id="log-level-label">Log Level</InputLabel>
             <Select
@@ -121,7 +121,7 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             </FormHelperText>
           </FormControl>
         )}
-        {formValues.template_version !== 'mqtt-relay' && (
+        {currentTemplate.capabilities.canDefinePollInterval && (
           <TextField
             label="Poll Interval (seconds)"
             name="poll_interval_seconds"
@@ -176,7 +176,7 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             the most common flash size.
           </FormHelperText>
         </FormControl>
-        {formValues.template_version === 'v1' && (
+        {currentTemplate.capabilities.hasAutoRestart && (
           <>
             <BooleanField
               value={formValues}
@@ -197,33 +197,41 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
                 error={formValues.auto_restart.restart_after_error_count < 1}
               />
             )}
-            <BooleanField
-              value={formValues}
-              onChange={handleInputChange}
-              prop="enable_hexdump"
-              label="Enable Hexdump"
-            />
-            <BooleanField
-              value={formValues}
-              onChange={handleInputChange}
-              prop="enable_cellquery"
-              label="Enable Cellquery"
-            />
-            <BooleanField
-              value={formValues}
-              onChange={handleInputChange}
-              prop="enable_timer_query"
-              label="Enable Timer Query (v2 & 3 only)"
-            />
-            <BooleanField
-              value={formValues}
-              onChange={handleInputChange}
-              prop="enable_experimental_commands"
-              label="Enable Experimental Commands"
-            />
           </>
         )}
-        {formValues.template_version !== 'mqtt-relay' && (
+        {currentTemplate.capabilities.canEnableHexdump && (
+          <BooleanField
+            value={formValues}
+            onChange={handleInputChange}
+            prop="enable_hexdump"
+            label="Enable Hexdump"
+          />
+        )}
+        {currentTemplate.capabilities.canEnableCellquery && (
+          <BooleanField
+            value={formValues}
+            onChange={handleInputChange}
+            prop="enable_cellquery"
+            label="Enable Cellquery"
+          />
+        )}
+        {currentTemplate.capabilities.canEnableTimerQuery && (
+          <BooleanField
+            value={formValues}
+            onChange={handleInputChange}
+            prop="enable_timer_query"
+            label="Enable Timer Query (v2 & 3 only)"
+          />
+        )}
+        {currentTemplate.capabilities.canEnableExperimentalCommands && (
+          <BooleanField
+            value={formValues}
+            onChange={handleInputChange}
+            prop="enable_experimental_commands"
+            label="Enable Experimental Commands"
+          />
+        )}
+        {currentTemplate.capabilities.hasStorage && (
           <>
             <BooleanField
               value={formValues}
@@ -276,7 +284,7 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           </>
         )}
 
-        {formValues.template_version === 'v1' && (
+        {currentTemplate.capabilities.canEnableEnforceDod && (
           <BooleanField
             value={formValues}
             onChange={handleInputChange}
@@ -307,9 +315,7 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
                   error={webserverPortInvalid}
                 />
               </Grid>
-              {!['v2-minimal', 'mqtt-relay'].includes(
-                formValues.template_version
-              ) && (
+              {currentTemplate.capabilities.canDefineJsInclude && (
                 <Grid item xs={12} sm={6}>
                   <TextField
                     label="JS Include"
@@ -434,7 +440,7 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             </Grid>
           </Box>
         )}
-        {formValues.template_version === 'v1' && (
+        {currentTemplate.capabilities.canEnableCmd30 && (
           <BooleanField
             value={formValues}
             onChange={handleInputChange}

@@ -25,6 +25,7 @@ import WifiSection from './WifiSection';
 import AdvancedSection from './AdvancedSection';
 import { StorageForm } from './StorageForm';
 import { InfoOutlined } from '@mui/icons-material';
+import { templates } from '../templates';
 
 interface ConfigFormProps {
   formValues: FormValues;
@@ -48,10 +49,20 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
   const handleSelectChange = useCallback(
     <E extends string>(e: SelectChangeEvent<E>) => {
       const { name, value } = e.target;
-      onFormChange({
-        ...formValues,
-        [name]: value,
-      });
+      if (name === 'native_api.enabled') {
+        onFormChange({
+          ...formValues,
+          native_api: {
+            ...formValues.native_api,
+            enabled: value === 'true',
+          },
+        });
+      } else {
+        onFormChange({
+          ...formValues,
+          [name]: value,
+        });
+      }
     },
     [formValues, onFormChange]
   );
@@ -119,6 +130,7 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
     [formValues, onFormChange]
   );
 
+  let template = templates[formValues.template_version];
   let nameInvalid =
     formValues.name.length > 31 || !/^[a-z0-9-]+$/.test(formValues.name);
   let friendlyNameInvalid =
@@ -135,43 +147,20 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
           value={formValues.template_version}
           onChange={handleSelectChange}
         >
-          <MenuItem value={'v1'}>Legacy</MenuItem>
-          <MenuItem value={'v2'}>Native ESPHome component</MenuItem>
-          <MenuItem value={'v2-minimal'}>
-            Minimal native ESPHome component
-          </MenuItem>
-          <MenuItem value={'mqtt-relay'}>MQTT Relay</MenuItem>
+          {Object.entries(templates).map(([value, template]) => (
+            <MenuItem key={value} value={value}>
+              {template.name}
+            </MenuItem>
+          ))}
         </Select>
         <FormHelperText>
           You can choose between two different configuration versions:
           <ul>
-            <li>
-              Legacy - Old config based on{' '}
-              <a href="https://github.com/noone2k/hm2500pub/tree/master">
-                noone2k's ESPHome config
-              </a>
-            </li>
-            <li>
-              Native ESPHome component - A new config that uses a native ESPHome
-              component. Slightly less resource-intensive and more stable.
-            </li>
-            <li>
-              Minimal native ESPHome component - A minimal version of the native
-              ESPHome component. Exposes storage data through a smaller number
-              of MQTT topics without using ESPHome sensors. Use this for
-              low-power devices or if you manually integrate the storage into
-              your home automation system using MQTT.
-            </li>
-            <li>
-              MQTT Relay - A minimal config that relays MQTT data from the
-              storage to the Hame MQTT broker. It doesn't expose any sensors or
-              switches and doesn't connect to the storage via Bluetooth. With
-              this you can configure the storage to send data to your local MQTT
-              broker while still being able to use the Power Zero/Marstek app to
-              control the storage. Note that an image for this can only be built
-              via this tool. You won't be able to build it using the ESPHome
-              unless you know the Hame certificate and key.
-            </li>
+            {Object.entries(templates).map(([value, template]) => (
+              <li key={value}>
+                {template.name} - {template.description}
+              </li>
+            ))}
           </ul>
         </FormHelperText>
       </FormControl>
@@ -265,6 +254,25 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
           this at "auto" to automatically detect the variant from the board.
         </FormHelperText>
       </FormControl>
+      {template.capabilities.canUseNativeAPI && (
+        <FormControl fullWidth margin="normal">
+          <InputLabel id="native-api-label">Native API</InputLabel>
+          <Select<string>
+            labelId="native-api-label"
+            name="native_api.enabled"
+            value={formValues.native_api.enabled ? 'true' : 'false'}
+            onChange={handleSelectChange}
+            label="Native API"
+          >
+            <MenuItem value="true">Enabled</MenuItem>
+            <MenuItem value="false">Disabled</MenuItem>
+          </Select>
+          <FormHelperText>
+            Enable the native ESPHome API for direct communication with Home
+            Assistant without MQTT
+          </FormHelperText>
+        </FormControl>
+      )}
 
       <Divider sx={{ my: 2 }} />
 
