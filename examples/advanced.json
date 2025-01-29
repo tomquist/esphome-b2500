@@ -14,7 +14,7 @@
     "discovery": true
   },
   "native_api": {
-    "enabled": true,
+    "enabled": true
   },
   "wifi": {
     "ssid": "MyWifi",

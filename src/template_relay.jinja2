@@ -136,7 +136,6 @@ web_server:
 captive_portal:
 {%- endif %}
 
-{%- if mqtt.enabled %}
 mqtt:
   id: mqtt_client
   broker: "{{ yaml_string(mqtt_broker) }}"
@@ -158,7 +157,6 @@ mqtt:
     - logger.log:
         level: INFO
         format: "MQTT disconnected"
-{%- endif %}
 
 hame_relay:
   devices:
@@ -175,9 +173,7 @@ button:
   - platform: restart
     id: controller_restart
     name: "Restart Controller"
-{%- if mqtt.enabled %}
     command_topic: "{{ yaml_string(mqtt_topic) }}/restart/set"
-{%- endif %}
 
 {%- if enable_powermeter %}
 uart:
@@ -192,10 +188,8 @@ sensor:
 {%- if enable_esp_temperature and esp_temperature_variant == 'internal' %}
   - platform: internal_temperature
     name: "Temperature"
-{%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
     retain: false
-{%- endif %}
     unit_of_measurement: "°C"
     icon: "mdi:thermometer"
 {%- endif %}
@@ -203,10 +197,8 @@ sensor:
   - platform: ntc
     sensor: temp_resistance_reading
     name: "Temperature"
-{%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
     retain: false
-{%- endif %}
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     icon: "mdi:thermometer"
@@ -256,7 +248,5 @@ sensor:
       - lambda: return x / 3600.0;
     unit_of_measurement: "hours"
     accuracy_decimals: 2
-{%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/uptime"
     retain: false
-{%- endif %}

@@ -89,5 +89,5 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}-${{ matrix.template }}
+          name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}-${{ matrix.template }}-${{ matrix.mqtt_enabled }}
           path: firmware.zip

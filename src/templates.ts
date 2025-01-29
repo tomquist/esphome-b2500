@@ -111,7 +111,7 @@ export const templates = {
       requiresStorageId: true,
       hasStorage: false,
       canUseNativeAPI: true,
-      canDisableMQTT: true,
+      canDisableMQTT: false,
       canChangeLoglevel: true,
       canDefinePollInterval: false,
       hasAutoRestart: false,
