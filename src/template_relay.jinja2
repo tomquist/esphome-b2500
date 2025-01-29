@@ -194,10 +194,10 @@ sensor:
     name: "Temperature"
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
+    retain: false
 {%- endif %}
     unit_of_measurement: "°C"
     icon: "mdi:thermometer"
-    retain: false
 {%- endif %}
 {%- if enable_esp_temperature and esp_temperature_variant == 'ntc' %}
   - platform: ntc
@@ -205,11 +205,11 @@ sensor:
     name: "Temperature"
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
+    retain: false
 {%- endif %}
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     icon: "mdi:thermometer"
-    retain: false
     calibration:
       b_constant: 3350
       reference_resistance: 10kOhm
@@ -258,5 +258,5 @@ sensor:
     accuracy_decimals: 2
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/uptime"
-{%- endif %}
     retain: false
+{%- endif %}
