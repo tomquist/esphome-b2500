@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { FormValues } from '../types';
+import { templates } from '../templates';
 
 export const defaultFormValues: FormValues = {
   template_version: 'v2',
@@ -8,6 +9,7 @@ export const defaultFormValues: FormValues = {
   poll_interval_seconds: 5,
   log_level: 'INFO',
   mqtt: {
+    enabled: true,
     topic: 'b2500',
     broker: 'mqttbroker.local',
     port: 1883,
@@ -79,6 +81,9 @@ export const defaultFormValues: FormValues = {
     ssid: 'ESPHome-b2500',
     enable_captive_portal: true,
   },
+  native_api: {
+    enabled: false,
+  },
   enable_dio_flash_mode: false,
   storages: [{ name: 'B2500', version: 1, mac_address: '00:00:00:00:00:00' }],
 };
@@ -141,6 +146,7 @@ export const redactSecrets = (config: FormValues) => {
 };
 
 export const validateConfig = (config: FormValues) => {
+  const template = templates[config.template_version];
   const errors = [];
   if (config.storages.length === 0) {
     errors.push('At least one storage is required');
@@ -149,7 +155,10 @@ export const validateConfig = (config: FormValues) => {
     if (storage.name.trim() === '') {
       errors.push('Storage name is required');
     }
-    if (storage.version < 1 || storage.version > 2) {
+    if (
+      template.capabilities.requiresStorageVersion &&
+      (storage.version < 1 || storage.version > 2)
+    ) {
       errors.push('Storage version is invalid');
     }
     if (storage.mac_address.trim() === '') {
@@ -161,7 +170,7 @@ export const validateConfig = (config: FormValues) => {
       errors.push('Storage MAC address is invalid');
     }
     if (
-      config.template_version === 'mqtt-relay' &&
+      template.capabilities.requiresStorageId &&
       !/^[0-9A-Fa-f]{24}$/.test(storage.id ?? '')
     ) {
       errors.push('Storage ID is required');
@@ -185,16 +194,26 @@ export const validateConfig = (config: FormValues) => {
   if (config.wifi.password.trim() === '') {
     errors.push('WiFi password is required');
   }
-  if (config.mqtt.topic.trim() === '') {
-    errors.push('MQTT topic is required');
+  if (!config.mqtt.enabled && !template.capabilities.canDisableMQTT) {
+    errors.push(
+      `MQTT cannot be disabled for the configuration version '${template.name}'`
+    );
   }
-  if (config.mqtt.broker.trim() === '') {
-    errors.push('MQTT broker is required');
+  if (config.mqtt.enabled || !template.capabilities.canDisableMQTT) {
+    if (config.mqtt.topic.trim() === '') {
+      errors.push('MQTT topic is required');
+    }
+    if (config.mqtt.broker.trim() === '') {
+      errors.push('MQTT broker is required');
+    }
+    if (config.mqtt.port <= 0 || config.mqtt.port > 65535) {
+      errors.push('MQTT port is invalid');
+    }
   }
-  if (config.mqtt.port <= 0 || config.mqtt.port > 65535) {
-    errors.push('MQTT port is invalid');
-  }
-  if (config.auto_restart.restart_after_error_count < 0) {
+  if (
+    template.capabilities.hasAutoRestart &&
+    config.auto_restart.restart_after_error_count < 0
+  ) {
     errors.push('Auto restart count is invalid');
   }
   if (config.enable_powermeter) {
@@ -248,7 +267,7 @@ export const validateConfig = (config: FormValues) => {
       errors.push('Fallback hotspot SSID is required');
     }
   }
-  if (config.enable_set_wifi) {
+  if (template.capabilities.hasStorage && config.enable_set_wifi) {
     if (config.set_wifi.ssid.trim() === '') {
       errors.push('Set WiFi SSID is required');
     }
@@ -256,7 +275,7 @@ export const validateConfig = (config: FormValues) => {
       errors.push('Set WiFi password is required');
     }
   }
-  if (config.enable_powerzero) {
+  if (template.capabilities.hasPowerZeroScript && config.enable_powerzero) {
     if (config.powerzero.grid_power_topic.trim() === '') {
       errors.push('Powerzero grid power topic is required');
     }

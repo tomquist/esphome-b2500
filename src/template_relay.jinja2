@@ -34,6 +34,8 @@
 {%- set fallback_hotspot = fallback_hotspot or {} %}
 {%- set fallback_hotspot_ssid = fallback_hotspot.ssid or '' %}
 {%- set fallback_hotspot_enable_captive_portal = fallback_hotspot.enable_captive_portal or False %}
+{%- set native_api = native_api or {} %}
+{%- set native_api_enabled = native_api.enabled or False %}
 {%- macro yaml_string(value) %}{% set escaped_value = value | replace('\\', '\\\\') | replace('"', '\\"') %}{{ escaped_value }}{% endmacro %}
 {%- macro yaml_lambda_string(value) %}{% set escaped_value = yaml_string(value) | replace('#', '\\#') %}{{ escaped_value }}{% endmacro %}
 {%- set _ = '' -%}
@@ -43,6 +45,10 @@ esphome:
 {%- if enable_dio_flash_mode %}
   platformio_options:
     board_build.flash_mode: dio
+{%- endif %}
+
+{%- if native_api_enabled %}
+api:
 {%- endif %}
 
 esp32:
@@ -183,19 +189,19 @@ sensor:
   - platform: internal_temperature
     name: "Temperature"
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
+    retain: false
     unit_of_measurement: "°C"
     icon: "mdi:thermometer"
-    retain: false
 {%- endif %}
 {%- if enable_esp_temperature and esp_temperature_variant == 'ntc' %}
   - platform: ntc
     sensor: temp_resistance_reading
     name: "Temperature"
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/temperature"
+    retain: false
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     icon: "mdi:thermometer"
-    retain: false
     calibration:
       b_constant: 3350
       reference_resistance: 10kOhm

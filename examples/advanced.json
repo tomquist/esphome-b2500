@@ -5,6 +5,7 @@
   "poll_interval_seconds": 5,
   "log_level": "INFO",
   "mqtt": {
+    "enable": true,
     "topic": "b2500",
     "broker": "mqttbroker.local",
     "port": 1883,
@@ -12,13 +13,16 @@
     "password": "",
     "discovery": true
   },
+  "native_api": {
+    "enabled": true
+  },
   "wifi": {
     "ssid": "MyWifi",
     "password": "MyPassword"
   },
   "board": "esp32dev",
   "variant": "auto",
-  "flash_size": "4MB",
+  "flash_size": "8MB",
   "idf_platform_version": "",
   "enable_auto_restart": true,
   "auto_restart": {
