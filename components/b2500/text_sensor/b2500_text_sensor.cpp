@@ -2,7 +2,6 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 #include "esphome/core/time.h"
-#include "esphome/components/json/json_util.h"
 
 namespace esphome {
 namespace b2500 {
@@ -122,29 +121,31 @@ void B2500TextSensor::on_message(B2500Message message) {
     }
   } else if (message == B2500_MSG_CELL_INFO) {
     if (this->cell_voltage_text_sensor_ != nullptr) {
-      auto cellInfo = json::build_json([this](JsonObject root) {
-        auto cell_info = this->state_->get_cell_info();
-        auto min = cell_info.cell_voltages[0];
-        auto max = cell_info.cell_voltages[0];
-        int sum = 0;
-        JsonArray cells = root.createNestedArray("cells");
-        for (int i = 0; i < 14; i++) {
-          cells.add(cell_info.cell_voltages[i] / 1000.0);
-          if (cell_info.cell_voltages[i] < min) {
-            min = cell_info.cell_voltages[i];
-          }
-          if (cell_info.cell_voltages[i] > max) {
-            max = cell_info.cell_voltages[i];
-          }
-          sum += cell_info.cell_voltages[i];
+      auto cell_info = this->state_->get_cell_info();
+      auto min = cell_info.cell_voltages[0];
+      auto max = cell_info.cell_voltages[0];
+      int sum = 0;
+      std::string json = "{\"cells\":[";
+      for (int i = 0; i < 14; i++) {
+        if (i > 0) json += ",";
+        json += std::to_string(cell_info.cell_voltages[i] / 1000.0);
+
+        if (cell_info.cell_voltages[i] < min) {
+          min = cell_info.cell_voltages[i];
         }
-        root["min"] = (min / 1000.0);
-        root["max"] = (max / 1000.0);
-        root["avg"] = ((sum / 14.0) / 1000.0);
-        root["sum"] = (sum / 1000.0);
-        root["delta"] = ((max - min) / 1000.0);
-      });
-      this->cell_voltage_text_sensor_->publish_state(cellInfo);
+        if (cell_info.cell_voltages[i] > max) {
+          max = cell_info.cell_voltages[i];
+        }
+        sum += cell_info.cell_voltages[i];
+      }
+      json += "],";
+      json += "\"min\":" + std::to_string(min / 1000.0) + ",";
+      json += "\"max\":" + std::to_string(max / 1000.0) + ",";
+      json += "\"avg\":" + std::to_string((sum / 14.0) / 1000.0) + ",";
+      json += "\"sum\":" + std::to_string(sum / 1000.0) + ",";
+      json += "\"delta\":" + std::to_string((max - min) / 1000.0);
+      json += "}";
+      this->cell_voltage_text_sensor_->publish_state(json);
     }
   }
 }
