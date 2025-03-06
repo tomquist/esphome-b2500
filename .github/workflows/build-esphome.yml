@@ -20,7 +20,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -66,9 +66,9 @@ jobs:
 
       - name: Build firmware
         id: esphome-build
-        uses: esphome/build-action@v3.1.0
+        uses: esphome/build-action@v6.0.0
         with:
-          yaml_file: device.yaml
+          yaml-file: device.yaml
           version: ${{ github.event.client_payload.esphome_version || 'latest' }}
         continue-on-error: true
 
