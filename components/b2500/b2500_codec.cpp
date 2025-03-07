@@ -370,7 +370,7 @@ bool B2500Codec::encode_set_mqtt(bool ssl, const std::string &host, uint16_t por
   }
 
   std::string mqtt_info =
-      std::to_string(ssl) + "<.,.>" + host + "<.,.>" + std::to_string(port) + "<.,.>" + username + "<.,.>" + password;
+      std::to_string(ssl) + "<.,.>" + host + "<.,.>" + std::to_string(port) + "<.,.>" + username + "<.,.>" + password + "<.,.>";
   return this->encode_command(CMD_SET_MQTT, reinterpret_cast<const uint8_t *>(mqtt_info.c_str()), mqtt_info.size(),
                               payload);
 }
