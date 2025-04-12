@@ -105,7 +105,7 @@ jobs:
 
       - name: Upload firmware to S3
         run: |
-          aws s3 cp firmware.zip s3://$S3_BUCKET/firmware/${{ github.event.client_payload.identifier }}.zip --acl public-read
+          aws s3 cp firmware.zip s3://$S3_BUCKET/firmware/${{ github.event.client_payload.identifier }}.zip
 
       - name: Output firmware URL
         run: |
