@@ -11,7 +11,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    env:
+      REACT_APP_S3_BUCKET: esphome-b2500-images
+      REACT_APP_AWS_REGION: eu-west-1
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -26,6 +28,9 @@ jobs:
 
     - name: Build the app
       run: npm run build
+      env:
+        REACT_APP_S3_BUCKET: ${{ env.REACT_APP_S3_BUCKET }}
+        REACT_APP_AWS_REGION: ${{ env.REACT_APP_AWS_REGION }}
 
     - name: Upload artifact
       if: github.event_name == 'push'
