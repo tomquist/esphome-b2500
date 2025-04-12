@@ -19,6 +19,9 @@ import {
 } from '../utils';
 import { encryptConfig, encryptPassword } from '../crypto';
 
+const S3_BUCKET = process.env.REACT_APP_S3_BUCKET;
+const AWS_REGION = process.env.REACT_APP_AWS_REGION;
+
 interface BuildModalProps {
   closeModal: () => void;
   debouncedFormValues: any;
@@ -154,7 +157,7 @@ const BuildModal: React.FC<BuildModalProps> = ({
                 Once the build completed, download your firmware using this
                 link:{' '}
                 <Link
-                  href={`https://github.com/tomquist/esphome-b2500/raw/gh-pages/firmware/${identifier}/${identifier}.zip`}
+                  href={`https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/firmware/${identifier}.zip`}
                 >
                   Firmware Download
                 </Link>
