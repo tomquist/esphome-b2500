@@ -38,7 +38,6 @@ const templateV2Minimal = fs.readFileSync(
   './src/template_v2_minimal.jinja2',
   'utf-8'
 );
-const templateRelay = fs.readFileSync('./src/template_relay.jinja2', 'utf-8');
 
 let template;
 switch (config.template_version) {
@@ -50,9 +49,6 @@ switch (config.template_version) {
     break;
   case 'v2-minimal':
     template = templateV2Minimal;
-    break;
-  case 'mqtt-relay':
-    template = templateRelay;
     break;
   default:
     throw new Error(`Unknown template version: ${config.template_version}`);
