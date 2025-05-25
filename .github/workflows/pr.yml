@@ -21,7 +21,6 @@ jobs:
           - v1
           - v2
           - v2-minimal
-          - mqtt-relay
         mqtt_enabled:
           - true
           - false

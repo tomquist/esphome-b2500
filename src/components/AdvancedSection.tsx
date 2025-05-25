@@ -636,73 +636,71 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           helperText="This is required for some ESP32 devices to flash them. Leave this disabled unless you know what you are doing."
         />
 
-        {formValues.template_version !== 'mqtt-relay' && (
-          <>
-            <BooleanField
-              value={formValues}
-              onChange={handleInputChange}
-              prop="enable_powerzero"
-              label="Enable Powerzero"
-            />
-            {formValues.enable_powerzero && (
-              <Box mb={2} border={1} borderRadius={5} padding={2}>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label="Grid Power Topic"
-                      name="grid_power_topic"
-                      value={formValues.powerzero.grid_power_topic}
-                      onChange={handlePowerzeroChange}
-                      fullWidth
-                      margin="normal"
-                      required
-                      error={powerzeroGridPowerTopicInvalid}
-                      helperText={
-                        powerzeroGridPowerTopicInvalid
-                          ? 'Grid Power Topic is required'
-                          : ''
-                      }
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label="Limit CMD Topic"
-                      name="limit_cmd_topic"
-                      value={formValues.powerzero.limit_cmd_topic}
-                      onChange={handlePowerzeroChange}
-                      fullWidth
-                      margin="normal"
-                      required
-                      error={powerzeroLimitCmdTopic}
-                      helperText={
-                        powerzeroLimitCmdTopic
-                          ? 'Limit CMD Topic is required'
-                          : ''
-                      }
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label="Limit State Topic"
-                      name="limit_state_topic"
-                      value={formValues.powerzero.limit_state_topic}
-                      onChange={handlePowerzeroChange}
-                      fullWidth
-                      margin="normal"
-                      required
-                      error={powerzerolimitStateTopicInvalid}
-                      helperText={
-                        powerzerolimitStateTopicInvalid
-                          ? 'Limit State Topic is required'
-                          : ''
-                      }
-                    />
-                  </Grid>
+        <>
+          <BooleanField
+            value={formValues}
+            onChange={handleInputChange}
+            prop="enable_powerzero"
+            label="Enable Powerzero"
+          />
+          {formValues.enable_powerzero && (
+            <Box mb={2} border={1} borderRadius={5} padding={2}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Grid Power Topic"
+                    name="grid_power_topic"
+                    value={formValues.powerzero.grid_power_topic}
+                    onChange={handlePowerzeroChange}
+                    fullWidth
+                    margin="normal"
+                    required
+                    error={powerzeroGridPowerTopicInvalid}
+                    helperText={
+                      powerzeroGridPowerTopicInvalid
+                        ? 'Grid Power Topic is required'
+                        : ''
+                    }
+                  />
                 </Grid>
-              </Box>
-            )}
-          </>
-        )}
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Limit CMD Topic"
+                    name="limit_cmd_topic"
+                    value={formValues.powerzero.limit_cmd_topic}
+                    onChange={handlePowerzeroChange}
+                    fullWidth
+                    margin="normal"
+                    required
+                    error={powerzeroLimitCmdTopic}
+                    helperText={
+                      powerzeroLimitCmdTopic
+                        ? 'Limit CMD Topic is required'
+                        : ''
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Limit State Topic"
+                    name="limit_state_topic"
+                    value={formValues.powerzero.limit_state_topic}
+                    onChange={handlePowerzeroChange}
+                    fullWidth
+                    margin="normal"
+                    required
+                    error={powerzerolimitStateTopicInvalid}
+                    helperText={
+                      powerzerolimitStateTopicInvalid
+                        ? 'Limit State Topic is required'
+                        : ''
+                    }
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </>
       </AccordionDetails>
     </Accordion>
   );

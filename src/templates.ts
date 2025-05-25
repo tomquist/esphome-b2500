@@ -1,7 +1,6 @@
 import template from './template.jinja2';
 import templateV2 from './template_v2.jinja2';
 import templateV2Minimal from './template_v2_minimal.jinja2';
-import templateMqttRelay from './template_relay.jinja2';
 
 interface TemplateCapability {
   readonly requiresStorageVersion: boolean;
@@ -99,30 +98,6 @@ export const templates = {
       canEnableCmd30: false,
       canDefineJsInclude: false,
       hasPowerZeroScript: true,
-    },
-  },
-  'mqtt-relay': {
-    name: 'MQTT Relay',
-    description:
-      "A minimal config that relays MQTT data from the storage to the Hame MQTT broker. It doesn't expose any sensors or switches and doesn't connect to the storage via Bluetooth. With this you can configure the storage to send data to your local MQTT broker while still being able to use the Power Zero/Marstek app to control the storage. Note that an image for this can only be built via this tool. You won't be able to build it using the ESPHome unless you know the Hame certificate and key.",
-    template: templateMqttRelay,
-    capabilities: {
-      requiresStorageVersion: false,
-      requiresStorageId: true,
-      hasStorage: false,
-      canUseNativeAPI: true,
-      canDisableMQTT: false,
-      canChangeLoglevel: true,
-      canDefinePollInterval: false,
-      hasAutoRestart: false,
-      canEnableHexdump: false,
-      canEnableCellquery: false,
-      canEnableTimerQuery: false,
-      canEnableExperimentalCommands: false,
-      canEnableEnforceDod: false,
-      canEnableCmd30: false,
-      canDefineJsInclude: false,
-      hasPowerZeroScript: false,
     },
   },
 } as const satisfies Record<string, Template>;
