@@ -7,6 +7,9 @@
 #include "esphome/components/ble_client/ble_client.h"
 #include "esphome/components/time/real_time_clock.h"
 
+#include <queue>
+#include <vector>
+
 #include "b2500_state.h"
 
 namespace esphome {
