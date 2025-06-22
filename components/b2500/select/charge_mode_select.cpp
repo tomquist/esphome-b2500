@@ -19,9 +19,8 @@ void ChargeModeSelect::setup() {
 
 void ChargeModeSelect::control(const std::string &value) {
   if (this->parent_->set_charge_mode(value)) {
-    this->publish_state(state);
+    this->publish_state(value);
   }
-  // TODO: Implement this
 }
 
 }  // namespace b2500
