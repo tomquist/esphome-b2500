@@ -22,10 +22,9 @@ void TimerStartTimeEntity::on_message(B2500Message message) {
     uint8_t start_hour = timer.start.hour % 24;
     uint8_t start_minute = timer.start.minute % 60;
     if (this->hour != start_hour || this->minute != start_minute) {
-      auto call = this->make_call();
-      call.set_hour(start_hour);
-      call.set_minute(start_minute);
-      call.perform();
+      this->hour_ = start_hour;
+      this->minute_ = start_minute;
+      this->publish_state();
     }
   }
 }

@@ -27,10 +27,9 @@ void TimerEndTimeEntity::on_message(B2500Message message) {
     uint8_t end_hour = timer.end.hour % 24;
     uint8_t end_minute = timer.end.minute % 60;
     if (this->hour != end_hour || this->minute != end_minute) {
-      auto call = this->make_call();
-      call.set_hour(end_hour);
-      call.set_minute(end_minute);
-      call.perform();
+      this->hour_ = end_hour;
+      this->minute_ = end_minute;
+      this->publish_state();
     }
   }
 }
