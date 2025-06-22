@@ -194,7 +194,7 @@ bool B2500Codec::parse_fc41d_info(uint8_t *data, uint16_t data_len, FC41DInfoPac
     return false;
   }
   if (command != CMD_FC41D_INFO) {
-    ESP_LOGW(TAG, "Not a CMD_RUNTIME_INFO packet");
+    ESP_LOGW(TAG, "Not a CMD_FC41D_INFO packet");
     return false;
   }
   if (data_len < sizeof(B2500PacketHeader) + 1) {
