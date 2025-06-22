@@ -22,12 +22,12 @@ When using these boards, set the following options:
 1. Visit https://tomquist.github.io/esphome-b2500/
 2. Fill out the form with your desired configuration settings. The default values are provided for convenience.
 3. Once you have filled out the form, the configuration will be automatically generated and displayed.
-4. You can download the YAML configuration file by clicking the "Download YAML" button. This configuration can directly ve ised to build an ESPHome image, e.g. through the Home Assistant ESPHome Addon. alternatively you can directly build an image for your ESP32 and föash it via the ESPHome web flasher. Read the following section for detailed instructions.
+4. You can download the YAML configuration file by clicking the "Download YAML" button. This configuration can directly be used to build an ESPHome image, e.g. through the Home Assistant ESPHome Addon. Alternatively you can directly build an image for your ESP32 and flash it via the ESPHome web flasher. Read the following section for detailed instructions.
 
 ### Build an Image on the Web
 
 1. Click the "Build Image" button.
-2. Click "Start Build" and follow tje instructions
+2. Click "Start Build" and follow the instructions
 3. Extract the firmware binary from the downloaded ZIP file.
 4. Connect your ESP32 via USB
 5. Go to the ESPHome Web Installer: [ESPHome Web Installer](https://web.esphome.io/).
@@ -346,6 +346,6 @@ The base topic prefix is configurable via `mqtt.topic`, defaulting to `b2500`. A
 
 ## Acknowledgments
 
-- Thanks to [@noone2k](https://github.com/noone2k) for reverse engineeing the bluetooth protocol and creating the [initial ESPHome config](https://github.com/noone2k/hm2500pub)
+- Thanks to [@noone2k](https://github.com/noone2k) for reverse engineering the bluetooth protocol and creating the [initial ESPHome config](https://github.com/noone2k/hm2500pub)
 - Thanks to the [ESPHome](https://esphome.io/) community for their excellent documentation and tools.
 - Thanks to [Material-UI](https://mui.com/) for providing the UI components used in this project.
