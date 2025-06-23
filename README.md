@@ -344,6 +344,16 @@ The base topic prefix is configurable via `mqtt.topic`, defaulting to `b2500`. A
 
 </details>
 
+### Running tests
+
+To verify the ESPHome component compiles correctly, install the
+Python dependencies and run `pytest`:
+
+```bash
+pip install esphome pytest
+pytest
+```
+
 ## Acknowledgments
 
 - Thanks to [@noone2k](https://github.com/noone2k) for reverse engineering the bluetooth protocol and creating the [initial ESPHome config](https://github.com/noone2k/hm2500pub)
