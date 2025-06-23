@@ -1,0 +1,25 @@
+external_components:
+  - source: COMPONENT_PATH
+    refresh: 0s
+
+wifi:
+  ssid: "test"
+  password: "12345678"
+
+esp32:
+  board: esp32dev
+
+ble_client:
+  mac_address: "00:00:00:00:00:00"
+
+b2500:
+  generation: 1
+
+logger:
+
+esphome:
+  name: test
+
+time:
+  - platform: sntp
+    id: sntp_time

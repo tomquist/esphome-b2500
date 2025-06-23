@@ -90,3 +90,20 @@ jobs:
         with:
           name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}-${{ matrix.template }}-${{ matrix.mqtt_enabled }}
           path: firmware.zip
+
+  component_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install esphome pytest
+
+      - name: Run tests
+        run: pytest -q
