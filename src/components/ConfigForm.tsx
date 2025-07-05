@@ -26,6 +26,7 @@ import AdvancedSection from './AdvancedSection';
 import { StorageForm } from './StorageForm';
 import { InfoOutlined } from '@mui/icons-material';
 import { templates } from '../templates';
+import { getMaxBleDevices } from '../utils';
 
 interface ConfigFormProps {
   formValues: FormValues;
@@ -305,7 +306,7 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
         templateVersion={formValues.template_version}
         storages={formValues.storages}
         onChange={handleStorageChange}
-        maxStorages={3}
+        maxStorages={getMaxBleDevices()}
         minStorages={1}
       />
     </Paper>
