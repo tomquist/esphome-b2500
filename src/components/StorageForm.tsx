@@ -1,6 +1,6 @@
 // src/components/StorageForm.tsx
 import React from 'react';
-import { Button, TextField, Box, Typography, Grid } from '@mui/material';
+import { Button, TextField, Box, Typography, Grid, Alert } from '@mui/material';
 import { Storage, TemplateVersion } from '../types';
 import { templates } from '../templates';
 
@@ -182,6 +182,12 @@ const StorageForm: React.FC<StorageFormProps> = ({
           </Box>
         );
       })}
+      {storages.length >= 3 && (
+        <Alert severity="warning" sx={{ mt: 2 }}>
+          Adding more than two devices may cause instabilities due to high
+          resource usage. Proceed at your own risk.
+        </Alert>
+      )}
       {storages.length < maxStorages && (
         <Button variant="contained" color="primary" onClick={handleAddStorage}>
           Add Storage

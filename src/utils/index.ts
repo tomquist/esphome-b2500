@@ -145,6 +145,12 @@ export const redactSecrets = (config: FormValues) => {
   return redactedConfig;
 };
 
+// The maximum number of BLE connections depends on the framework used.
+// ESPHome's esp32_ble_tracker module defines `max_connections()` which
+// returns 9 for ESP-IDF and 3 for Arduino. Since all templates in this
+// project use ESP-IDF by default, we allow up to 9 B2500 devices.
+export const getMaxBleDevices = (): number => 9;
+
 export const validateConfig = (config: FormValues) => {
   const template = templates[config.template_version];
   const errors = [];
