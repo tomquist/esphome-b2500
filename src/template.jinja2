@@ -342,6 +342,7 @@ esp32_ble:
   id: ble
 
 esp32_ble_tracker:
+  max_connections: {{ storages|length }}
   scan_parameters:
     window: 300ms
     continuous: false
