@@ -80,6 +80,7 @@ jobs:
         uses: esphome/build-action@v7.0.0
         with:
           yaml-file: device.yaml
+          version: '2025.6.3'
 
       - name: Create zip with password
         run: |
