@@ -40,38 +40,40 @@ BASE_SCHEMA = cv.Schema(
     }
 )
 
-CONFIG_SCHEMA = cv.Any(
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV1),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(1),
-            cv.Optional(CONF_DISCHARGE_THRESHOLD): cv.maybe_simple_value(
-                number.number_schema(
-                    DischargeThresholdNumber,
-                    unit_of_measurement=UNIT_WATT,
-                    entity_category=ENTITY_CATEGORY_CONFIG,
-                ),
-                key=CONF_NAME,
-            ),
-        }
-    ).extend(BASE_SCHEMA),
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV2),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(2),
-            **{
-                cv.Optional(f"timer{x + 1}_output_power"): cv.maybe_simple_value(
+CONFIG_SCHEMA = cv.typed_schema(
+    {
+        1: cv.Schema(
+            {
+                cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV1),
+                cv.Optional(CONF_DISCHARGE_THRESHOLD): cv.maybe_simple_value(
                     number.number_schema(
-                        TimerOutputPowerNumber,
+                        DischargeThresholdNumber,
                         unit_of_measurement=UNIT_WATT,
                         entity_category=ENTITY_CATEGORY_CONFIG,
                     ),
                     key=CONF_NAME,
-                )
-                for x in range(5)
-            },
-        }
-    ).extend(BASE_SCHEMA),
+                ),
+            }
+        ).extend(BASE_SCHEMA),
+        2: cv.Schema(
+            {
+                cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV2),
+                **{
+                    cv.Optional(f"timer{x + 1}_output_power"): cv.maybe_simple_value(
+                        number.number_schema(
+                            TimerOutputPowerNumber,
+                            unit_of_measurement=UNIT_WATT,
+                            entity_category=ENTITY_CATEGORY_CONFIG,
+                        ),
+                        key=CONF_NAME,
+                    )
+                    for x in range(5)
+                },
+            }
+        ).extend(BASE_SCHEMA),
+    },
+    key=CONF_B2500_GENERATION,
+    int=True,
 )
 
 NUMBER_ATTRS = {

@@ -41,10 +41,9 @@ MARKERS: dict[str] = [
     CONF_LAST_RESPONSE,
 ]
 
-CONFIG_SCHEMA = B2500_COMPONENT_SCHEMA.extend(
+TEXT_SENSOR_BASE_SCHEMA = B2500_COMPONENT_SCHEMA.extend(
     {
         cv.GenerateID(): cv.declare_id(B2500TextSensor),
-        cv.Required(CONF_B2500_GENERATION): cv.int_range(1, 2),
     }
 ).extend(
     {
@@ -54,6 +53,15 @@ CONFIG_SCHEMA = B2500_COMPONENT_SCHEMA.extend(
         )
         for marker in MARKERS
     }
+)
+
+CONFIG_SCHEMA = cv.typed_schema(
+    {
+        1: TEXT_SENSOR_BASE_SCHEMA,
+        2: TEXT_SENSOR_BASE_SCHEMA,
+    },
+    key=CONF_B2500_GENERATION,
+    int=True,
 )
 
 
