@@ -13,11 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        example: 
+        esphome_version: ["latest", "2025.6.3"]
+        example:
           - basic-v1
           - basic-v2
           - advanced
-        template: 
+        template:
           - v1
           - v2
           - v2-minimal
@@ -80,7 +81,7 @@ jobs:
         uses: esphome/build-action@v7.0.0
         with:
           yaml-file: device.yaml
-          version: '2025.6.3'
+          version: ${{ matrix.esphome_version }}
 
       - name: Create zip with password
         run: |
@@ -89,11 +90,14 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}-${{ matrix.template }}-${{ matrix.mqtt_enabled }}
+          name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}-${{ matrix.template }}-${{ matrix.mqtt_enabled }}-${{ matrix.esphome_version }}
           path: firmware.zip
 
   component_tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        esphome_version: ["latest", "2025.6.3"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -104,7 +108,12 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install esphome pytest
+        run: |
+          if [ "${{ matrix.esphome_version }}" = "latest" ]; then
+            pip install esphome pytest
+          else
+            pip install esphome==${{ matrix.esphome_version }} pytest
+          fi
 
       - name: Run tests
         run: pytest -q
