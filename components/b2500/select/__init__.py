@@ -31,19 +31,21 @@ BASE_SCHEMA = cv.Schema(
     }
 )
 
-CONFIG_SCHEMA = cv.Any(
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV1),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(1),
-        }
-    ).extend(BASE_SCHEMA),
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV2),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(2),
-        }
-    ).extend(BASE_SCHEMA),
+CONFIG_SCHEMA = cv.typed_schema(
+    {
+        1: cv.Schema(
+            {
+                cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV1),
+            }
+        ).extend(BASE_SCHEMA),
+        2: cv.Schema(
+            {
+                cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV2),
+            }
+        ).extend(BASE_SCHEMA),
+    },
+    key=CONF_B2500_GENERATION,
+    int=True,
 )
 
 

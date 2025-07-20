@@ -185,72 +185,74 @@ BASE_SCHEMA = cv.Schema(
     }
 )
 
-CONFIG_SCHEMA = cv.Any(
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV1),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(1),
-        }
-    ).extend(BASE_SCHEMA),
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV2),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(2),
-            cv.Optional(CONF_ADAPTIVE_POWER_OUT): cv.maybe_simple_value(
-                sensor.sensor_schema(
-                    unit_of_measurement=UNIT_WATT,
-                    state_class=STATE_CLASS_MEASUREMENT,
-                    device_class=DEVICE_CLASS_POWER,
-                    accuracy_decimals=0,
+CONFIG_SCHEMA = cv.typed_schema(
+    {
+        1: cv.Schema(
+            {
+                cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV1),
+            }
+        ).extend(BASE_SCHEMA),
+        2: cv.Schema(
+            {
+                cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV2),
+                cv.Optional(CONF_ADAPTIVE_POWER_OUT): cv.maybe_simple_value(
+                    sensor.sensor_schema(
+                        unit_of_measurement=UNIT_WATT,
+                        state_class=STATE_CLASS_MEASUREMENT,
+                        device_class=DEVICE_CLASS_POWER,
+                        accuracy_decimals=0,
+                    ),
+                    key=CONF_NAME,
                 ),
-                key=CONF_NAME,
-            ),
-            cv.Optional(CONF_SMART_METER_READING): cv.maybe_simple_value(
-                sensor.sensor_schema(
-                    unit_of_measurement=UNIT_VOLT_AMPS,
-                    state_class=STATE_CLASS_MEASUREMENT,
-                    accuracy_decimals=0,
+                cv.Optional(CONF_SMART_METER_READING): cv.maybe_simple_value(
+                    sensor.sensor_schema(
+                        unit_of_measurement=UNIT_VOLT_AMPS,
+                        state_class=STATE_CLASS_MEASUREMENT,
+                        accuracy_decimals=0,
+                    ),
+                    key=CONF_NAME,
                 ),
-                key=CONF_NAME,
-            ),
-            cv.Optional(CONF_DAILY_TOTAL_BATTERY_CHARGE): cv.maybe_simple_value(
-                sensor.sensor_schema(
-                    unit_of_measurement=UNIT_WATT_HOURS,
-                    state_class=STATE_CLASS_TOTAL_INCREASING,
-                    device_class=DEVICE_CLASS_ENERGY,
-                    accuracy_decimals=0,
+                cv.Optional(CONF_DAILY_TOTAL_BATTERY_CHARGE): cv.maybe_simple_value(
+                    sensor.sensor_schema(
+                        unit_of_measurement=UNIT_WATT_HOURS,
+                        state_class=STATE_CLASS_TOTAL_INCREASING,
+                        device_class=DEVICE_CLASS_ENERGY,
+                        accuracy_decimals=0,
+                    ),
+                    key=CONF_NAME,
                 ),
-                key=CONF_NAME,
-            ),
-            cv.Optional(CONF_DAILY_TOTAL_BATTERY_DISCHARGE): cv.maybe_simple_value(
-                sensor.sensor_schema(
-                    unit_of_measurement=UNIT_WATT_HOURS,
-                    state_class=STATE_CLASS_TOTAL_INCREASING,
-                    device_class=DEVICE_CLASS_ENERGY,
-                    accuracy_decimals=0,
+                cv.Optional(CONF_DAILY_TOTAL_BATTERY_DISCHARGE): cv.maybe_simple_value(
+                    sensor.sensor_schema(
+                        unit_of_measurement=UNIT_WATT_HOURS,
+                        state_class=STATE_CLASS_TOTAL_INCREASING,
+                        device_class=DEVICE_CLASS_ENERGY,
+                        accuracy_decimals=0,
+                    ),
+                    key=CONF_NAME,
                 ),
-                key=CONF_NAME,
-            ),
-            cv.Optional(CONF_DAILY_TOTAL_LOAD_CHARGE): cv.maybe_simple_value(
-                sensor.sensor_schema(
-                    unit_of_measurement=UNIT_WATT_HOURS,
-                    state_class=STATE_CLASS_TOTAL_INCREASING,
-                    device_class=DEVICE_CLASS_ENERGY,
-                    accuracy_decimals=0,
+                cv.Optional(CONF_DAILY_TOTAL_LOAD_CHARGE): cv.maybe_simple_value(
+                    sensor.sensor_schema(
+                        unit_of_measurement=UNIT_WATT_HOURS,
+                        state_class=STATE_CLASS_TOTAL_INCREASING,
+                        device_class=DEVICE_CLASS_ENERGY,
+                        accuracy_decimals=0,
+                    ),
+                    key=CONF_NAME,
                 ),
-                key=CONF_NAME,
-            ),
-            cv.Optional(CONF_DAILY_TOTAL_LOAD_DISCHARGE): cv.maybe_simple_value(
-                sensor.sensor_schema(
-                    unit_of_measurement=UNIT_WATT_HOURS,
-                    state_class=STATE_CLASS_TOTAL_INCREASING,
-                    device_class=DEVICE_CLASS_ENERGY,
-                    accuracy_decimals=0,
+                cv.Optional(CONF_DAILY_TOTAL_LOAD_DISCHARGE): cv.maybe_simple_value(
+                    sensor.sensor_schema(
+                        unit_of_measurement=UNIT_WATT_HOURS,
+                        state_class=STATE_CLASS_TOTAL_INCREASING,
+                        device_class=DEVICE_CLASS_ENERGY,
+                        accuracy_decimals=0,
+                    ),
+                    key=CONF_NAME,
                 ),
-                key=CONF_NAME,
-            ),
-        }
-    ).extend(BASE_SCHEMA),
+            }
+        ).extend(BASE_SCHEMA),
+    },
+    key=CONF_B2500_GENERATION,
+    int=True,
 )
 
 

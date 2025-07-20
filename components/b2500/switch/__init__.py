@@ -23,46 +23,48 @@ CONF_ADAPTIVE_MODE = "adaptive_mode"
 
 BASE_SCHEMA = cv.Schema({})
 
-CONFIG_SCHEMA = cv.Any(
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV1),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(1),
-            **{
-                cv.Optional(f"out{x + 1}"): cv.maybe_simple_value(
+CONFIG_SCHEMA = cv.typed_schema(
+    {
+        1: cv.Schema(
+            {
+                cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV1),
+                **{
+                    cv.Optional(f"out{x + 1}"): cv.maybe_simple_value(
+                        switch.switch_schema(
+                            OutActiveSwitch,
+                            entity_category=ENTITY_CATEGORY_CONFIG,
+                        ),
+                        key=CONF_NAME,
+                    )
+                    for x in range(2)
+                },
+            }
+        ).extend(BASE_SCHEMA),
+        2: cv.Schema(
+            {
+                cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV2),
+                cv.Optional(CONF_ADAPTIVE_MODE): cv.maybe_simple_value(
                     switch.switch_schema(
-                        OutActiveSwitch,
+                        AdaptiveModeSwitch,
                         entity_category=ENTITY_CATEGORY_CONFIG,
                     ),
                     key=CONF_NAME,
-                )
-                for x in range(2)
-            },
-        }
-    ).extend(BASE_SCHEMA),
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_B2500_ID): cv.use_id(B2500ComponentV2),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(2),
-            cv.Optional(CONF_ADAPTIVE_MODE): cv.maybe_simple_value(
-                switch.switch_schema(
-                    AdaptiveModeSwitch,
-                    entity_category=ENTITY_CATEGORY_CONFIG,
                 ),
-                key=CONF_NAME,
-            ),
-            **{
-                cv.Optional(f"timer{x + 1}_enabled"): cv.maybe_simple_value(
-                    switch.switch_schema(
-                        TimerEnabledSwitch,
-                        entity_category=ENTITY_CATEGORY_CONFIG,
-                    ),
-                    key=CONF_NAME,
-                )
-                for x in range(5)
-            },
-        }
-    ).extend(BASE_SCHEMA),
+                **{
+                    cv.Optional(f"timer{x + 1}_enabled"): cv.maybe_simple_value(
+                        switch.switch_schema(
+                            TimerEnabledSwitch,
+                            entity_category=ENTITY_CATEGORY_CONFIG,
+                        ),
+                        key=CONF_NAME,
+                    )
+                    for x in range(5)
+                },
+            }
+        ).extend(BASE_SCHEMA),
+    },
+    key=CONF_B2500_GENERATION,
+    int=True,
 )
 
 

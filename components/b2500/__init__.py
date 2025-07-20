@@ -119,24 +119,28 @@ BASE_SCHEMA = (
     .extend(cv.polling_component_schema("10s"))
 )
 
-CONFIG_SCHEMA = cv.Any(
-    cv.Schema(
-        {
-            cv.GenerateID(): cv.declare_id(B2500ComponentV1),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(1),
-        }
-    ).extend(BASE_SCHEMA),
-    cv.Schema(
-        {
-            cv.GenerateID(): cv.declare_id(B2500ComponentV2),
-            cv.Required(CONF_B2500_GENERATION): cv.int_(2),
-            cv.Optional(CONF_ON_TIMER_INFO): automation.validate_automation(
-                {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(TimerInfoTrigger),
-                }
-            ),
-        }
-    ).extend(BASE_SCHEMA),
+CONFIG_SCHEMA = cv.typed_schema(
+    {
+        1: cv.Schema(
+            {
+                cv.GenerateID(): cv.declare_id(B2500ComponentV1),
+            }
+        ).extend(BASE_SCHEMA),
+        2: cv.Schema(
+            {
+                cv.GenerateID(): cv.declare_id(B2500ComponentV2),
+                cv.Optional(CONF_ON_TIMER_INFO): automation.validate_automation(
+                    {
+                        cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                            TimerInfoTrigger
+                        ),
+                    }
+                ),
+            }
+        ).extend(BASE_SCHEMA),
+    },
+    key=CONF_B2500_GENERATION,
+    int=True,
 )
 
 
