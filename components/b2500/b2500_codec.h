@@ -116,7 +116,7 @@ struct TimerInfo {
 struct SmartMeterInfo {
   uint8_t connected;
   uint16_t power_out;
-  uint16_t meter_reading;
+  int16_t meter_reading;
   uint16_t unknown;
 } __attribute__((packed));
 
