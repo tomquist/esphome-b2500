@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        esphome_version: ["latest", "2025.6.3"]
+        esphome_version: ["latest", "2025.9.0"]
         example:
           - basic-v1
           - basic-v2
@@ -78,7 +78,7 @@ jobs:
 
       - name: Build firmware
         id: esphome-build
-        uses: esphome/build-action@v7.0.0
+        uses: esphome/build-action@v7.1.0
         with:
           yaml-file: device.yaml
           version: ${{ matrix.esphome_version }}
@@ -97,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        esphome_version: ["latest", "2025.6.3"]
+        esphome_version: ["latest", "2025.9.0"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
