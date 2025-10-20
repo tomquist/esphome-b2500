@@ -2,6 +2,10 @@ from esphome import automation
 from esphome.automation import maybe_simple_id
 import esphome.codegen as cg
 from esphome.components import binary_sensor, ble_client, time, esp32_ble_tracker
+try:
+    from esphome.components import esp32_ble
+except ImportError:  # pragma: no cover - older ESPHome releases
+    esp32_ble = None
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_DATETIME,
@@ -38,7 +42,24 @@ CONF_ON_FC41D_INFO = "on_fc41d_info"
 CONF_ON_TIMER_INFO = "on_timer_info"
 
 AUTO_LOAD = ["b2500"]
-MULTI_CONF = esp32_ble_tracker.max_connections()
+
+
+def _get_max_connections():
+    if hasattr(esp32_ble_tracker, "max_connections"):
+        return esp32_ble_tracker.max_connections()
+
+    if esp32_ble is not None:
+        from esphome.core import CORE
+
+        default = getattr(esp32_ble, "DEFAULT_MAX_CONNECTIONS", 1)
+        idf = getattr(esp32_ble, "IDF_MAX_CONNECTIONS", default)
+        return idf if CORE.using_esp_idf else default
+
+    # Fallback to a single instance if both helper APIs are unavailable
+    return 1
+
+
+MULTI_CONF = _get_max_connections()
 
 b2500_ns = cg.esphome_ns.namespace("b2500")
 
