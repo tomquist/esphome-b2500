@@ -17,7 +17,7 @@ def generate_main():
     """Generates the C++ main.cpp file and returns it as a string."""
 
     def generator(path: str) -> str:
-        CORE.config_path = path
+        CORE.config_path = Path(path)
         CORE.config = read_config({})
         generate_cpp_contents(CORE.config)
         return CORE.cpp_main_section
