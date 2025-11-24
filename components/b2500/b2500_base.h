@@ -5,7 +5,7 @@
 #include <esp_gattc_api.h>
 #include "esphome/core/component.h"
 #include "esphome/components/ble_client/ble_client.h"
-#include "esphome/components/select/select_traits.h"
+#include "esphome/components/select/select.h"
 #include "esphome/components/time/real_time_clock.h"
 
 #include <queue>
