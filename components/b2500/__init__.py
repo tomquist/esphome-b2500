@@ -28,7 +28,7 @@ from esphome.const import (
 )
 
 CODEOWNERS = ["@tomquist"]
-DEPENDENCIES = ["ble_client", "time"]
+DEPENDENCIES = ["ble_client", "time", "select"]
 CONF_B2500_ID = "b2500_id"
 CONF_B2500_GENERATION = "generation"
 CONF_HOST = "host"
