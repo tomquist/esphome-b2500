@@ -5,6 +5,7 @@
 #include <esp_gattc_api.h>
 #include "esphome/core/component.h"
 #include "esphome/components/ble_client/ble_client.h"
+#include "esphome/components/select/select_traits.h"
 #include "esphome/components/time/real_time_clock.h"
 
 #include <queue>
@@ -39,6 +40,7 @@ class B2500ComponentBase : public PollingComponent, public ble_client::BLEClient
                            esp_ble_gattc_cb_param_t *param) override;
 
   virtual std::vector<std::string> get_valid_charge_modes() { return {}; }
+  virtual void set_charge_mode_traits(select::SelectTraits &traits) const = 0;
   virtual std::string get_charge_mode() = 0;
 
   void set_time(time::RealTimeClock *time) { this->time_ = time; }

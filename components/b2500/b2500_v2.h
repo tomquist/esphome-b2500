@@ -12,6 +12,7 @@ class B2500ComponentV2 : public B2500ComponentBase {
   B2500ComponentV2() : B2500ComponentBase(2) {}
 
   std::vector<std::string> get_valid_charge_modes() override;
+  void set_charge_mode_traits(select::SelectTraits &traits) const override;
 
   std::string get_charge_mode() override;
 
