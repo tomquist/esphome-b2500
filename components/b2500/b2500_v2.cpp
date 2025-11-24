@@ -9,10 +9,6 @@ constexpr const char *CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE = "Simultane
 namespace esphome {
 namespace b2500 {
 
-std::vector<std::string> B2500ComponentV2::get_valid_charge_modes() {
-  return {CHARGE_MODE_LOAD_FIRST, CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE};
-}
-
 void B2500ComponentV2::set_charge_mode_traits(select::SelectTraits &traits) const {
   traits.set_options({CHARGE_MODE_LOAD_FIRST, CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE});
 }

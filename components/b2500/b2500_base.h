@@ -39,7 +39,6 @@ class B2500ComponentBase : public PollingComponent, public ble_client::BLEClient
   void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param) override;
 
-  virtual std::vector<std::string> get_valid_charge_modes() { return {}; }
   virtual void set_charge_mode_traits(select::SelectTraits &traits) const = 0;
   virtual std::string get_charge_mode() = 0;
 
