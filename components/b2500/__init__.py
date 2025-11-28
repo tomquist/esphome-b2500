@@ -28,7 +28,7 @@ from esphome.const import (
 )
 
 CODEOWNERS = ["@tomquist"]
-DEPENDENCIES = ["ble_client", "time"]
+DEPENDENCIES = ["ble_client", "time", "select"]
 CONF_B2500_ID = "b2500_id"
 CONF_B2500_GENERATION = "generation"
 CONF_HOST = "host"
@@ -41,7 +41,7 @@ CONF_ON_WIFI_INFO = "on_wifi_info"
 CONF_ON_FC41D_INFO = "on_fc41d_info"
 CONF_ON_TIMER_INFO = "on_timer_info"
 
-AUTO_LOAD = ["b2500"]
+AUTO_LOAD = ["b2500", "select"]
 
 
 def _get_max_connections():

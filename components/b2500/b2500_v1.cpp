@@ -3,14 +3,14 @@
 #include "b2500_v1.h"
 #include "esphome/core/log.h"
 
-const std::string CHARGE_MODE_LOAD_FIRST = "LoadFirst";
-const std::string CHARGE_MODE_PV2_PASSTHROUGH = "PV2Passthrough";
+constexpr const char *CHARGE_MODE_LOAD_FIRST = "LoadFirst";
+constexpr const char *CHARGE_MODE_PV2_PASSTHROUGH = "PV2Passthrough";
 
 namespace esphome {
 namespace b2500 {
 
-std::vector<std::string> B2500ComponentV1::get_valid_charge_modes() {
-  return {CHARGE_MODE_LOAD_FIRST, CHARGE_MODE_PV2_PASSTHROUGH};
+void B2500ComponentV1::set_charge_mode_traits(select::SelectTraits &traits) const {
+  traits.set_options({CHARGE_MODE_LOAD_FIRST, CHARGE_MODE_PV2_PASSTHROUGH});
 }
 
 bool B2500ComponentV1::set_out_active(int out, bool active) {
