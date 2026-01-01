@@ -168,19 +168,21 @@ bool B2500Codec::parse_wifi_info(uint8_t *data, uint16_t data_len, WifiInfoPacke
   const char *start = reinterpret_cast<const char *>(data + sizeof(B2500PacketHeader) + 2);
   const char *end = reinterpret_cast<const char *>(data + data_len);
 
-  // Ensure SSID is within a reasonable length
+  // Newer firmware versions may send invalid/empty SSID data, handle gracefully
   if (start >= end) {
-    ESP_LOGW(TAG, "SSID is empty or invalid");
-    return false;
+    ESP_LOGD(TAG, "SSID is empty or invalid (newer firmware may not send SSID)");
+    payload.ssid = "";
+    return true;
   }
 
   // Assign SSID to the payload
   auto ssid = std::string(start, end);
 
-  // Optional: Validate the SSID string (e.g., check for non-printable characters)
+  // Validate the SSID string (e.g., check for non-printable characters)
   if (ssid.empty() || !std::all_of(ssid.begin(), ssid.end(), ::isprint)) {
-    ESP_LOGW(TAG, "SSID contains non-printable characters or is empty");
-    return false;
+    ESP_LOGD(TAG, "SSID contains non-printable characters or is empty (newer firmware may not send SSID)");
+    payload.ssid = "";
+    return true;
   }
 
   payload.ssid = ssid;
