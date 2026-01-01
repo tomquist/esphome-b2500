@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        esphome_version: ["latest", "2025.11.0"]
+        esphome_version: ["latest", "2025.12.4"]
         example:
           - basic-v1
           - basic-v2
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        esphome_version: ["latest", "2025.11.0"]
+        esphome_version: ["latest", "2025.12.4"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
