@@ -212,8 +212,11 @@ time:
     id: sntp_time
     timezone: "{{ yaml_string(timezone) }}"
 
-esp32_ble_tracker:
+esp32_ble:
+  id: ble
   max_connections: {{ storages|length }}
+
+esp32_ble_tracker:
 
 ble_client:
 {%- for storage in storages %}
