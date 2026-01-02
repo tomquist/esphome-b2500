@@ -42,7 +42,7 @@
 {%- set fallback_hotspot = fallback_hotspot or {} %}
 {%- set fallback_hotspot_ssid = fallback_hotspot.ssid or '' %}
 {%- set fallback_hotspot_enable_captive_portal = fallback_hotspot.enable_captive_portal or False %}
-{%- set use_legacy_entity_names = use_legacy_entity_names if use_legacy_entity_names is defined else true %}
+{%- set use_legacy_entity_names = use_legacy_entity_names if use_legacy_entity_names is defined else false %}
 {%- macro isV2(deviceNr) %}({%- for storage in storages -%}
             {%- if storage.version >= 2 %}ble_device_nr=={{ loop.index }}{% else %}false{% endif %}
             {%- if not loop.last %} || {% endif -%}

@@ -85,7 +85,7 @@ export const defaultFormValues: FormValues = {
     enabled: false,
   },
   enable_dio_flash_mode: false,
-  use_legacy_entity_names: true,
+  use_legacy_entity_names: false,
   storages: [{ name: 'B2500', version: 1, mac_address: '00:00:00:00:00:00' }],
 };
 

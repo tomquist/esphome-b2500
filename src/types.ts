@@ -156,7 +156,7 @@ export interface FormValues {
   /**
    * Use legacy entity names with device prefix (e.g., "B2500 - 1 - Storage: Battery Level")
    * instead of simplified names (e.g., "Battery Level").
-   * Defaults to true for backward compatibility.
+   * Defaults to false. Enable for backward compatibility with existing configurations.
    */
   use_legacy_entity_names: boolean;
 

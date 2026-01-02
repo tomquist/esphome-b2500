@@ -644,10 +644,11 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           helperText={
             <>
               When enabled, entity names include the device prefix (e.g.,{' '}
-              <code>B2500 - 1 - Storage: Battery Level</code>). When disabled,
-              entity names are simplified (e.g., <code>Battery Level</code>).
-              Device grouping is provided by sub-devices in both cases. Leave
-              enabled for backward compatibility with existing configurations.
+              <code>B2500 - 1 - Storage: Battery Level</code>). When disabled
+              (default), entity names are simplified (e.g.,{' '}
+              <code>Battery Level</code>). Device grouping is provided by
+              sub-devices in both cases. Enable this for backward compatibility
+              with existing configurations.
             </>
           }
         />
