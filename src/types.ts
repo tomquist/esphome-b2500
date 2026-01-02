@@ -153,5 +153,12 @@ export interface FormValues {
    */
   enable_dio_flash_mode: boolean;
 
+  /**
+   * Use legacy entity names with device prefix (e.g., "B2500 - 1 - Storage: Battery Level")
+   * instead of simplified names (e.g., "Battery Level").
+   * Defaults to true for backward compatibility.
+   */
+  use_legacy_entity_names: boolean;
+
   storages: Storage[];
 }
