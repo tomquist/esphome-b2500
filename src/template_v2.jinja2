@@ -68,6 +68,13 @@
 esphome:
   name: "{{ yaml_string(name) }}"
   friendly_name: "{{ yaml_string(friendly_name) }}"
+{%- if storages|length > 0 %}
+  devices:
+{%- for storage in storages %}
+    - id: b2500_device_{{ loop.index }}
+      name: "{{ yaml_string(storage.name) }}"
+{%- endfor %}
+{%- endif %}
 {%- if enable_dio_flash_mode %}
   platformio_options:
     board_build.flash_mode: dio
@@ -256,12 +263,14 @@ button:
     reboot:
       id: b2500_button_reboot_{{ loop.index }}
       name: "{{ sensor_prefix(loop.index, storage) }} Reboot B2500"
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/reboot/set"
 {%- endif %}
     factory_reset:
       id: b2500_button_factory_reset_{{ loop.index }}
       name: "{{ sensor_prefix(loop.index, storage) }} Reset to Factory Settings"
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/factory_settings/set"
 {%- endif %}
@@ -270,6 +279,7 @@ button:
   - platform: template
     id: b2500_button_set_wifi{{ loop.index }}
     name: "{{ sensor_prefix(loop.index, storage) }} Set Wifi SSID / Password"
+    device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/wifi/set"
 {%- endif %}
@@ -284,10 +294,11 @@ button:
 {%- if enable_set_mqtt %}
   - platform: template
     id: b2500_button_set_mqtt_{{ loop.index }}
+    name: "{{ sensor_prefix(loop.index, storage) }} Set MQTT to {{ mqtt_broker }}"
+    device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/mqtt/set"
 {%- endif %}
-    name: "{{ sensor_prefix(loop.index, storage) }} Set MQTT to {{ mqtt_broker }}"
     disabled_by_default: True
     on_press:
       then:
@@ -302,10 +313,11 @@ button:
 {%- if enable_reset_mqtt %}
   - platform: template
     id: b2500_button_reset_mqtt_{{ loop.index }}
+    name: "{{ sensor_prefix(loop.index, storage) }} Reset MQTT"
+    device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/mqtt/reset"
 {%- endif %}
-    name: "{{ sensor_prefix(loop.index, storage) }} Reset MQTT"
     disabled_by_default: True
     on_press:
       then:
@@ -327,6 +339,7 @@ datetime:
     timer{{ loop.index }}_start:
       id: b2500_timer{{ loop.index }}_time_start_{{ storage_loop.index }}
       name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Start Time"
+      device_id: b2500_device_{{ storage_loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/start"
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/start/set"
@@ -334,6 +347,7 @@ datetime:
     timer{{ loop.index }}_end:
       id: b2500_timer{{ loop.index }}_time_end_{{ storage_loop.index }}
       name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} End Time"
+      device_id: b2500_device_{{ storage_loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/end"
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/end/set"
@@ -352,6 +366,7 @@ number:
     discharge_threshold:
       id: b2500_battery_discharge_threshold_{{ loop.index }}
       name: "{{ sensor_prefix(loop.index, storage) }} Discharge Threshold"
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/discharge_threshold"
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/discharge_threshold/set"
@@ -360,6 +375,7 @@ number:
     dod:
       id: b2500_battery_dod_{{ loop.index }}
       name: "{{ sensor_prefix(loop.index, storage) }} Depth of Discharge"
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/dod"
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/dod/set"
@@ -370,6 +386,7 @@ number:
     timer{{ loop.index }}_output_power:
       id: b2500_timer{{ loop.index }}_power_{{ storage_loop.index }}
       name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Output Power"
+      device_id: b2500_device_{{ storage_loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/power"
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/power/set"
@@ -429,6 +446,7 @@ switch:
     ble_client_id: b2500_ble_client_{{ loop.index }}
     name: "{{ sensor_prefix(loop.index, storage) }} Bluetooth Enabled"
     id: b2500_bluetooth_enabled_{{ loop.index }}
+    device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/bluetooth/enabled"
     command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/bluetooth/enabled/set"
@@ -443,6 +461,7 @@ switch:
     out{{ loop.index }}:
       id: b2500_out{{ loop.index }}_active_{{ storage_loop.index }}
       name: "{{ sensor_prefix(storage_loop.index, storage) }} Out {{ loop.index }} - Active"
+      device_id: b2500_device_{{ storage_loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled"
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled/set"
@@ -453,6 +472,7 @@ switch:
     timer{{ loop.index }}_enabled:
       id: b2500_timer{{ loop.index }}_enabled_{{ storage_loop.index }}
       name: "{{ sensor_prefix(storage_loop.index, storage) }} Timer {{ loop.index }} Enabled"
+      device_id: b2500_device_{{ storage_loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/enabled"
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/enabled/set"
@@ -461,6 +481,7 @@ switch:
     adaptive_mode:
       id: b2500_smartmeter_enabled_{{ loop.index }}
       name: "{{ sensor_prefix(loop.index, storage) }} SmartMeter Enabled"
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/enabled"
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/enabled/set"
@@ -488,6 +509,7 @@ select:
     charge_mode:
       id: b2500_charge_mode_{{ loop.index }}
       name: "{{ sensor_prefix(loop.index, storage) }} Charge Mode"
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/charge_mode"
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/charge_mode/set"
@@ -499,6 +521,7 @@ text_sensor:
   - platform: template
     name: "{{ sensor_prefix(loop.index, storage) }} Generation"
     id: b2500_device_generation_{{ loop.index }}
+    device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/generation"
 {%- endif %}
@@ -506,6 +529,7 @@ text_sensor:
   - platform: template
     name: "{{ sensor_prefix(loop.index, storage) }} Name"
     id: b2500_device_name_{{ loop.index }}
+    device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/name"
 {%- endif %}
@@ -516,21 +540,24 @@ text_sensor:
     device_type:
       name: "{{ sensor_prefix(loop.index, storage) }} Device Type"
       id: b2500_device_type_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/type"
 {%- endif %}
       icon: mdi:devices
     device_id:
       name: "{{ sensor_prefix(loop.index, storage) }} Device ID"
+      id: b2500_device_id_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/id"
 {%- endif %}
-      id: b2500_device_id_{{ loop.index }}
       icon: mdi:identifier
 {% if storage.version >= 2 %}
     device_time:
       name: "{{ sensor_prefix(loop.index, storage) }} Device Time"
       id: b2500_device_time_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/time"
       retain: false
@@ -540,6 +567,7 @@ text_sensor:
     firmware_version:
       name: "{{ sensor_prefix(loop.index, storage) }} Device Firmware Version"
       id: b2500_device_fw_version_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/fw_version"
 {%- endif %}
@@ -547,6 +575,7 @@ text_sensor:
     mac_address:
       name: "{{ sensor_prefix(loop.index, storage) }} MAC Address"
       id: b2500_device_ble_mac_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/ble_mac"
 {%- endif %}
@@ -554,6 +583,7 @@ text_sensor:
     wifi_ssid:
       name: "{{ sensor_prefix(loop.index, storage) }} Wifi SSID"
       id: b2500_device_wifi_ssid_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/wifi_ssid"
 {%- endif %}
@@ -561,6 +591,7 @@ text_sensor:
     fc41d_version:
       name: "{{ sensor_prefix(loop.index, storage) }} FC41D-Firmware"
       id: b2500_device_fc41d_fw_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/fc41d_fw"
 {%- endif %}
@@ -568,6 +599,7 @@ text_sensor:
     scene:
       name: "{{ sensor_prefix(loop.index, storage) }} Scene"
       id: b2500_device_scene_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/scene"
 {%- endif %}
@@ -575,6 +607,7 @@ text_sensor:
     region:
       name: "{{ sensor_prefix(loop.index, storage) }} Region"
       id: b2500_device_region_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/region"
 {%- endif %}
@@ -582,6 +615,7 @@ text_sensor:
     last_response:
       name: "{{ sensor_prefix(loop.index, storage) }} Last Response"
       id: b2500_device_last_response_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/last_response"
       retain: false
@@ -590,6 +624,7 @@ text_sensor:
     cell_voltage:
       name: "{{ sensor_prefix(loop.index, storage) }} Cell Voltage"
       id: b2500_device_cell_voltage_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/cell_voltage"
       retain: false
@@ -606,6 +641,7 @@ binary_sensor:
     in1_active:
       name: "{{ sensor_prefix(loop.index, storage) }} PV 1 - Active"
       id: b2500_pv1_active_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv1/active"
 {%- endif %}
@@ -613,6 +649,7 @@ binary_sensor:
     in2_active:
       name: "{{ sensor_prefix(loop.index, storage) }} PV 2 - Active"
       id: b2500_pv2_active_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/active"
 {%- endif %}
@@ -620,6 +657,7 @@ binary_sensor:
     in1_transparent:
       name: "{{ sensor_prefix(loop.index, storage) }} PV 1 - Transparent"
       id: b2500_pv1_transparent_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv1/transparent"
 {%- endif %}
@@ -627,6 +665,7 @@ binary_sensor:
     in2_transparent:
       name: "{{ sensor_prefix(loop.index, storage) }} PV 2 - Transparent"
       id: b2500_pv2_transparent_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/transparent"
 {%- endif %}
@@ -634,6 +673,7 @@ binary_sensor:
     wifi_connected:
       name: "{{ sensor_prefix(loop.index, storage) }} Wifi Connected"
       id: b2500_device_wifi_ok_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/wifi_ok"
 {%- endif %}
@@ -641,6 +681,7 @@ binary_sensor:
     mqtt_connected:
       name: "{{ sensor_prefix(loop.index, storage) }} MQTT Connected"
       id: b2500_device_mqtt_ok_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/mqtt_ok"
 {%- endif %}
@@ -648,6 +689,7 @@ binary_sensor:
     out1_active:
       name: "{{ sensor_prefix(loop.index, storage) }} Out 1 - Active"
       id: b2500_power1_active_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power1/active"
 {%- endif %}
@@ -655,6 +697,7 @@ binary_sensor:
     out2_active:
       name: "{{ sensor_prefix(loop.index, storage) }} Out 2 - Active"
       id: b2500_power2_active_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power2/active"
 {%- endif %}
@@ -662,6 +705,7 @@ binary_sensor:
     extern1_connected:
       name: "{{ sensor_prefix(loop.index, storage) }} Extension 1 connected"
       id: b2500_extern1_connected_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/extern1/connected"
 {%- endif %}
@@ -669,6 +713,7 @@ binary_sensor:
     extern2_connected:
       name: "{{ sensor_prefix(loop.index, storage) }} Extension 2 connected"
       id: b2500_extern2_connected_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/extern2/connected"
 {%- endif %}
@@ -677,6 +722,7 @@ binary_sensor:
     smart_meter_connected:
       name: "{{ sensor_prefix(loop.index, storage) }} SmartMeter Connected"
       id: b2500_smartmeter_connected_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/connected"
 {%- endif %}
@@ -686,6 +732,7 @@ binary_sensor:
   - platform: template
     name: "{{ sensor_prefix(loop.index, storage) }} BLE Connected"
     id: b2500_device_ble_ok_{{ loop.index }}
+    device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/ble_ok"
 {%- endif %}
@@ -781,6 +828,7 @@ sensor:
     in1_power:
       name: "{{ sensor_prefix(loop.index, storage) }} In 1 - Power"
       id: b2500_in1_power_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv1/power"
       retain: false
@@ -790,6 +838,7 @@ sensor:
     in2_power:
       name: "{{ sensor_prefix(loop.index, storage) }} In 2 - Power"
       id: b2500_in2_power_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv2/power"
       retain: false
@@ -799,6 +848,7 @@ sensor:
     in_total_power:
       name: "{{ sensor_prefix(loop.index, storage) }} Total Power In"
       id: b2500_total_power_in_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv/power"
       retain: false
@@ -812,6 +862,7 @@ sensor:
     out1_power:
       name: "{{ sensor_prefix(loop.index, storage) }} Out 1 - Power"
       id: b2500_out1_power_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power1/power"
       retain: false
@@ -820,6 +871,7 @@ sensor:
     out2_power:
       name: "{{ sensor_prefix(loop.index, storage) }} Out 2 - Power"
       id: b2500_out2_power_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power2/power"
       retain: false
@@ -828,6 +880,7 @@ sensor:
     out_total_power:
       name: "{{ sensor_prefix(loop.index, storage) }} Total Power Out"
       id: b2500_total_power_out_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power/power"
       retain: false
@@ -841,6 +894,7 @@ sensor:
     soc:
       name: "{{ sensor_prefix(loop.index, storage) }} Battery Level"
       id: b2500_battery_remaining_percent_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/remaining_percent"
       retain: false
@@ -848,6 +902,7 @@ sensor:
     capacity:
       name: "{{ sensor_prefix(loop.index, storage) }} Battery Capacity"
       id: b2500_battery_remaining_capacity_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/remaining_capacity"
       retain: false
@@ -861,6 +916,7 @@ sensor:
     temperature_low:
       name: "{{ sensor_prefix(loop.index, storage) }} Temperature 1"
       id: b2500_device_temperature1_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/temp1"
       retain: false
@@ -870,6 +926,7 @@ sensor:
     temperature_high:
       name: "{{ sensor_prefix(loop.index, storage) }} Temperature 2"
       id: b2500_device_temperature2_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/temp2"
       retain: false
@@ -880,6 +937,7 @@ sensor:
     adaptive_power_out:
       name: "{{ sensor_prefix(loop.index, storage) }} Smartmeter Power Out"
       id: b2500_smartmeter_power_out_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/out"
       retain: false
@@ -889,6 +947,7 @@ sensor:
     smart_meter_reading:
       name: "{{ sensor_prefix(loop.index, storage) }} Smartmeter Value"
       id: b2500_smartmeter_value_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/value"
       retain: false
@@ -898,6 +957,7 @@ sensor:
     daily_total_battery_charge:
       name: "{{ sensor_prefix(loop.index, storage) }} Daily Total Battery Charge"
       id: b2500_daily_total_battery_charge_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/daily_total_charge"
 {%- endif %}
@@ -907,6 +967,7 @@ sensor:
     daily_total_battery_discharge:
       name: "{{ sensor_prefix(loop.index, storage) }} Daily Total Battery Discharge"
       id: b2500_daily_total_battery_discharge_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/battery/daily_total_discharge"
 {%- endif %}
@@ -916,6 +977,7 @@ sensor:
     daily_total_load_charge:
       name: "{{ sensor_prefix(loop.index, storage) }} Daily Total Load Charge"
       id: b2500_daily_total_load_charge_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/load/daily_total_charge"
 {%- endif %}
@@ -925,6 +987,7 @@ sensor:
     daily_total_load_discharge:
       name: "{{ sensor_prefix(loop.index, storage) }} Daily Total Load Discharge"
       id: b2500_daily_total_load_discharge_{{ loop.index }}
+      device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/load/daily_total_discharge"
 {%- endif %}
@@ -935,6 +998,7 @@ sensor:
   - platform: total_daily_energy
     name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy In"
     id: b2500_total_daily_energy_in_{{ loop.index }}
+    device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv/energy"
 {%- endif %}
@@ -954,6 +1018,7 @@ sensor:
   - platform: total_daily_energy
     name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy Out"
     id: b2500_total_daily_energy_out_{{ loop.index }}
+    device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power/energy"
 {%- endif %}
