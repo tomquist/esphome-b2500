@@ -156,7 +156,8 @@ export interface FormValues {
   /**
    * Use legacy entity names with device prefix (e.g., "B2500 - 1 - Storage: Battery Level")
    * instead of simplified names (e.g., "Battery Level").
-   * Defaults to false. Enable for backward compatibility with existing configurations.
+   * Defaults to true. Simplified names are currently not supported by ESPHome webserver.
+   * See: https://github.com/esphome/esphome-webserver/issues/153
    */
   use_legacy_entity_names: boolean;
 

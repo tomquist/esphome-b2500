@@ -643,12 +643,23 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           label="Use Legacy Entity Names"
           helperText={
             <>
-              When enabled, entity names include the device prefix (e.g.,{' '}
-              <code>B2500 - 1 - Storage: Battery Level</code>). When disabled
-              (default), entity names are simplified (e.g.,{' '}
+              When enabled (default), entity names include the device prefix
+              (e.g., <code>B2500 - 1 - Storage: Battery Level</code>). When
+              disabled, entity names are simplified (e.g.,{' '}
               <code>Battery Level</code>). Device grouping is provided by
-              sub-devices in both cases. Enable this for backward compatibility
-              with existing configurations.
+              sub-devices in both cases.{' '}
+              <b>
+                Note: Simplified names are currently not supported by ESPHome
+                webserver (
+                <a
+                  href="https://github.com/esphome/esphome-webserver/issues/153"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  issue #153
+                </a>
+                ). Keep this enabled until the issue is resolved.
+              </b>
             </>
           }
         />
