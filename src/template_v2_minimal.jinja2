@@ -42,13 +42,14 @@
 {%- set fallback_hotspot = fallback_hotspot or {} %}
 {%- set fallback_hotspot_ssid = fallback_hotspot.ssid or '' %}
 {%- set fallback_hotspot_enable_captive_portal = fallback_hotspot.enable_captive_portal or False %}
+{%- set use_legacy_entity_names = use_legacy_entity_names if use_legacy_entity_names is defined else true %}
 {%- macro isV2(deviceNr) %}({%- for storage in storages -%}
             {%- if storage.version >= 2 %}ble_device_nr=={{ loop.index }}{% else %}false{% endif %}
             {%- if not loop.last %} || {% endif -%}
             {%- endfor %}){% endmacro %}
 {%- macro yaml_string(value) %}{% set escaped_value = value | replace('\\', '\\\\') | replace('"', '\\"') %}{{ escaped_value }}{% endmacro %}
 {%- macro yaml_lambda_string(value) %}{% set escaped_value = yaml_string(value) | replace('#', '\\#') %}{{ escaped_value }}{% endmacro %}
-{%- macro sensor_prefix(loopindex, storage) %}B2500 - {{ loopindex }} - {{ yaml_string(storage.name) }}:{% endmacro %}
+{%- macro sensor_prefix(loopindex, storage) %}{%- if use_legacy_entity_names %}B2500 - {{ loopindex }} - {{ yaml_string(storage.name) }}:{% endif %}{% endmacro %}
 {%- set hasV1 = false %}
 {%- set hasV2 = false %}
 {%- for storage in storages %}
@@ -65,6 +66,13 @@
 esphome:
   name: "{{ yaml_string(name) }}"
   friendly_name: "{{ yaml_string(friendly_name) }}"
+{%- if storages|length > 0 %}
+  devices:
+{%- for storage in storages %}
+    - id: b2500_device_{{ loop.index }}
+      name: "{{ yaml_string(storage.name) }}"
+{%- endfor %}
+{%- endif %}
 {%- if enable_dio_flash_mode %}
   platformio_options:
     board_build.flash_mode: dio
@@ -502,18 +510,21 @@ button:
     reboot:
       id: b2500_button_reboot_{{ loop.index }}
       name: "{{ sensor_prefix(loop.index, storage) }} Reboot B2500"
+      device_id: b2500_device_{{ loop.index }}
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/reboot/set"
     factory_reset:
       id: b2500_button_factory_reset_{{ loop.index }}
       name: "{{ sensor_prefix(loop.index, storage) }} Reset to Factory Settings"
+      device_id: b2500_device_{{ loop.index }}
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/factory_settings/set"
       disabled_by_default: True
 {%- if storage.version >= 2 %}
 {%- if enable_reset_mqtt %}
   - platform: template
     id: b2500_button_reset_mqtt_{{ loop.index }}
-    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/mqtt/reset"
     name: "{{ sensor_prefix(loop.index, storage) }} Reset MQTT"
+    device_id: b2500_device_{{ loop.index }}
+    command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/mqtt/reset"
     disabled_by_default: True
     on_press:
       then:
@@ -565,8 +576,9 @@ switch:
 {%- for storage in storages %}
   - platform: ble_client
     ble_client_id: b2500_ble_client_{{ loop.index }}
-    name: "{{ sensor_prefix(loop.index, storage) }} Bluetooth Enabled"
     id: b2500_bluetooth_enabled_{{ loop.index }}
+    name: "{{ sensor_prefix(loop.index, storage) }} Bluetooth Enabled"
+    device_id: b2500_device_{{ loop.index }}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/bluetooth/enabled"
     command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/bluetooth/enabled/set"
     icon: mdi:bluetooth-connect
@@ -585,8 +597,9 @@ switch:
 binary_sensor:
 {%- for storage in storages %}
   - platform: template
-    name: "{{ sensor_prefix(loop.index, storage) }} BLE Connected"
     id: b2500_device_ble_ok_{{ loop.index }}
+    name: "{{ sensor_prefix(loop.index, storage) }} BLE Connected"
+    device_id: b2500_device_{{ loop.index }}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device/ble_ok"
     icon: mdi:bluetooth
 {%- endfor %}
@@ -672,46 +685,53 @@ sensor:
     b2500_id: b2500_{{ loop.index }}
     generation: {{ storage.version }}
     in1_power:
-      name: "{{ sensor_prefix(loop.index, storage) }} In 1 - Power"
       id: b2500_in1_power_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} In 1 - Power"
+      device_id: b2500_device_{{ loop.index }}
       device_class: power
       icon: mdi:solar-power
       retain: false
       internal: true
     in2_power:
-      name: "{{ sensor_prefix(loop.index, storage) }} In 2 - Power"
       id: b2500_in2_power_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} In 2 - Power"
+      device_id: b2500_device_{{ loop.index }}
       device_class: power
       icon: mdi:solar-power
       retain: false
       internal: true
     in_total_power:
-      name: "{{ sensor_prefix(loop.index, storage) }} Total Power In"
       id: b2500_total_power_in_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Total Power In"
+      device_id: b2500_device_{{ loop.index }}
       device_class: power
       retain: false
       internal: true
     out1_power:
-      name: "{{ sensor_prefix(loop.index, storage) }} Out 1 - Power"
       id: b2500_out1_power_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Out 1 - Power"
+      device_id: b2500_device_{{ loop.index }}
       device_class: power
       retain: false
       internal: true
     out2_power:
-      name: "{{ sensor_prefix(loop.index, storage) }} Out 2 - Power"
       id: b2500_out2_power_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Out 2 - Power"
+      device_id: b2500_device_{{ loop.index }}
       device_class: power
       retain: false
       internal: true
     out_total_power:
-      name: "{{ sensor_prefix(loop.index, storage) }} Total Power Out"
       id: b2500_total_power_out_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Total Power Out"
+      device_id: b2500_device_{{ loop.index }}
       device_class: power
       retain: false
       internal: true
   - platform: total_daily_energy
-    name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy In"
     id: b2500_total_daily_energy_in_{{ loop.index }}
+    name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy In"
+    device_id: b2500_device_{{ loop.index }}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/pv/energy"
     power_id: b2500_total_power_in_{{ loop.index }}
     unit_of_measurement: kWh
@@ -727,8 +747,9 @@ sensor:
         - script.execute: b2500_update_total_daily_energy_in
     {%- endif %}
   - platform: total_daily_energy
-    name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy Out"
     id: b2500_total_daily_energy_out_{{ loop.index }}
+    name: "{{ sensor_prefix(loop.index, storage) }} Total Daily Energy Out"
+    device_id: b2500_device_{{ loop.index }}
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/power/energy"
     power_id: b2500_total_power_out_{{ loop.index }}
     unit_of_measurement: kWh

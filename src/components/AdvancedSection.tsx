@@ -636,6 +636,34 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           helperText="This is required for some ESP32 devices to flash them. Leave this disabled unless you know what you are doing."
         />
 
+        <BooleanField
+          value={formValues}
+          prop={'use_legacy_entity_names'}
+          onChange={handleInputChange}
+          label="Use Legacy Entity Names"
+          helperText={
+            <>
+              When enabled (default), entity names include the device prefix
+              (e.g., <code>B2500 - 1 - Storage: Battery Level</code>). When
+              disabled, entity names are simplified (e.g.,{' '}
+              <code>Battery Level</code>). Device grouping is provided by
+              sub-devices in both cases.{' '}
+              <b>
+                Note: Simplified names are currently not supported by ESPHome
+                webserver (
+                <a
+                  href="https://github.com/esphome/esphome-webserver/issues/153"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  issue #153
+                </a>
+                ). Keep this enabled until the issue is resolved.
+              </b>
+            </>
+          }
+        />
+
         <>
           <BooleanField
             value={formValues}
