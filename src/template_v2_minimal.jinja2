@@ -48,7 +48,7 @@
             {%- endfor %}){% endmacro %}
 {%- macro yaml_string(value) %}{% set escaped_value = value | replace('\\', '\\\\') | replace('"', '\\"') %}{{ escaped_value }}{% endmacro %}
 {%- macro yaml_lambda_string(value) %}{% set escaped_value = yaml_string(value) | replace('#', '\\#') %}{{ escaped_value }}{% endmacro %}
-{%- macro sensor_prefix(loopindex, storage) %}B2500 - {{ loopindex }} - {{ yaml_string(storage.name) }}:{% endmacro %}
+{%- macro sensor_prefix(loopindex, storage) %}{% endmacro %}
 {%- set hasV1 = false %}
 {%- set hasV2 = false %}
 {%- for storage in storages %}
