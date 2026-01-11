@@ -29,7 +29,7 @@ import PublishOutlinedIcon from '@mui/icons-material/PublishOutlined';
 import { useMediaQuery } from '@mui/material';
 import { templates } from './templates';
 
-nunjucks.configure({ autoescape: false });
+nunjucks.configure({ autoescape: false }).addGlobal('automated_build', false);
 
 const theme = createTheme();
 const darkTheme = createTheme({

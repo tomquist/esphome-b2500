@@ -18,6 +18,7 @@ jobs:
       PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
       S3_BUCKET: esphome-b2500-images
       AWS_REGION: eu-west-1
+      AUTOMATED_BUILD: 'true'
     permissions:
       contents: write
     steps:
