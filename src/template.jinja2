@@ -42,6 +42,7 @@
 {%- set enable_web_server = enable_web_server or False %}
 {%- set web_server_port = web_server.port or 80 %}
 {%- set web_server_ota = web_server.ota or False %}
+{%- set automated_build = automated_build or false %}
 {%- set web_server_js_include = web_server.js_include or './v2/www.js' %}
 {%- set enable_ota = enable_ota %}
 {%- set ota = ota or {} %}
@@ -220,9 +221,13 @@ wifi:
 web_server:
   port: {{ web_server_port }}
   ota: false
+  {%- if automated_build %}
   js_include: "{{ yaml_string(web_server_js_include) }}"
   js_url: ""
   version: 2
+  {%- else %}
+  version: 3
+  {%- endif %}
 {%- endif %}
 
 {%- if enable_fallback_hotspot and fallback_hotspot_enable_captive_portal %}

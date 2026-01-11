@@ -19,7 +19,8 @@ const configJSON = Buffer.concat([
 
 nunjucks
   .configure({ autoescape: false })
-  .addGlobal('git_sha', process.env.GITHUB_SHA);
+  .addGlobal('git_sha', process.env.GITHUB_SHA)
+  .addGlobal('automated_build', process.env.AUTOMATED_BUILD === 'true');
 const { config, secrets } = JSON.parse(configJSON);
 
 // Mask all secrets
