@@ -6,6 +6,19 @@
 
 namespace esphome {
 namespace b2500 {
+namespace {
+
+template<typename UUID>
+auto uuid_to_log_string(const UUID &uuid, int) -> decltype(uuid.to_str()) {
+  return uuid.to_str();
+}
+
+template<typename UUID>
+auto uuid_to_log_string(const UUID &uuid, long) -> decltype(uuid.to_string()) {
+  return uuid.to_string();
+}
+
+}  // namespace
 
 void B2500ComponentBase::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                                              esp_ble_gattc_cb_param_t *param) {
@@ -28,8 +41,10 @@ void B2500ComponentBase::gattc_event_handler(esp_gattc_cb_event_t event, esp_gat
       this->read_handle_ = 0;
       auto *chr = this->parent()->get_characteristic(B2500_SERVICE_UUID, B2500_STATUS_UUID);
       if (chr == nullptr) {
-        ESP_LOGW(TAG, "No sensor read characteristic found at service %s char %s",
-                 B2500_SERVICE_UUID.to_str().c_str(), B2500_STATUS_UUID.to_str().c_str());
+        const auto service_uuid = uuid_to_log_string(B2500_SERVICE_UUID, 0);
+        const auto status_uuid = uuid_to_log_string(B2500_STATUS_UUID, 0);
+        ESP_LOGW(TAG, "No sensor read characteristic found at service %s char %s", service_uuid.c_str(),
+                 status_uuid.c_str());
         break;
       }
       this->read_handle_ = chr->handle;
@@ -42,8 +57,10 @@ void B2500ComponentBase::gattc_event_handler(esp_gattc_cb_event_t event, esp_gat
 
       auto *write_chr = this->parent()->get_characteristic(B2500_SERVICE_UUID, B2500_COMMAND_UUID);
       if (write_chr == nullptr) {
-        ESP_LOGW(TAG, "No sensor write characteristic found at service %s char %s",
-                 B2500_SERVICE_UUID.to_str().c_str(), B2500_COMMAND_UUID.to_str().c_str());
+        const auto service_uuid = uuid_to_log_string(B2500_SERVICE_UUID, 0);
+        const auto command_uuid = uuid_to_log_string(B2500_COMMAND_UUID, 0);
+        ESP_LOGW(TAG, "No sensor write characteristic found at service %s char %s", service_uuid.c_str(),
+                 command_uuid.c_str());
         break;
       }
       this->write_handle_ = write_chr->handle;
