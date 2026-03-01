@@ -1,6 +1,8 @@
 #ifdef USE_ESP32
 
+#include <array>
 #include <inttypes.h>
+#include <utility>
 #include "b2500_base.h"
 #include "esphome/core/log.h"
 
@@ -9,12 +11,15 @@ namespace b2500 {
 namespace {
 
 template<typename UUID>
-auto uuid_to_log_string(const UUID &uuid, int) -> decltype(uuid.to_str()) {
-  return uuid.to_str();
+auto uuid_to_log_string(const UUID &uuid, int)
+    -> decltype(uuid.to_str(std::declval<std::array<char, UUID::UUID_STR_LEN> &>()), std::string()) {
+  std::array<char, UUID::UUID_STR_LEN> uuid_buffer{};
+  uuid.to_str(uuid_buffer);
+  return std::string(uuid_buffer.data());
 }
 
 template<typename UUID>
-auto uuid_to_log_string(const UUID &uuid, long) -> decltype(uuid.to_string()) {
+auto uuid_to_log_string(const UUID &uuid, long) -> decltype(uuid.to_string(), std::string()) {
   return uuid.to_string();
 }
 
