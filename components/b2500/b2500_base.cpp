@@ -29,7 +29,7 @@ void B2500ComponentBase::gattc_event_handler(esp_gattc_cb_event_t event, esp_gat
       auto *chr = this->parent()->get_characteristic(B2500_SERVICE_UUID, B2500_STATUS_UUID);
       if (chr == nullptr) {
         ESP_LOGW(TAG, "No sensor read characteristic found at service %s char %s",
-                 B2500_SERVICE_UUID.to_string().c_str(), B2500_STATUS_UUID.to_string().c_str());
+                 B2500_SERVICE_UUID.to_str().c_str(), B2500_STATUS_UUID.to_str().c_str());
         break;
       }
       this->read_handle_ = chr->handle;
@@ -43,7 +43,7 @@ void B2500ComponentBase::gattc_event_handler(esp_gattc_cb_event_t event, esp_gat
       auto *write_chr = this->parent()->get_characteristic(B2500_SERVICE_UUID, B2500_COMMAND_UUID);
       if (write_chr == nullptr) {
         ESP_LOGW(TAG, "No sensor write characteristic found at service %s char %s",
-                 B2500_SERVICE_UUID.to_string().c_str(), B2500_COMMAND_UUID.to_string().c_str());
+                 B2500_SERVICE_UUID.to_str().c_str(), B2500_COMMAND_UUID.to_str().c_str());
         break;
       }
       this->write_handle_ = write_chr->handle;
