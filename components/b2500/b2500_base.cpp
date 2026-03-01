@@ -10,10 +10,12 @@ namespace esphome {
 namespace b2500 {
 namespace {
 
+constexpr size_t UUID_LOG_STR_LEN = 37;
+
 template<typename UUID>
 auto uuid_to_log_string(const UUID &uuid, int)
-    -> decltype(uuid.to_str(std::declval<std::array<char, esphome::esp32_ble::UUID_STR_LEN> &>()), std::string()) {
-  std::array<char, esphome::esp32_ble::UUID_STR_LEN> uuid_buffer{};
+    -> decltype(uuid.to_str(std::declval<std::array<char, UUID_LOG_STR_LEN> &>()), std::string()) {
+  std::array<char, UUID_LOG_STR_LEN> uuid_buffer{};
   uuid.to_str(uuid_buffer);
   return std::string(uuid_buffer.data());
 }
