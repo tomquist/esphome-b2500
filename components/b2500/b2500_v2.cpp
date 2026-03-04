@@ -109,6 +109,12 @@ bool B2500ComponentV2::set_adaptive_mode_enabled(bool enabled) {
 }
 
 bool B2500ComponentV2::set_surplus_feed_in_enabled(bool enabled) {
+  auto runtime_info = this->state_->get_runtime_info();
+  if (runtime_info.dev_version < 226) {
+    ESP_LOGW(TAG, "Surplus feed-in command (0x35) requires firmware >= 226 (current: %d)", runtime_info.dev_version);
+    return false;
+  }
+
   std::vector<uint8_t> payload;
   if (!this->state_->set_surplus_feed_in_enabled(enabled, payload)) {
     ESP_LOGW(TAG, "Failed to set surplus feed-in enabled");
