@@ -17,9 +17,11 @@ CODEOWNERS = ["@tomquist"]
 OutActiveSwitch = b2500_ns.class_("OutActiveSwitch", switch.Switch, cg.Component, cg.Parented)
 TimerEnabledSwitch = b2500_ns.class_("TimerEnabledSwitch", switch.Switch, cg.Component, cg.Parented)
 AdaptiveModeSwitch = b2500_ns.class_("AdaptiveModeSwitch", switch.Switch, cg.Component, cg.Parented)
+SurplusFeedInSwitch = b2500_ns.class_("SurplusFeedInSwitch", switch.Switch, cg.Component, cg.Parented)
 
 
 CONF_ADAPTIVE_MODE = "adaptive_mode"
+CONF_SURPLUS_FEED_IN = "surplus_feed_in"
 
 BASE_SCHEMA = cv.Schema({})
 
@@ -50,6 +52,13 @@ CONFIG_SCHEMA = cv.typed_schema(
                     ),
                     key=CONF_NAME,
                 ),
+                cv.Optional(CONF_SURPLUS_FEED_IN): cv.maybe_simple_value(
+                    switch.switch_schema(
+                        SurplusFeedInSwitch,
+                        entity_category=ENTITY_CATEGORY_CONFIG,
+                    ),
+                    key=CONF_NAME,
+                ),
                 **{
                     cv.Optional(f"timer{x + 1}_enabled"): cv.maybe_simple_value(
                         switch.switch_schema(
@@ -70,6 +79,11 @@ CONFIG_SCHEMA = cv.typed_schema(
 
 async def to_code(config):
     if conf := config.get(CONF_ADAPTIVE_MODE):
+        btn = await switch.new_switch(conf)
+        await cg.register_parented(btn, config[CONF_B2500_ID])
+        await cg.register_component(btn, config)
+
+    if conf := config.get(CONF_SURPLUS_FEED_IN):
         btn = await switch.new_switch(conf)
         await cg.register_parented(btn, config[CONF_B2500_ID])
         await cg.register_component(btn, config)

@@ -108,6 +108,16 @@ bool B2500ComponentV2::set_adaptive_mode_enabled(bool enabled) {
   return true;
 }
 
+bool B2500ComponentV2::set_surplus_feed_in_enabled(bool enabled) {
+  std::vector<uint8_t> payload;
+  if (!this->state_->set_surplus_feed_in_enabled(enabled, payload)) {
+    ESP_LOGW(TAG, "Failed to set surplus feed-in enabled");
+    return false;
+  }
+  this->send_command(payload);
+  return true;
+}
+
 }  // namespace b2500
 }  // namespace esphome
 #endif  // USE_ESP32

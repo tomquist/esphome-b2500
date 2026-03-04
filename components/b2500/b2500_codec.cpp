@@ -377,5 +377,11 @@ bool B2500Codec::encode_set_mqtt(bool ssl, const std::string &host, uint16_t por
                               payload);
 }
 
+bool B2500Codec::encode_set_surplus_feed_in_enabled(bool enabled, std::vector<uint8_t> &payload) {
+  // cmd 0x35 semantics observed on v2: 0x00 = ON, 0x01 = OFF
+  uint8_t state = enabled ? 0x00 : 0x01;
+  return this->encode_command(CMD_SET_SURPLUS_FEED_IN, &state, sizeof(state), payload);
+}
+
 }  // namespace b2500
 }  // namespace esphome

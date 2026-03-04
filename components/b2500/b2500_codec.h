@@ -162,6 +162,7 @@ class B2500Codec {
   bool encode_set_wifi(const std::string &ssid, const std::string &password, std::vector<uint8_t> &payload);
   bool encode_set_mqtt(bool ssl, const std::string &host, uint16_t port, const std::string &username,
                        const std::string &password, std::vector<uint8_t> &payload);
+  bool encode_set_surplus_feed_in_enabled(bool enabled, std::vector<uint8_t> &payload);
 
  protected:
   bool encode_command(B2500Command command, const uint8_t *data, uint16_t data_len, std::vector<uint8_t> &payload);
