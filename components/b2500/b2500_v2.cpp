@@ -5,6 +5,7 @@
 
 constexpr const char *CHARGE_MODE_LOAD_FIRST = "LoadFirst";
 constexpr const char *CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE = "SimultaneousChargeAndDischarge";
+constexpr uint8_t kMinFirmwareSurplusFeedIn = 226;
 
 namespace esphome {
 namespace b2500 {
@@ -114,8 +115,9 @@ bool B2500ComponentV2::set_surplus_feed_in_enabled(bool enabled) {
     ESP_LOGW(TAG, "Surplus feed-in command (0x35) unavailable: runtime info not yet available");
     return false;
   }
-  if (runtime_info.dev_version < 226) {
-    ESP_LOGW(TAG, "Surplus feed-in command (0x35) requires firmware >= 226 (current: %d)", runtime_info.dev_version);
+  if (runtime_info.dev_version < kMinFirmwareSurplusFeedIn) {
+    ESP_LOGW(TAG, "Surplus feed-in command (0x35) requires firmware >= %d (current: %d)",
+             kMinFirmwareSurplusFeedIn, runtime_info.dev_version);
     return false;
   }
 
