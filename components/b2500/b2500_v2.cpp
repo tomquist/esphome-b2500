@@ -6,6 +6,12 @@
 constexpr const char *CHARGE_MODE_LOAD_FIRST = "LoadFirst";
 constexpr const char *CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE = "SimultaneousChargeAndDischarge";
 constexpr uint8_t kMinFirmwareSurplusFeedIn = 226;
+constexpr uint8_t kMinFirmwareSurplusFeedInHMJ = 110;
+
+static bool supports_surplus_feed_in(const DeviceInfoPacket &device_info, uint8_t firmware) {
+  const bool is_hmj = device_info.type.rfind("HMJ", 0) == 0;
+  return firmware >= (is_hmj ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn);
+}
 
 namespace esphome {
 namespace b2500 {
@@ -111,13 +117,16 @@ bool B2500ComponentV2::set_adaptive_mode_enabled(bool enabled) {
 
 bool B2500ComponentV2::set_surplus_feed_in_enabled(bool enabled) {
   auto runtime_info = this->state_->get_runtime_info();
+  const auto device_info = this->state_->get_device_info();
   if (runtime_info.dev_version == 0) {
     ESP_LOGW(TAG, "Surplus feed-in command (0x35) unavailable: runtime info not yet available");
     return false;
   }
-  if (runtime_info.dev_version < kMinFirmwareSurplusFeedIn) {
-    ESP_LOGW(TAG, "Surplus feed-in command (0x35) requires firmware >= %d (current: %d)",
-             kMinFirmwareSurplusFeedIn, runtime_info.dev_version);
+  if (!supports_surplus_feed_in(device_info, runtime_info.dev_version)) {
+    const bool is_hmj = device_info.type.rfind("HMJ", 0) == 0;
+    const uint8_t required = is_hmj ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn;
+    ESP_LOGW(TAG, "Surplus feed-in command (0x35) requires firmware >= %d for %s (current: %d)", required,
+             is_hmj ? "HMJ" : "non-HMJ", runtime_info.dev_version);
     return false;
   }
 
