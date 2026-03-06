@@ -3,6 +3,9 @@
 #include "b2500_v2.h"
 #include "esphome/core/log.h"
 
+namespace esphome {
+namespace b2500 {
+
 constexpr const char *CHARGE_MODE_LOAD_FIRST = "LoadFirst";
 constexpr const char *CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE = "SimultaneousChargeAndDischarge";
 constexpr uint8_t kMinFirmwareSurplusFeedIn = 226;
@@ -12,9 +15,6 @@ static bool supports_surplus_feed_in(const DeviceInfoPacket &device_info, uint8_
   const bool is_hmj = device_info.type.rfind("HMJ", 0) == 0;
   return firmware >= (is_hmj ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn);
 }
-
-namespace esphome {
-namespace b2500 {
 
 void B2500ComponentV2::set_charge_mode_traits(select::SelectTraits &traits) const {
   traits.set_options({CHARGE_MODE_LOAD_FIRST, CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE});
