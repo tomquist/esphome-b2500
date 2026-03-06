@@ -52,8 +52,7 @@ class B2500State {
   // State Accessors
   const DeviceInfoPacket &get_device_info() const { return this->device_info_; }
   const RuntimeInfoPacket &get_runtime_info() const { return this->runtime_info_; }
-  bool has_surplus_feed_in_enabled() const { return this->has_surplus_feed_in_enabled_; }
-  bool get_surplus_feed_in_enabled() const { return this->surplus_feed_in_enabled_; }
+  uint16_t get_last_runtime_payload_size() const { return this->last_runtime_payload_size_; }
   const CellInfoPacket &get_cell_info() const { return this->cell_info_; }
   const WifiInfoPacket &get_wifi_info() const { return this->wifi_info_; }
   const FC41DInfoPacket &get_fc41d_info() const { return this->fc41d_info_; }
@@ -73,8 +72,7 @@ class B2500State {
 
   DeviceInfoPacket device_info_;
   RuntimeInfoPacket runtime_info_;
-  bool has_surplus_feed_in_enabled_ = false;
-  bool surplus_feed_in_enabled_ = false;
+  uint16_t last_runtime_payload_size_ = 0;
   CellInfoPacket cell_info_;
   WifiInfoPacket wifi_info_;
   FC41DInfoPacket fc41d_info_;

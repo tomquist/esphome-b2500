@@ -279,17 +279,8 @@ bool B2500State::receive_packet(uint8_t *data, uint16_t data_len, time_t timesta
         return false;
       }
 
-      // Newer firmware (>= 226) exposes surplus feed-in as a disable flag in the
-      // last byte of the runtime packet payload: 0x00 = enabled, 0x01 = disabled.
-      // Guard by packet length for backward compatibility with shorter payloads.
-      constexpr size_t kRuntimeSurplusFlagOffset = sizeof(B2500PacketHeader) + 55;  // packet index 59
-      if (data_len > kRuntimeSurplusFlagOffset) {
-        const uint8_t disabled = data[kRuntimeSurplusFlagOffset];
-        this->surplus_feed_in_enabled_ = (disabled == 0x00);
-        this->has_surplus_feed_in_enabled_ = true;
-      } else {
-        this->has_surplus_feed_in_enabled_ = false;
-      }
+      const size_t header_size = sizeof(B2500PacketHeader);
+      this->last_runtime_payload_size_ = data_len > header_size ? (data_len - header_size) : 0;
 
       this->message_received(B2500_MSG_RUNTIME_INFO, timestamp);
       break;
