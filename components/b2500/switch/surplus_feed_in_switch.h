@@ -8,6 +8,7 @@ namespace b2500 {
 
 class SurplusFeedInSwitch : public Component, public switch_::Switch, public Parented<B2500ComponentV2> {
  public:
+  void setup() override;
   void write_state(bool state) override;
 };
 
