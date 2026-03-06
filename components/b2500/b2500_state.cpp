@@ -282,15 +282,6 @@ bool B2500State::receive_packet(uint8_t *data, uint16_t data_len, time_t timesta
       const size_t header_size = sizeof(B2500PacketHeader);
       this->last_runtime_payload_size_ = data_len > header_size ? (data_len - header_size) : 0;
 
-      constexpr size_t kRuntimeSurplusFlagOffset = sizeof(B2500PacketHeader) + 55;  // packet index 59
-      if (data_len > kRuntimeSurplusFlagOffset) {
-        this->surplus_feed_in_disabled_flag_ = data[kRuntimeSurplusFlagOffset];
-        this->has_surplus_feed_in_disabled_flag_ = true;
-      } else {
-        this->has_surplus_feed_in_disabled_flag_ = false;
-        this->surplus_feed_in_disabled_flag_ = 0;
-      }
-
       this->message_received(B2500_MSG_RUNTIME_INFO, timestamp);
       break;
     }

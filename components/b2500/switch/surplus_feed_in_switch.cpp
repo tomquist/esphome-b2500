@@ -27,11 +27,13 @@ void SurplusFeedInSwitch::setup() {
       return;
     }
 
-    if (!state->has_surplus_feed_in_disabled_flag()) {
+    // Extension byte is payload index 59 in full packet (= payload index 55).
+    constexpr uint16_t kRuntimeSurplusFlagPayloadIndex = 55;
+    if (state->get_last_runtime_payload_size() <= kRuntimeSurplusFlagPayloadIndex) {
       return;
     }
 
-    const uint8_t disabled = state->get_surplus_feed_in_disabled_flag();
+    const uint8_t disabled = runtime_info.surplus_feed_in_disabled();
     const bool enabled = (disabled == 0x00);
     if (this->state != enabled) {
       this->publish_state(enabled);

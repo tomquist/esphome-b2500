@@ -82,6 +82,9 @@ struct RuntimeInfoPacket {
   uint32_t daily_total_battery_discharge; // 44 - 47
   uint32_t daily_total_load_charge;       // 48 - 51
   uint32_t daily_total_load_discharge;    // 52 - 55
+  uint8_t runtime_ext[4];                 // 56 - 59 (newer firmware extension)
+
+  uint8_t surplus_feed_in_disabled() const { return runtime_ext[3]; }
 } __attribute__((packed));
 
 struct DeviceInfoPacket {
