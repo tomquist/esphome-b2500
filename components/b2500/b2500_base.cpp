@@ -306,7 +306,7 @@ void B2500ComponentBase::interpret_runtime_info() {
   constexpr uint16_t kRuntimeSurplusFlagPayloadIndex = 55;
   const bool has_surplus_flag = payload.dev_version >= required_fw &&
                                 this->state_->get_last_runtime_payload_size() > kRuntimeSurplusFlagPayloadIndex;
-  const uint8_t surplus_disabled = payload.surplus_feed_in_disabled();
+  const uint8_t surplus_disabled = payload.surplus_feed_in_disabled;
 
   ESP_LOGD(TAG,
            "in1_active: %d, pv_in2_state: %d, in1_power: %d, in2_power: %d, soc: %d, dev_version: %d, "

@@ -33,7 +33,7 @@ void SurplusFeedInSwitch::setup() {
       return;
     }
 
-    const uint8_t disabled = runtime_info.surplus_feed_in_disabled();
+    const uint8_t disabled = runtime_info.surplus_feed_in_disabled;
     const bool enabled = (disabled == 0x00);
     if (this->state != enabled) {
       this->publish_state(enabled);
