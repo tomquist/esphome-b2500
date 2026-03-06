@@ -72,7 +72,7 @@ bool B2500Codec::parse_runtime_info(uint8_t *data, uint16_t data_len, RuntimeInf
   }
   const size_t header_size = sizeof(B2500PacketHeader);
   const size_t payload_size = sizeof(RuntimeInfoPacket);
-  const size_t base_payload_size = offsetof(RuntimeInfoPacket, runtime_ext);
+  const size_t base_payload_size = offsetof(RuntimeInfoPacket, runtime_ext_56);
   const size_t actual_payload_size = data_len > header_size ? (data_len - header_size) : 0;
 
   if (actual_payload_size < base_payload_size) {
