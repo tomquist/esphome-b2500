@@ -27,14 +27,11 @@ void SurplusFeedInSwitch::setup() {
       return;
     }
 
-    // Surplus flag is the last byte of the 56-byte runtime payload (payload index 55):
-    // 0x00 = enabled, 0x01 = disabled.
-    constexpr uint16_t kRuntimeSurplusFlagPayloadIndex = 55;
-    if (state->get_last_runtime_payload_size() <= kRuntimeSurplusFlagPayloadIndex) {
+    if (!state->has_surplus_feed_in_disabled_flag()) {
       return;
     }
 
-    const uint8_t disabled = static_cast<uint8_t>((runtime_info.daily_total_load_discharge >> 24) & 0xFF);
+    const uint8_t disabled = state->get_surplus_feed_in_disabled_flag();
     const bool enabled = (disabled == 0x00);
     if (this->state != enabled) {
       this->publish_state(enabled);

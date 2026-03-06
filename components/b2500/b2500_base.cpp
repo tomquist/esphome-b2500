@@ -303,10 +303,8 @@ void B2500ComponentBase::interpret_runtime_info() {
   const auto device_info = this->state_->get_device_info();
   const bool is_hmj = device_info.type.rfind("HMJ", 0) == 0;
   const uint8_t required_fw = is_hmj ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn;
-  constexpr uint16_t kRuntimeSurplusFlagPayloadIndex = 55;
-  const bool has_surplus_flag = payload.dev_version >= required_fw &&
-                                this->state_->get_last_runtime_payload_size() > kRuntimeSurplusFlagPayloadIndex;
-  const uint8_t surplus_disabled = static_cast<uint8_t>((payload.daily_total_load_discharge >> 24) & 0xFF);
+  const bool has_surplus_flag = payload.dev_version >= required_fw && this->state_->has_surplus_feed_in_disabled_flag();
+  const uint8_t surplus_disabled = this->state_->get_surplus_feed_in_disabled_flag();
 
   ESP_LOGD(TAG,
            "in1_active: %d, pv_in2_state: %d, in1_power: %d, in2_power: %d, soc: %d, dev_version: %d, "
