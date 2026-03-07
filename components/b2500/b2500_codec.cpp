@@ -1,4 +1,5 @@
 #include "b2500_codec.h"
+#include <cstddef>
 
 namespace esphome {
 namespace b2500 {
@@ -71,17 +72,21 @@ bool B2500Codec::parse_runtime_info(uint8_t *data, uint16_t data_len, RuntimeInf
   }
   const size_t header_size = sizeof(B2500PacketHeader);
   const size_t payload_size = sizeof(RuntimeInfoPacket);
+  const size_t base_payload_size = offsetof(RuntimeInfoPacket, runtime_ext_56);
+  const size_t actual_payload_size = data_len > header_size ? (data_len - header_size) : 0;
 
-  if (data_len < header_size + payload_size) {
-    ESP_LOGD(TAG, "Packet too short for CMD_RUNTIME_INFO, expected %d, got %d", header_size + payload_size, data_len);
-  } else if (data_len > header_size + payload_size) {
-    ESP_LOGD(TAG, "Packet too long for CMD_RUNTIME_INFO, expected %d, got %d", header_size + payload_size, data_len);
+  if (actual_payload_size < base_payload_size) {
+    ESP_LOGD(TAG, "Packet too short for CMD_RUNTIME_INFO, expected at least %d, got %d", base_payload_size,
+             actual_payload_size);
+  } else if (actual_payload_size > payload_size) {
+    ESP_LOGD(TAG, "Packet too long for CMD_RUNTIME_INFO, expected at most %d, got %d", payload_size,
+             actual_payload_size);
   }
 
-  std::memcpy(&payload, data + header_size, std::min(payload_size, data_len - header_size));
+  std::memcpy(&payload, data + header_size, std::min(payload_size, actual_payload_size));
   // Fill in the rest with zeros
-  if (data_len - header_size < payload_size) {
-    std::memset(reinterpret_cast<uint8_t *>(&payload) + data_len - header_size, 0, payload_size - (data_len - header_size));
+  if (actual_payload_size < payload_size) {
+    std::memset(reinterpret_cast<uint8_t *>(&payload) + actual_payload_size, 0, payload_size - actual_payload_size);
   }
 
   return true;
@@ -375,6 +380,12 @@ bool B2500Codec::encode_set_mqtt(bool ssl, const std::string &host, uint16_t por
       std::to_string(ssl) + "<.,.>" + host + "<.,.>" + std::to_string(port) + "<.,.>" + username + "<.,.>" + password + "<.,.>";
   return this->encode_command(CMD_SET_MQTT, reinterpret_cast<const uint8_t *>(mqtt_info.c_str()), mqtt_info.size(),
                               payload);
+}
+
+bool B2500Codec::encode_set_surplus_feed_in_enabled(bool enabled, std::vector<uint8_t> &payload) {
+  // cmd 0x35 semantics observed on v2: 0x00 = ON, 0x01 = OFF
+  uint8_t state = enabled ? 0x00 : 0x01;
+  return this->encode_command(CMD_SET_SURPLUS_FEED_IN, &state, sizeof(state), payload);
 }
 
 }  // namespace b2500

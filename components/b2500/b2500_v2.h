@@ -24,6 +24,7 @@ namespace b2500 {
   bool set_timer(int timer, bool enabled, float output_power, uint8_t start_hour, uint8_t start_minute, uint8_t end_hour,
                  uint8_t end_minute);
   bool set_adaptive_mode_enabled(bool enabled);
+  bool set_surplus_feed_in_enabled(bool enabled);
 
  protected:
   void poll_runtime_info_() override;

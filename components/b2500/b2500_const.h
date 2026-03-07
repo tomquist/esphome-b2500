@@ -27,6 +27,8 @@ enum B2500Command : uint8_t {
   CMD_SET_TIMERS = 0x12,
   CMD_GET_TIMERS = 0x13,
   CMD_SET_DATETIME = 0x14,
+  // Firmware Version >= 226 (v2)
+  CMD_SET_SURPLUS_FEED_IN = 0x35,
 
   CMD_UNKNOWN = 0xFF,
 };

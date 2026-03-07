@@ -206,6 +206,10 @@ bool B2500State::set_adaptive_mode_enabled(bool enabled, std::vector<uint8_t> &p
   return true;
 }
 
+bool B2500State::set_surplus_feed_in_enabled(bool enabled, std::vector<uint8_t> &payload) {
+  return this->codec_->encode_set_surplus_feed_in_enabled(enabled, payload);
+}
+
 bool B2500State::set_datetime(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second,
                               std::vector<uint8_t> &payload) {
   DateTimePacket time_packet;
@@ -274,6 +278,10 @@ bool B2500State::receive_packet(uint8_t *data, uint16_t data_len, time_t timesta
         ESP_LOGW(TAG, "Failed to parse runtime info");
         return false;
       }
+
+      const size_t header_size = sizeof(B2500PacketHeader);
+      this->last_runtime_payload_size_ = data_len > header_size ? (data_len - header_size) : 0;
+
       this->message_received(B2500_MSG_RUNTIME_INFO, timestamp);
       break;
     }

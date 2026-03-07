@@ -82,6 +82,10 @@ struct RuntimeInfoPacket {
   uint32_t daily_total_battery_discharge; // 44 - 47
   uint32_t daily_total_load_charge;       // 48 - 51
   uint32_t daily_total_load_discharge;    // 52 - 55
+  uint8_t runtime_ext_56;                 // 56 (newer firmware extension)
+  uint8_t runtime_ext_57;                 // 57 (newer firmware extension)
+  uint8_t runtime_ext_58;                 // 58 (newer firmware extension)
+  uint8_t surplus_feed_in_disabled;       // 59 (0 = enabled, 1 = disabled)
 } __attribute__((packed));
 
 struct DeviceInfoPacket {
@@ -162,6 +166,7 @@ class B2500Codec {
   bool encode_set_wifi(const std::string &ssid, const std::string &password, std::vector<uint8_t> &payload);
   bool encode_set_mqtt(bool ssl, const std::string &host, uint16_t port, const std::string &username,
                        const std::string &password, std::vector<uint8_t> &payload);
+  bool encode_set_surplus_feed_in_enabled(bool enabled, std::vector<uint8_t> &payload);
 
  protected:
   bool encode_command(B2500Command command, const uint8_t *data, uint16_t data_len, std::vector<uint8_t> &payload);

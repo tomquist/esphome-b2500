@@ -298,6 +298,16 @@ void B2500ComponentBase::interpret_cell_info() {
 void B2500ComponentBase::interpret_runtime_info() {
   auto payload = this->state_->get_runtime_info();
   // For now just dump the values
+  constexpr uint8_t kMinFirmwareSurplusFeedIn = 226;
+  constexpr uint8_t kMinFirmwareSurplusFeedInHMJ = 110;
+  const auto device_info = this->state_->get_device_info();
+  const bool is_hmj = device_info.type.rfind("HMJ", 0) == 0;
+  const uint8_t required_fw = is_hmj ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn;
+  constexpr uint16_t kRuntimeSurplusFlagPayloadIndex = 55;
+  const bool has_surplus_flag = payload.dev_version >= required_fw &&
+                                this->state_->get_last_runtime_payload_size() > kRuntimeSurplusFlagPayloadIndex;
+  const uint8_t surplus_disabled = payload.surplus_feed_in_disabled;
+
   ESP_LOGD(TAG,
            "in1_active: %d, pv_in2_state: %d, in1_power: %d, in2_power: %d, soc: %d, dev_version: %d, "
            "charge_mode: %d, wifi_connected: %d, mqtt_connected: %d, out1_active: %d, out2_active: %d, out1_enabled: "
@@ -305,13 +315,14 @@ void B2500ComponentBase::interpret_runtime_info() {
            "discharge_threshold: %d, dod: %d, remaining_capacity: %d, device_scene: %d, out1_power: %d, "
            "out2_power: %d, "
            "device_region: %d, extern1_connected: %d, extern2_connected: %d, "
-           "hour: %d, minute: %d",
+           "hour: %d, minute: %d, surplus_feed_in_enabled: %d",
            payload.in1_active.byte, payload.in2_active.byte, payload.in1_power, payload.in2_power, payload.soc,
            payload.dev_version, payload.charge_mode.byte, payload.wifi_mqtt_state.wifi_connected,
            payload.wifi_mqtt_state.mqtt_connected, payload.out1_active, payload.out2_active,
            payload.discharge_setting.out1_enable, payload.discharge_setting.out2_enable, payload.discharge_threshold,
            payload.dod, payload.remaining_capacity, payload.device_scene, payload.out1_power, payload.out2_power,
-           payload.device_region, payload.extern1_connected, payload.extern2_connected, payload.time.hour, payload.time.minute);
+           payload.device_region, payload.extern1_connected, payload.extern2_connected, payload.time.hour,
+           payload.time.minute, has_surplus_flag ? (surplus_disabled == 0x00) : -1);
 }
 
 void B2500ComponentBase::dump_config() {

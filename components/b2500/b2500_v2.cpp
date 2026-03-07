@@ -3,11 +3,18 @@
 #include "b2500_v2.h"
 #include "esphome/core/log.h"
 
-constexpr const char *CHARGE_MODE_LOAD_FIRST = "LoadFirst";
-constexpr const char *CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE = "SimultaneousChargeAndDischarge";
-
 namespace esphome {
 namespace b2500 {
+
+constexpr const char *CHARGE_MODE_LOAD_FIRST = "LoadFirst";
+constexpr const char *CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE = "SimultaneousChargeAndDischarge";
+constexpr uint8_t kMinFirmwareSurplusFeedIn = 226;
+constexpr uint8_t kMinFirmwareSurplusFeedInHMJ = 110;
+
+static bool supports_surplus_feed_in(const DeviceInfoPacket &device_info, uint8_t firmware) {
+  const bool is_hmj = device_info.type.rfind("HMJ", 0) == 0;
+  return firmware >= (is_hmj ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn);
+}
 
 void B2500ComponentV2::set_charge_mode_traits(select::SelectTraits &traits) const {
   traits.set_options({CHARGE_MODE_LOAD_FIRST, CHARGE_MODE_SIMULTANEOUS_CHARGE_AND_DISCHARGE});
@@ -102,6 +109,30 @@ bool B2500ComponentV2::set_adaptive_mode_enabled(bool enabled) {
   std::vector<uint8_t> payload;
   if (!this->state_->set_adaptive_mode_enabled(enabled, payload)) {
     ESP_LOGW(TAG, "Failed to set adaptive mode enabled");
+    return false;
+  }
+  this->send_command(payload);
+  return true;
+}
+
+bool B2500ComponentV2::set_surplus_feed_in_enabled(bool enabled) {
+  auto runtime_info = this->state_->get_runtime_info();
+  const auto device_info = this->state_->get_device_info();
+  if (runtime_info.dev_version == 0) {
+    ESP_LOGW(TAG, "Surplus feed-in command (0x35) unavailable: runtime info not yet available");
+    return false;
+  }
+  if (!supports_surplus_feed_in(device_info, runtime_info.dev_version)) {
+    const bool is_hmj = device_info.type.rfind("HMJ", 0) == 0;
+    const uint8_t required = is_hmj ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn;
+    ESP_LOGW(TAG, "Surplus feed-in command (0x35) requires firmware >= %d for %s (current: %d)", required,
+             is_hmj ? "HMJ" : "non-HMJ", runtime_info.dev_version);
+    return false;
+  }
+
+  std::vector<uint8_t> payload;
+  if (!this->state_->set_surplus_feed_in_enabled(enabled, payload)) {
+    ESP_LOGW(TAG, "Failed to set surplus feed-in enabled");
     return false;
   }
   this->send_command(payload);

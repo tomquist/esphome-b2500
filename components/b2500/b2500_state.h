@@ -41,6 +41,7 @@ class B2500State {
   bool set_timer(int timer, bool enabled, float output_power, uint8_t start_hour, uint8_t start_minute, uint8_t end_hour,
                  uint8_t end_minute, std::vector<uint8_t> &payload);
   bool set_adaptive_mode_enabled(bool enabled, std::vector<uint8_t> &payload);
+  bool set_surplus_feed_in_enabled(bool enabled, std::vector<uint8_t> &payload);
   bool set_datetime(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second,
                     std::vector<uint8_t> &payload);
   bool set_wifi(const std::string &ssid, const std::string &password, std::vector<uint8_t> &payload);
@@ -51,6 +52,7 @@ class B2500State {
   // State Accessors
   const DeviceInfoPacket &get_device_info() const { return this->device_info_; }
   const RuntimeInfoPacket &get_runtime_info() const { return this->runtime_info_; }
+  uint16_t get_last_runtime_payload_size() const { return this->last_runtime_payload_size_; }
   const CellInfoPacket &get_cell_info() const { return this->cell_info_; }
   const WifiInfoPacket &get_wifi_info() const { return this->wifi_info_; }
   const FC41DInfoPacket &get_fc41d_info() const { return this->fc41d_info_; }
@@ -70,6 +72,7 @@ class B2500State {
 
   DeviceInfoPacket device_info_;
   RuntimeInfoPacket runtime_info_;
+  uint16_t last_runtime_payload_size_ = 0;
   CellInfoPacket cell_info_;
   WifiInfoPacket wifi_info_;
   FC41DInfoPacket fc41d_info_;
