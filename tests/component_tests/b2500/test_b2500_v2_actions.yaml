@@ -1,0 +1,38 @@
+external_components:
+  - source: COMPONENT_PATH
+    refresh: 0s
+
+wifi:
+  ssid: "test"
+  password: "12345678"
+
+esp32:
+  board: esp32dev
+
+ble_client:
+  mac_address: "00:00:00:00:00:00"
+
+b2500:
+  id: b2500_device
+  generation: 2
+
+logger:
+
+esphome:
+  name: test
+  on_boot:
+    then:
+      - b2500.set_timer:
+          id: b2500_device
+          generation: 2
+          timer: 1
+          enabled: true
+      - b2500.set_timer:
+          id: b2500_device
+          generation: 2
+          timer: !lambda 'return 2;'
+          start_hour: !lambda 'return 6;'
+
+time:
+  - platform: sntp
+    id: sntp_time

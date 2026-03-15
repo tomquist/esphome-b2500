@@ -456,7 +456,7 @@ async def b2500_set_timer(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(action_var, config[CONF_ID])
 
-    template_ = await cg.templatable(config["timer"], args, cg.std_string)
+    template_ = await cg.templatable(config["timer"], args, cg.int_)
     cg.add(action_var.set_timer(template_))
     if "enabled" in config:
         template_ = await cg.templatable(

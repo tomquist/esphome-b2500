@@ -24,3 +24,19 @@ def test_b2500_component_generation(generate_main, yaml_file: str, expected: str
 
     main_cpp = generate_main(temp_path)
     assert expected in main_cpp
+
+
+def test_b2500_set_timer_generation_uses_integer_templates(generate_main):
+    yaml_path = Path(__file__).with_name("test_b2500_v2_actions.yaml")
+    contents = yaml_path.read_text()
+    component_dir = (Path(__file__).parents[3] / "components").resolve()
+    contents = contents.replace("COMPONENT_PATH", str(component_dir))
+
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+        f.write(contents)
+        temp_path = f.name
+
+    main_cpp = generate_main(temp_path)
+
+    assert "set_timer(1)" in main_cpp
+    assert "set_timer([=]() -> int" in main_cpp
