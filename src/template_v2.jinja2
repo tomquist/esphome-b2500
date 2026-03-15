@@ -218,6 +218,34 @@ b2500:
     generation: {{ storage.version }}
     update_interval: {{ poll_interval_seconds or '5' }}s
     ble_client_id: b2500_ble_client_{{ loop.index }}
+{%- if enable_detailed_cell_sensors %}
+    {%- set storage_idx = loop.index %}
+    on_cell_info:
+      then:
+        - lambda: |-
+            auto min = x.cell_voltages[0];
+            auto max = x.cell_voltages[0];
+            int sum = 0;
+            for (int i = 0; i < 14; i++) {
+              sum += x.cell_voltages[i];
+              if (x.cell_voltages[i] < min) {
+                min = x.cell_voltages[i];
+              }
+              if (x.cell_voltages[i] > max) {
+                max = x.cell_voltages[i];
+              }
+{%- for cell_idx in range(1, 15) %}
+              if (i == {{ cell_idx - 1 }}) {
+                id(b2500_device_cell_voltage_{{ storage_idx }}_{{ cell_idx }}).publish_state(x.cell_voltages[i] / 1000.0);
+              }
+{%- endfor %}
+            }
+            id(b2500_device_cell_voltage_min_{{ storage_idx }}).publish_state(min / 1000.0);
+            id(b2500_device_cell_voltage_max_{{ storage_idx }}).publish_state(max / 1000.0);
+            id(b2500_device_cell_voltage_avg_{{ storage_idx }}).publish_state((sum / 14.0) / 1000.0);
+            id(b2500_device_cell_voltage_sum_{{ storage_idx }}).publish_state(sum / 1000.0);
+            id(b2500_device_cell_voltage_diff_{{ storage_idx }}).publish_state((max - min) / 1000.0);
+{%- endif %}
 {%- endfor %}
 
 time:
@@ -1052,6 +1080,95 @@ sensor:
       then:
         - script.execute: b2500_update_total_daily_energy_out
     {%- endif %}
+{%- if enable_detailed_cell_sensors %}
+  {%- set storage_idx = loop.index %}
+  - platform: template
+    name: "{{ sensor_prefix(storage_idx, storage) }} Cell Voltage Min"
+    id: b2500_device_cell_voltage_min_{{ storage_idx }}
+    device_id: b2500_device_{{ storage_idx }}
+{%- if mqtt.enabled %}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_idx }}/battery/cell_voltage/min"
+    retain: false
+{%- endif %}
+    unit_of_measurement: 'V'
+    accuracy_decimals: 3
+    device_class: voltage
+    state_class: measurement
+    icon: mdi:arrow-down-bold
+    disabled_by_default: true
+  - platform: template
+    name: "{{ sensor_prefix(storage_idx, storage) }} Cell Voltage Max"
+    id: b2500_device_cell_voltage_max_{{ storage_idx }}
+    device_id: b2500_device_{{ storage_idx }}
+{%- if mqtt.enabled %}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_idx }}/battery/cell_voltage/max"
+    retain: false
+{%- endif %}
+    unit_of_measurement: 'V'
+    accuracy_decimals: 3
+    device_class: voltage
+    state_class: measurement
+    icon: mdi:arrow-up-bold
+    disabled_by_default: true
+  - platform: template
+    name: "{{ sensor_prefix(storage_idx, storage) }} Cell Voltage Avg"
+    id: b2500_device_cell_voltage_avg_{{ storage_idx }}
+    device_id: b2500_device_{{ storage_idx }}
+{%- if mqtt.enabled %}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_idx }}/battery/cell_voltage/avg"
+    retain: false
+{%- endif %}
+    unit_of_measurement: 'V'
+    accuracy_decimals: 3
+    device_class: voltage
+    state_class: measurement
+    icon: mdi:approximately-equal
+    disabled_by_default: true
+  - platform: template
+    name: "{{ sensor_prefix(storage_idx, storage) }} Cell Voltage Sum"
+    id: b2500_device_cell_voltage_sum_{{ storage_idx }}
+    device_id: b2500_device_{{ storage_idx }}
+{%- if mqtt.enabled %}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_idx }}/battery/cell_voltage/sum"
+    retain: false
+{%- endif %}
+    unit_of_measurement: 'V'
+    accuracy_decimals: 3
+    device_class: voltage
+    state_class: measurement
+    icon: mdi:plus-box
+    disabled_by_default: true
+  - platform: template
+    name: "{{ sensor_prefix(storage_idx, storage) }} Cell Voltage Delta"
+    id: b2500_device_cell_voltage_diff_{{ storage_idx }}
+    device_id: b2500_device_{{ storage_idx }}
+{%- if mqtt.enabled %}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_idx }}/battery/cell_voltage/delta"
+    retain: false
+{%- endif %}
+    unit_of_measurement: 'V'
+    accuracy_decimals: 3
+    device_class: voltage
+    state_class: measurement
+    icon: mdi:delta
+    disabled_by_default: true
+{%- for cell_idx in range(1, 15) %}
+  - platform: template
+    name: "{{ sensor_prefix(storage_idx, storage) }} Cell Voltage {{ cell_idx }}"
+    id: b2500_device_cell_voltage_{{ storage_idx }}_{{ cell_idx }}
+    device_id: b2500_device_{{ storage_idx }}
+{%- if mqtt.enabled %}
+    state_topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_idx }}/battery/cell_voltage/{{ cell_idx }}"
+    retain: false
+{%- endif %}
+    unit_of_measurement: 'V'
+    accuracy_decimals: 3
+    device_class: voltage
+    state_class: measurement
+    icon: mdi:battery
+    disabled_by_default: true
+{%- endfor %}
+{%- endif %}
 {%- endfor %}
 {%- if storages|length > 1 %}
   - platform: template
