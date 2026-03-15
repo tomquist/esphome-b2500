@@ -518,6 +518,12 @@ button:
       device_id: b2500_device_{{ loop.index }}
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/factory_settings/set"
       disabled_by_default: True
+    hardware_reset:
+      id: b2500_button_hardware_reset_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Hardware Reset"
+      device_id: b2500_device_{{ loop.index }}
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/hardware_reset/set"
+      disabled_by_default: True
 {%- if storage.version >= 2 %}
 {%- if enable_reset_mqtt %}
   - platform: template
