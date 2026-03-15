@@ -30,6 +30,6 @@ interval:
     then:
       - b2500.set_timer:
           id: battery
-          b2500_generation: 2
+          generation: 2
           timer: !lambda 'return 99;'
           enabled: true
