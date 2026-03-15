@@ -16,6 +16,7 @@ interface TemplateCapability {
   readonly canEnableTimerQuery: boolean;
   readonly canEnableExperimentalCommands: boolean;
   readonly canEnableDetailedCellSensors: boolean;
+  readonly canConfigurePublishUnchangedSensorValues: boolean;
   readonly canEnableEnforceDod: boolean;
   readonly canEnableCmd30: boolean;
   readonly canDefineJsInclude: boolean;
@@ -48,6 +49,7 @@ export const templates = {
       canEnableTimerQuery: true,
       canEnableExperimentalCommands: true,
       canEnableDetailedCellSensors: false,
+      canConfigurePublishUnchangedSensorValues: false,
       canEnableEnforceDod: true,
       canEnableCmd30: true,
       canDefineJsInclude: true,
@@ -73,6 +75,7 @@ export const templates = {
       canEnableTimerQuery: false,
       canEnableExperimentalCommands: false,
       canEnableDetailedCellSensors: true,
+      canConfigurePublishUnchangedSensorValues: true,
       canEnableEnforceDod: false,
       canEnableCmd30: false,
       canDefineJsInclude: true,
@@ -98,6 +101,7 @@ export const templates = {
       canEnableTimerQuery: false,
       canEnableExperimentalCommands: false,
       canEnableDetailedCellSensors: false,
+      canConfigurePublishUnchangedSensorValues: true,
       canEnableEnforceDod: false,
       canEnableCmd30: false,
       canDefineJsInclude: false,

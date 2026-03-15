@@ -11,6 +11,9 @@ class B2500Sensor : public Component {
   B2500Sensor(B2500State *state) : state_(state) {}
   void dump_config() override;
   void setup() override;
+  void set_publish_unchanged_sensor_values(bool publish_unchanged_sensor_values) {
+    this->publish_unchanged_sensor_values_ = publish_unchanged_sensor_values;
+  }
 
   SUB_SENSOR(soc)
   SUB_SENSOR(in1_power)
@@ -32,7 +35,17 @@ class B2500Sensor : public Component {
 
  protected:
   B2500State *state_;
+  bool publish_unchanged_sensor_values_{true};
+
   void on_message(B2500Message message);
+  inline void publish_sensor_(sensor::Sensor *sensor, float value) {
+    if (sensor == nullptr) {
+      return;
+    }
+    if (this->publish_unchanged_sensor_values_ || sensor->state != value) {
+      sensor->publish_state(value);
+    }
+  }
 };
 
 }  // namespace b2500
