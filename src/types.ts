@@ -122,6 +122,7 @@ export interface FormValues {
   enable_timer_query: boolean;
   enable_experimental_commands: boolean;
   enable_detailed_cell_sensors: boolean;
+  publish_unchanged_sensor_values: boolean;
   enable_cmd30: boolean;
   enable_esp_temperature: boolean;
   esp_temperature: EspTemperatureSettings;

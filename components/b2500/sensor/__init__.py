@@ -51,6 +51,7 @@ CONF_DAILY_TOTAL_BATTERY_CHARGE = "daily_total_battery_charge"
 CONF_DAILY_TOTAL_BATTERY_DISCHARGE = "daily_total_battery_discharge"
 CONF_DAILY_TOTAL_LOAD_CHARGE = "daily_total_load_charge"
 CONF_DAILY_TOTAL_LOAD_DISCHARGE = "daily_total_load_discharge"
+CONF_PUBLISH_UNCHANGED_SENSOR_VALUES = "publish_unchanged_sensor_values"
 
 MARKERS: list[str] = [
     CONF_SOC,
@@ -75,6 +76,7 @@ MARKERS: list[str] = [
 BASE_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(B2500Sensor),
+        cv.Optional(CONF_PUBLISH_UNCHANGED_SENSOR_VALUES, default=True): cv.boolean,
         cv.Optional(CONF_IN1_POWER): cv.maybe_simple_value(
             sensor.sensor_schema(
                 icon="mdi:solar-power",
@@ -259,6 +261,12 @@ CONFIG_SCHEMA = cv.typed_schema(
 async def to_code(config):
     paren = await cg.get_variable(config[CONF_B2500_ID])
     bat = cg.new_Pvariable(config[CONF_ID], paren.get_state())
+
+    cg.add(
+        bat.set_publish_unchanged_sensor_values(
+            config[CONF_PUBLISH_UNCHANGED_SENSOR_VALUES]
+        )
+    )
 
     for marker in MARKERS:
         if marker_config := config.get(marker):

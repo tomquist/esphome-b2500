@@ -224,6 +224,15 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             helperText="Adds 14 per-cell voltage sensors plus min/max/avg/sum/delta. Increases memory usage significantly; only enable on ESP32-S3 or boards with similar RAM headroom."
           />
         )}
+        {currentTemplate.capabilities.canConfigurePublishUnchangedSensorValues && (
+          <BooleanField
+            value={formValues}
+            onChange={handleInputChange}
+            prop="publish_unchanged_sensor_values"
+            label="Publish unchanged sensor values"
+            helperText="When enabled (default), sensor states are published every update cycle even if unchanged. Helps MQTT consumers recover quickly after broker restarts."
+          />
+        )}
         {currentTemplate.capabilities.canEnableTimerQuery && (
           <BooleanField
             value={formValues}
