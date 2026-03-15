@@ -309,6 +309,31 @@ bool B2500State::receive_packet(uint8_t *data, uint16_t data_len, time_t timesta
       this->message_received(B2500_MSG_TIMER_INFO, timestamp);
       break;
     }
+    // Some firmware variants/webserver UI actions return short ACK packets
+    // for set commands (e.g. 0x0B for DoD) with a status byte payload.
+    // Treat those as valid acknowledgements instead of warning as unknown.
+    case CMD_SET_REGION:
+    case CMD_SET_WIFI:
+    case CMD_SET_DOD:
+    case CMD_SET_DISCHARGE_THRESHOLD:
+    case CMD_LOAD_FIRST_ENABLED:
+    case CMD_POWER_OUT:
+    case CMD_SET_MQTT:
+    case CMD_RESET_MQTT:
+    case CMD_REBOOT:
+    case CMD_FACTORY_RESET:
+    case CMD_ENABLE_ADAPTIVE_MODE:
+    case CMD_SET_TIMERS:
+    case CMD_SET_DATETIME:
+    case CMD_SET_SURPLUS_FEED_IN: {
+      const size_t header_size = sizeof(B2500PacketHeader);
+      if (data_len > header_size) {
+        ESP_LOGD(TAG, "Received ACK for command %d with status %d", command, data[header_size]);
+      } else {
+        ESP_LOGD(TAG, "Received ACK for command %d", command);
+      }
+      break;
+    }
     default:
       ESP_LOGW(TAG, "Unknown command");
       return false;
