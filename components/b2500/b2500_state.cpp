@@ -240,6 +240,10 @@ bool B2500State::get_simple_command(B2500Command command, std::vector<uint8_t> &
 }
 
 const TimerInfo B2500State::get_timer(int timer) const {
+  if (timer < 0 || timer >= 5) {
+    ESP_LOGW(TAG, "Requested invalid timer index %d", timer);
+    return TimerInfo{};
+  }
   if (timer < 3) {
     return this->timer_info_.base.timer[timer];
   } else {
