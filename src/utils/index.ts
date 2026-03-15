@@ -38,6 +38,7 @@ export const defaultFormValues: FormValues = {
   },
   enable_powermeter: false,
   enable_experimental_commands: false,
+  enable_detailed_cell_sensors: false,
   enable_hexdump: false,
   enable_set_wifi: false,
   set_wifi: {

@@ -37,6 +37,7 @@
   },
   "enable_powermeter": false,
   "enable_experimental_commands": false,
+  "enable_detailed_cell_sensors": true,
   "enable_hexdump": false,
   "enable_set_wifi": true,
   "set_wifi": {

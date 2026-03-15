@@ -215,6 +215,15 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             label="Enable Cellquery"
           />
         )}
+        {currentTemplate.capabilities.canEnableDetailedCellSensors && (
+          <BooleanField
+            value={formValues}
+            onChange={handleInputChange}
+            prop="enable_detailed_cell_sensors"
+            label="Detailed Cell Sensors (ESP32-S3 recommended)"
+            helperText="Adds 14 per-cell voltage sensors plus min/max/avg/sum/delta. Increases memory usage significantly; only enable on ESP32-S3 or boards with similar RAM headroom."
+          />
+        )}
         {currentTemplate.capabilities.canEnableTimerQuery && (
           <BooleanField
             value={formValues}

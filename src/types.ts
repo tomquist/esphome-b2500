@@ -121,6 +121,7 @@ export interface FormValues {
   enable_cellquery: boolean;
   enable_timer_query: boolean;
   enable_experimental_commands: boolean;
+  enable_detailed_cell_sensors: boolean;
   enable_cmd30: boolean;
   enable_esp_temperature: boolean;
   esp_temperature: EspTemperatureSettings;
