@@ -831,7 +831,7 @@ sensor:
     name: Uptime Sensor
     filters:
       - lambda: return x / 3600.0;
-    unit_of_measurement: "hours"
+    unit_of_measurement: "h"
     accuracy_decimals: 2
 {%- if mqtt.enabled %}
     state_topic: "{{ yaml_string(mqtt_topic) }}/esp32/uptime"
