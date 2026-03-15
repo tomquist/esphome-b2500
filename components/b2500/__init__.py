@@ -53,7 +53,7 @@ def _get_max_connections():
 
         default = getattr(esp32_ble, "DEFAULT_MAX_CONNECTIONS", 1)
         idf = getattr(esp32_ble, "IDF_MAX_CONNECTIONS", default)
-        return idf if CORE.using_esp_idf else default
+        return idf if CORE.is_esp32 else default
 
     # Fallback to a single instance if both helper APIs are unavailable
     return 1
