@@ -15,6 +15,7 @@ interface TemplateCapability {
   readonly canEnableCellquery: boolean;
   readonly canEnableTimerQuery: boolean;
   readonly canEnableExperimentalCommands: boolean;
+  readonly canEnableDetailedCellSensors: boolean;
   readonly canEnableEnforceDod: boolean;
   readonly canEnableCmd30: boolean;
   readonly canDefineJsInclude: boolean;
@@ -46,6 +47,7 @@ export const templates = {
       canEnableCellquery: true,
       canEnableTimerQuery: true,
       canEnableExperimentalCommands: true,
+      canEnableDetailedCellSensors: false,
       canEnableEnforceDod: true,
       canEnableCmd30: true,
       canDefineJsInclude: true,
@@ -70,6 +72,7 @@ export const templates = {
       canEnableCellquery: false,
       canEnableTimerQuery: false,
       canEnableExperimentalCommands: false,
+      canEnableDetailedCellSensors: true,
       canEnableEnforceDod: false,
       canEnableCmd30: false,
       canDefineJsInclude: true,
@@ -94,6 +97,7 @@ export const templates = {
       canEnableCellquery: false,
       canEnableTimerQuery: false,
       canEnableExperimentalCommands: false,
+      canEnableDetailedCellSensors: false,
       canEnableEnforceDod: false,
       canEnableCmd30: false,
       canDefineJsInclude: false,

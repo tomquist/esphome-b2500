@@ -234,12 +234,10 @@ b2500:
               if (x.cell_voltages[i] > max) {
                 max = x.cell_voltages[i];
               }
-{%- for cell_idx in range(1, 15) %}
-              if (i == {{ cell_idx - 1 }}) {
-                id(b2500_device_cell_voltage_{{ storage_idx }}_{{ cell_idx }}).publish_state(x.cell_voltages[i] / 1000.0);
-              }
-{%- endfor %}
             }
+{%- for cell_idx in range(1, 15) %}
+            id(b2500_device_cell_voltage_{{ storage_idx }}_{{ cell_idx }}).publish_state(x.cell_voltages[{{ cell_idx - 1 }}] / 1000.0);
+{%- endfor %}
             id(b2500_device_cell_voltage_min_{{ storage_idx }}).publish_state(min / 1000.0);
             id(b2500_device_cell_voltage_max_{{ storage_idx }}).publish_state(max / 1000.0);
             id(b2500_device_cell_voltage_avg_{{ storage_idx }}).publish_state((sum / 14.0) / 1000.0);

@@ -215,7 +215,7 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
             label="Enable Cellquery"
           />
         )}
-        {formValues.template_version === 'v2' && (
+        {currentTemplate.capabilities.canEnableDetailedCellSensors && (
           <BooleanField
             value={formValues}
             onChange={handleInputChange}
