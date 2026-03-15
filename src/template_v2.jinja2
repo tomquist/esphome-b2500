@@ -310,6 +310,14 @@ button:
       command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/factory_settings/set"
 {%- endif %}
       disabled_by_default: True
+    hardware_reset:
+      id: b2500_button_hardware_reset_{{ loop.index }}
+      name: "{{ sensor_prefix(loop.index, storage) }} Hardware Reset"
+      device_id: b2500_device_{{ loop.index }}
+{%- if mqtt.enabled %}
+      command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/hardware_reset/set"
+{%- endif %}
+      disabled_by_default: True
 {%- if enable_set_wifi %}
   - platform: template
     id: b2500_button_set_wifi{{ loop.index }}

@@ -40,12 +40,15 @@ void B2500ComponentBase::gattc_event_handler(esp_gattc_cb_event_t event, esp_gat
     case ESP_GATTC_DISCONNECT_EVT: {
       this->read_handle_ = 0;
       this->write_handle_ = 0;
+      this->write_ext_handle_ = 0;
       ESP_LOGW(TAG, "Disconnected!");
       break;
     }
 
     case ESP_GATTC_SEARCH_CMPL_EVT: {
       this->read_handle_ = 0;
+      this->write_handle_ = 0;
+      this->write_ext_handle_ = 0;
       auto *chr = this->parent()->get_characteristic(B2500_SERVICE_UUID, B2500_STATUS_UUID);
       if (chr == nullptr) {
         const auto service_uuid = uuid_to_log_string(B2500_SERVICE_UUID, 0);
@@ -71,6 +74,11 @@ void B2500ComponentBase::gattc_event_handler(esp_gattc_cb_event_t event, esp_gat
         break;
       }
       this->write_handle_ = write_chr->handle;
+
+      auto *write_ext_chr = this->parent()->get_characteristic(B2500_SERVICE_UUID, B2500_COMMAND_EXT_UUID);
+      if (write_ext_chr != nullptr) {
+        this->write_ext_handle_ = write_ext_chr->handle;
+      }
 
       break;
     }
@@ -126,6 +134,44 @@ bool B2500ComponentBase::factory_reset() {
     return false;
   }
   this->send_command(payload);
+  return true;
+}
+
+bool B2500ComponentBase::hardware_reset() {
+  if (this->write_ext_handle_ == 0) {
+    ESP_LOGW(TAG, "Hardware reset characteristic not available");
+    return false;
+  }
+
+  static const std::vector<uint8_t> trigger_payload{0xAA, 0x05, 0x01, 0x00, 0x01, 0x01, 0x00, 0x08};
+  static const std::vector<uint8_t> release_payload{0xAA, 0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x07};
+
+  auto trigger_status = esp_ble_gattc_write_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
+                                                  this->write_ext_handle_, trigger_payload.size(),
+                                                  const_cast<uint8_t *>(trigger_payload.data()),
+                                                  ESP_GATT_WRITE_TYPE_NO_RSP, ESP_GATT_AUTH_REQ_NONE);
+  if (trigger_status) {
+    ESP_LOGW(TAG, "Error sending hardware reset trigger, status=%d", trigger_status);
+    return false;
+  }
+
+  this->set_timeout("hardware_reset_release", 1000, [this]() {
+    if (this->write_ext_handle_ == 0 || !this->is_connected()) {
+      ESP_LOGW(TAG, "Hardware reset release characteristic not available or device disconnected");
+      return;
+    }
+
+    auto release_status = esp_ble_gattc_write_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
+                                                    this->write_ext_handle_, release_payload.size(),
+                                                    const_cast<uint8_t *>(release_payload.data()),
+                                                    ESP_GATT_WRITE_TYPE_NO_RSP, ESP_GATT_AUTH_REQ_NONE);
+    if (release_status) {
+      ESP_LOGW(TAG, "Error sending hardware reset release, status=%d", release_status);
+      return;
+    }
+    ESP_LOGD(TAG, "Hardware reset command sent");
+  });
+
   return true;
 }
 

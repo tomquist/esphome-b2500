@@ -23,6 +23,8 @@ static const esp32_ble_tracker::ESPBTUUID B2500_STATUS_UUID =
     esp32_ble_tracker::ESPBTUUID::from_raw("0000ff02-0000-1000-8000-00805f9b34fb");
 static const esp32_ble_tracker::ESPBTUUID B2500_COMMAND_UUID =
     esp32_ble_tracker::ESPBTUUID::from_raw("0000ff01-0000-1000-8000-00805f9b34fb");
+static const esp32_ble_tracker::ESPBTUUID B2500_COMMAND_EXT_UUID =
+    esp32_ble_tracker::ESPBTUUID::from_raw("0000ff06-0000-1000-8000-00805f9b34fb");
 
 class B2500ComponentBase : public PollingComponent, public ble_client::BLEClientNode {
  public:
@@ -48,6 +50,7 @@ class B2500ComponentBase : public PollingComponent, public ble_client::BLEClient
   virtual bool set_charge_mode(const std::string &charge_mode) = 0;
   bool reboot();
   bool factory_reset();
+  bool hardware_reset();
   bool set_dod(float dod);
   bool set_wifi(const std::string &ssid, const std::string &password);
   bool set_mqtt(bool ssl, const std::string &host, uint16_t port, const std::string &username,
@@ -65,6 +68,7 @@ class B2500ComponentBase : public PollingComponent, public ble_client::BLEClient
   uint16_t read_handle_;
   uint16_t desc_handle;
   uint16_t write_handle_;
+  uint16_t write_ext_handle_{0};
 
   // Queue of all outstanding requests
   std::queue<std::vector<uint8_t>> requests_;

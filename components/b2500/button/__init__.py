@@ -17,11 +17,13 @@ CODEOWNERS = ["@tomquist"]
 
 RebootButton = b2500_ns.class_("RebootButton", button.Button)
 FactoryResetButton = b2500_ns.class_("FactoryResetButton", button.Button)
+HardwareResetButton = b2500_ns.class_("HardwareResetButton", button.Button)
 
 CONF_REBOOT = "reboot"
 CONF_FACTORY_RESET = "factory_reset"
+CONF_HARDWARE_RESET = "hardware_reset"
 
-MARKERS = [CONF_REBOOT, CONF_FACTORY_RESET]
+MARKERS = [CONF_REBOOT, CONF_FACTORY_RESET, CONF_HARDWARE_RESET]
 
 BASE_SCHEMA = cv.Schema(
     {
@@ -32,6 +34,10 @@ BASE_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_FACTORY_RESET): cv.maybe_simple_value(
             button.button_schema(FactoryResetButton),
+            key=CONF_NAME,
+        ),
+        cv.Optional(CONF_HARDWARE_RESET): cv.maybe_simple_value(
+            button.button_schema(HardwareResetButton),
             key=CONF_NAME,
         ),
     }
