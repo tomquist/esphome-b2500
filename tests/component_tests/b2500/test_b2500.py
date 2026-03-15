@@ -39,4 +39,7 @@ def test_b2500_set_timer_generation_uses_integer_templates(generate_main):
     main_cpp = generate_main(temp_path)
 
     assert "set_timer(1)" in main_cpp
-    assert "set_timer([=]() -> int" in main_cpp
+    lambda_set_timer = "set_timer([]() -> int {"
+    assert lambda_set_timer in main_cpp
+    lambda_set_timer_index = main_cpp.index(lambda_set_timer)
+    assert "return 2;" in main_cpp[lambda_set_timer_index: lambda_set_timer_index + 200]
