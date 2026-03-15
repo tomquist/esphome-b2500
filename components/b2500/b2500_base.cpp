@@ -47,6 +47,7 @@ void B2500ComponentBase::gattc_event_handler(esp_gattc_cb_event_t event, esp_gat
 
     case ESP_GATTC_SEARCH_CMPL_EVT: {
       this->read_handle_ = 0;
+      this->write_handle_ = 0;
       this->write_ext_handle_ = 0;
       auto *chr = this->parent()->get_characteristic(B2500_SERVICE_UUID, B2500_STATUS_UUID);
       if (chr == nullptr) {
@@ -155,6 +156,11 @@ bool B2500ComponentBase::hardware_reset() {
   }
 
   this->set_timeout("hardware_reset_release", 1000, [this]() {
+    if (this->write_ext_handle_ == 0 || !this->is_connected()) {
+      ESP_LOGW(TAG, "Hardware reset release characteristic not available or device disconnected");
+      return;
+    }
+
     auto release_status = esp_ble_gattc_write_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
                                                     this->write_ext_handle_, release_payload.size(),
                                                     const_cast<uint8_t *>(release_payload.data()),
