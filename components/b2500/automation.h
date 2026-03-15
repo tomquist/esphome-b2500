@@ -98,14 +98,20 @@ template<typename... Ts> class SetTimerAction : public Action<Ts...>, public Par
 
  public:
   void play(const Ts &... x) override {
-    auto timer = this->parent_->get_state()->get_timer(this->timer_.value(x...));
+    int timer_idx = this->timer_.value(x...);
+    if (timer_idx < 0 || timer_idx >= 5) {
+      ESP_LOGW("b2500.automation", "Invalid timer index %d in set_timer action", timer_idx);
+      return;
+    }
+
+    auto timer = this->parent_->get_state()->get_timer(timer_idx);
     auto enabled = this->enabled_.value_or(x..., timer.enabled).value_or(timer.enabled);
     auto output_power = this->output_power_.value_or(x..., timer.output_power).value_or(timer.output_power);
     auto start_hour = this->start_hour_.value_or(x..., timer.start.hour).value_or(timer.start.hour);
     auto start_minute = this->start_minute_.value_or(x..., timer.start.minute).value_or(timer.start.minute);
     auto end_hour = this->end_hour_.value_or(x..., timer.end.hour).value_or(timer.end.hour);
     auto end_minute = this->end_minute_.value_or(x..., timer.end.minute).value_or(timer.end.minute);
-    this->parent_->set_timer(this->timer_.value(x...), enabled, output_power, start_hour, start_minute, end_hour, end_minute);
+    this->parent_->set_timer(timer_idx, enabled, output_power, start_hour, start_minute, end_hour, end_minute);
   }
 };
 
