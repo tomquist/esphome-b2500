@@ -969,7 +969,7 @@ sensor:
       state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/value"
       retain: false
 {%- endif %}
-      device_class: power
+      device_class: apparent_power
       icon: mdi:meter-electric
     daily_total_battery_charge:
       name: "{{ sensor_prefix(loop.index, storage) }} Daily Total Battery Charge"

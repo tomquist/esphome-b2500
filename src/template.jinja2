@@ -1217,7 +1217,7 @@ sensor:
     state_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/smartmeter/value"
     accuracy_decimals: 0
     unit_of_measurement: 'VA'
-    device_class: power
+    device_class: apparent_power
     icon: mdi:meter-electric
   {%- endif %}
 
