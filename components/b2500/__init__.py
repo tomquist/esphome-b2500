@@ -45,15 +45,16 @@ AUTO_LOAD = ["b2500", "select"]
 
 
 def _get_max_connections():
-    if hasattr(esp32_ble_tracker, "max_connections"):
-        return esp32_ble_tracker.max_connections()
-
     if esp32_ble is not None:
         from esphome.core import CORE
 
         default = getattr(esp32_ble, "DEFAULT_MAX_CONNECTIONS", 1)
         idf = getattr(esp32_ble, "IDF_MAX_CONNECTIONS", default)
         return idf if CORE.is_esp32 else default
+
+    if hasattr(esp32_ble_tracker, "max_connections"):
+        # Backward-compatibility for older ESPHome releases
+        return esp32_ble_tracker.max_connections()
 
     # Fallback to a single instance if both helper APIs are unavailable
     return 1
@@ -213,6 +214,7 @@ B2500_BASE_ACTION_SCHEMA = maybe_simple_id(
             cv.Required(CONF_PASSWORD): cv.templatable(cv.string),
         }
     ),
+    synchronous=True,
 )
 async def b2500_set_wifi(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
@@ -241,6 +243,7 @@ async def b2500_set_wifi(config, action_id, template_arg, args):
             cv.Required(CONF_PASSWORD): cv.templatable(cv.string),
         }
     ),
+    synchronous=True,
 )
 async def b2500_set_mqtt(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
@@ -271,6 +274,7 @@ async def b2500_set_mqtt(config, action_id, template_arg, args):
             cv.Required(CONF_ID): cv.use_id(B2500ComponentBase),
         }
     ),
+    synchronous=True,
 )
 async def b2500_reset_mqtt(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
@@ -289,6 +293,7 @@ async def b2500_reset_mqtt(config, action_id, template_arg, args):
             ),
         },
     ),
+    synchronous=True,
 )
 async def b2500_set_datetime(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
@@ -316,6 +321,7 @@ async def b2500_set_datetime(config, action_id, template_arg, args):
     "b2500.reboot",
     RebootAction,
     B2500_BASE_ACTION_SCHEMA,
+    synchronous=True,
 )
 async def b2500_reboot(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
@@ -327,6 +333,7 @@ async def b2500_reboot(config, action_id, template_arg, args):
     "b2500.factory_reset",
     FactoryResetAction,
     B2500_BASE_ACTION_SCHEMA,
+    synchronous=True,
 )
 async def b2500_factory_reset(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
@@ -343,6 +350,7 @@ async def b2500_factory_reset(config, action_id, template_arg, args):
             cv.Required("dod"): cv.templatable(cv.int_),
         },
     ),
+    synchronous=True,
 )
 async def b2500_set_dod(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
@@ -369,6 +377,7 @@ async def b2500_set_dod(config, action_id, template_arg, args):
             )),
         },
     ),
+    synchronous=True,
 )
 async def b2500_set_charge_mode(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
@@ -394,6 +403,7 @@ async def b2500_set_charge_mode(config, action_id, template_arg, args):
             cv.Required("active"): cv.templatable(cv.boolean),
         },
     ),
+    synchronous=True,
 )
 async def b2500_set_out_active(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
@@ -416,6 +426,7 @@ async def b2500_set_out_active(config, action_id, template_arg, args):
             cv.Required("threshold"): cv.templatable(cv.int_),
         },
     ),
+    synchronous=True,
 )
 async def b2500_set_discharge_threshold(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
@@ -450,7 +461,8 @@ async def b2500_set_discharge_threshold(config, action_id, template_arg, args):
             "end_hour",
             "end_minute",
         )
-    )
+    ),
+    synchronous=True,
 )
 async def b2500_set_timer(config, action_id, template_arg, args):
     action_var = cg.new_Pvariable(action_id, template_arg)
@@ -513,6 +525,7 @@ async def b2500_set_timer(config, action_id, template_arg, args):
             cv.Required("enabled"): cv.templatable(cv.boolean),
         },
     ),
+    synchronous=True,
 )
 async def b2500_set_adaptive_mode_enabled(
     config,
