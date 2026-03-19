@@ -1,3 +1,5 @@
+import inspect
+
 from esphome import automation
 from esphome.automation import maybe_simple_id
 import esphome.codegen as cg
@@ -42,6 +44,17 @@ CONF_ON_FC41D_INFO = "on_fc41d_info"
 CONF_ON_TIMER_INFO = "on_timer_info"
 
 AUTO_LOAD = ["b2500", "select"]
+
+_REGISTER_ACTION_SUPPORTS_SYNCHRONOUS = (
+    "synchronous" in inspect.signature(automation.register_action).parameters
+)
+
+
+def register_action_compat(action_name, action_type, schema, *, synchronous=True):
+    kwargs = {}
+    if _REGISTER_ACTION_SUPPORTS_SYNCHRONOUS:
+        kwargs["synchronous"] = synchronous
+    return automation.register_action(action_name, action_type, schema, **kwargs)
 
 
 def _get_max_connections():
@@ -204,7 +217,7 @@ B2500_BASE_ACTION_SCHEMA = maybe_simple_id(
 )
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.set_wifi",
     SetWifiAction,
     cv.Schema(
@@ -230,7 +243,7 @@ async def b2500_set_wifi(config, action_id, template_arg, args):
     return var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.set_mqtt",
     SetMqttAction,
     cv.Schema(
@@ -266,7 +279,7 @@ async def b2500_set_mqtt(config, action_id, template_arg, args):
     cg.add(var.set_password(template_))
     return var
 
-@automation.register_action(
+@register_action_compat(
     "b2500.reset_mqtt",
     ResetMqttAction,
     cv.Schema(
@@ -282,7 +295,7 @@ async def b2500_reset_mqtt(config, action_id, template_arg, args):
     return var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.set_datetime",
     SetDatetimeAction,
     cv.Schema(
@@ -317,7 +330,7 @@ async def b2500_set_datetime(config, action_id, template_arg, args):
     return action_var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.reboot",
     RebootAction,
     B2500_BASE_ACTION_SCHEMA,
@@ -329,7 +342,7 @@ async def b2500_reboot(config, action_id, template_arg, args):
     return var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.factory_reset",
     FactoryResetAction,
     B2500_BASE_ACTION_SCHEMA,
@@ -341,7 +354,7 @@ async def b2500_factory_reset(config, action_id, template_arg, args):
     return var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.set_dod",
     SetDodAction,
     cv.Schema(
@@ -361,7 +374,7 @@ async def b2500_set_dod(config, action_id, template_arg, args):
     return action_var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.set_charge_mode",
     SetChargeModeAction,
     cv.Schema(
@@ -392,7 +405,7 @@ async def b2500_set_charge_mode(config, action_id, template_arg, args):
     return action_var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.set_out_active",
     SetOutActiveAction,
     cv.Schema(
@@ -416,7 +429,7 @@ async def b2500_set_out_active(config, action_id, template_arg, args):
     return action_var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.set_discharge_threshold",
     SetDischargeThresholdAction,
     cv.Schema(
@@ -437,7 +450,7 @@ async def b2500_set_discharge_threshold(config, action_id, template_arg, args):
     return action_var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.set_timer",
     SetTimerAction,
     cv.Schema(
@@ -515,7 +528,7 @@ async def b2500_set_timer(config, action_id, template_arg, args):
     return action_var
 
 
-@automation.register_action(
+@register_action_compat(
     "b2500.set_adaptive_mode_enabled",
     SetAdaptiveModeEnabledAction,
     cv.Schema(
