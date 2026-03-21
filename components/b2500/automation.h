@@ -98,7 +98,8 @@ template<typename... Ts> class SetTimerAction : public Action<Ts...>, public Par
 
  public:
   void play(const Ts &... x) override {
-    auto timer = this->parent_->get_state()->get_timer(this->timer_.value(x...));
+    const auto timer_idx = this->timer_.value(x...);
+    auto timer = this->parent_->get_state()->get_timer(timer_idx);
 
     // Avoid binding references directly to packed struct fields
     auto timer_enabled = static_cast<bool>(timer.enabled);
@@ -114,7 +115,7 @@ template<typename... Ts> class SetTimerAction : public Action<Ts...>, public Par
     auto start_minute = this->start_minute_.value_or(x..., timer_start_minute).value_or(timer_start_minute);
     auto end_hour = this->end_hour_.value_or(x..., timer_end_hour).value_or(timer_end_hour);
     auto end_minute = this->end_minute_.value_or(x..., timer_end_minute).value_or(timer_end_minute);
-    this->parent_->set_timer(this->timer_.value(x...), enabled, output_power, start_hour, start_minute, end_hour, end_minute);
+    this->parent_->set_timer(timer_idx, enabled, output_power, start_hour, start_minute, end_hour, end_minute);
   }
 };
 
