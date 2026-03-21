@@ -99,6 +99,13 @@ template<typename... Ts> class SetTimerAction : public Action<Ts...>, public Par
  public:
   void play(const Ts &... x) override {
     const auto timer_idx = this->timer_.value(x...);
+    const auto max_timers = this->parent_->get_state()->get_number_of_timers();
+    if (timer_idx < 0 || timer_idx >= max_timers) {
+      ESP_LOGW("b2500.automation", "SetTimerAction: invalid timer index %d (valid range: 0-%d)", timer_idx,
+               max_timers - 1);
+      return;
+    }
+
     auto timer = this->parent_->get_state()->get_timer(timer_idx);
 
     // Avoid binding references directly to packed struct fields
