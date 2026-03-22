@@ -98,14 +98,31 @@ template<typename... Ts> class SetTimerAction : public Action<Ts...>, public Par
 
  public:
   void play(const Ts &... x) override {
-    auto timer = this->parent_->get_state()->get_timer(this->timer_.value(x...));
-    auto enabled = this->enabled_.value_or(x..., timer.enabled).value_or(timer.enabled);
-    auto output_power = this->output_power_.value_or(x..., timer.output_power).value_or(timer.output_power);
-    auto start_hour = this->start_hour_.value_or(x..., timer.start.hour).value_or(timer.start.hour);
-    auto start_minute = this->start_minute_.value_or(x..., timer.start.minute).value_or(timer.start.minute);
-    auto end_hour = this->end_hour_.value_or(x..., timer.end.hour).value_or(timer.end.hour);
-    auto end_minute = this->end_minute_.value_or(x..., timer.end.minute).value_or(timer.end.minute);
-    this->parent_->set_timer(this->timer_.value(x...), enabled, output_power, start_hour, start_minute, end_hour, end_minute);
+    const auto timer_idx = this->timer_.value(x...);
+    const auto max_timers = this->parent_->get_state()->get_number_of_timers();
+    if (timer_idx < 0 || timer_idx >= max_timers) {
+      ESP_LOGW("b2500.automation", "SetTimerAction: invalid timer index %d (valid range: 0-%d)", timer_idx,
+               max_timers - 1);
+      return;
+    }
+
+    auto timer = this->parent_->get_state()->get_timer(timer_idx);
+
+    // Avoid binding references directly to packed struct fields
+    auto timer_enabled = static_cast<bool>(timer.enabled);
+    auto timer_output_power = static_cast<int>(timer.output_power);
+    auto timer_start_hour = static_cast<int>(timer.start.hour);
+    auto timer_start_minute = static_cast<int>(timer.start.minute);
+    auto timer_end_hour = static_cast<int>(timer.end.hour);
+    auto timer_end_minute = static_cast<int>(timer.end.minute);
+
+    auto enabled = this->enabled_.value_or(x..., timer_enabled).value_or(timer_enabled);
+    auto output_power = this->output_power_.value_or(x..., timer_output_power).value_or(timer_output_power);
+    auto start_hour = this->start_hour_.value_or(x..., timer_start_hour).value_or(timer_start_hour);
+    auto start_minute = this->start_minute_.value_or(x..., timer_start_minute).value_or(timer_start_minute);
+    auto end_hour = this->end_hour_.value_or(x..., timer_end_hour).value_or(timer_end_hour);
+    auto end_minute = this->end_minute_.value_or(x..., timer_end_minute).value_or(timer_end_minute);
+    this->parent_->set_timer(timer_idx, enabled, output_power, start_hour, start_minute, end_hour, end_minute);
   }
 };
 
