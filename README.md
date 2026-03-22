@@ -911,7 +911,7 @@ on_...:
     - b2500.set_timer:
         id: b2500_device
         generation: 2
-        timer: 1
+        timer: 0
         enabled: true
         output_power: 500
         start_hour: 8
@@ -922,7 +922,7 @@ on_...:
 
 - **id** (**Required**, [ID](https://esphome.io/guides/configuration-types#config-id)): The `b2500` V2 component to control.
 - **generation** (**Required**, int): Must be `2`.
-- **timer** (**Required**, int, [templatable](https://esphome.io/automations/templates)): Timer index (`0`–`4`, corresponding to timers 1–5).
+- **timer** (**Required**, int, [templatable](https://esphome.io/automations/templates)): Timer index (`0`–`4`). Index `0` corresponds to Timer 1, `1` to Timer 2, and so on up to `4` for Timer 5.
 - **enabled** (*Optional*, boolean, [templatable](https://esphome.io/automations/templates)): Whether the timer is enabled.
 - **output_power** (*Optional*, int, [templatable](https://esphome.io/automations/templates)): Timer output power in watts.
 - **start_hour** (*Optional*, int, [templatable](https://esphome.io/automations/templates)): Timer start hour.
