@@ -88,7 +88,7 @@ export const defaultFormValues: FormValues = {
   },
   enable_dio_flash_mode: false,
   use_legacy_entity_names: true,
-  storages: [{ name: 'B2500', version: 1, mac_address: '00:00:00:00:00:00' }],
+  storages: [{ name: 'B2500', version: 2, mac_address: '00:00:00:00:00:00' }],
 };
 
 export const mergeDeep = (target: any, source: any) => {

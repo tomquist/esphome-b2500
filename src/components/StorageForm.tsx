@@ -1,6 +1,18 @@
 // src/components/StorageForm.tsx
 import React from 'react';
-import { Button, TextField, Box, Typography, Grid, Alert } from '@mui/material';
+import {
+  Button,
+  TextField,
+  Box,
+  Typography,
+  Grid,
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText,
+} from '@mui/material';
 import { Storage, TemplateVersion } from '../types';
 import { templates } from '../templates';
 
@@ -31,7 +43,7 @@ const StorageForm: React.FC<StorageFormProps> = ({
 
   const handleAddStorage = () => {
     if (storages.length < maxStorages) {
-      onChange([...storages, { name: '', version: 1, mac_address: '' }]);
+      onChange([...storages, { name: '', version: 2, mac_address: '' }]);
     }
   };
 
@@ -108,24 +120,35 @@ const StorageForm: React.FC<StorageFormProps> = ({
               </Grid>
               {template.capabilities.requiresStorageVersion && (
                 <Grid item xs={4}>
-                  <TextField
-                    label="Version"
-                    type="number"
-                    value={storage.version}
-                    onChange={(e) =>
-                      handleStorageChange(
-                        index,
-                        'version',
-                        parseInt(e.target.value, 10)
-                      )
-                    }
+                  <FormControl
                     fullWidth
                     margin="normal"
-                    inputProps={{ min: 1, max: 2 }}
                     required
                     error={versionValid}
-                    helperText={'Version must be 1 or 2'}
-                  />
+                  >
+                    <InputLabel id={`storage-version-label-${index}`}>
+                      Device Version
+                    </InputLabel>
+                    <Select
+                      labelId={`storage-version-label-${index}`}
+                      label="Device Version"
+                      value={storage.version}
+                      onChange={(e) =>
+                        handleStorageChange(
+                          index,
+                          'version',
+                          e.target.value as number
+                        )
+                      }
+                    >
+                      <MenuItem value={2}>V2 (Standard)</MenuItem>
+                      <MenuItem value={1}>V1 (Legacy)</MenuItem>
+                    </Select>
+                    <FormHelperText>
+                      Most devices sold in recent years are V2. Only select V1
+                      if you are sure your device is a first-generation model.
+                    </FormHelperText>
+                  </FormControl>
                 </Grid>
               )}
               <Grid item xs={4}>
