@@ -750,8 +750,8 @@ on_...:
   then:
     - b2500.set_wifi:
         id: b2500_device
-        ssid: "MyNetwork"
-        password: "MyPassword"
+        ssid: !secret wifi_ssid
+        password: !secret wifi_password
 ```
 
 - **id** (**Required**, [ID](https://esphome.io/guides/configuration-types#config-id)): The `b2500` component to control.
@@ -767,10 +767,10 @@ on_...:
   then:
     - b2500.set_mqtt:
         id: b2500_device
-        host: "mqtt.local"
+        host: !secret mqtt_host
         port: 1883
-        username: "user"
-        password: "pass"
+        username: !secret mqtt_username
+        password: !secret mqtt_password
         ssl: false
 ```
 
