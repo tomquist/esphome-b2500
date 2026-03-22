@@ -949,7 +949,7 @@ on_...:
 
 ### Complete Example
 
-A full configuration for an ESP32-S3 with a V2 B2500 device, exposing all available entities:
+Example configuration for an ESP32-S3 with a V2 B2500 device. This shows a representative subset of entities — timers are shown for 1–2 only (3–5 follow the same pattern), and some diagnostic text sensors and binary sensors are omitted for brevity. See the platform sections above for the full list of available entities.
 
 ```yaml
 external_components:
