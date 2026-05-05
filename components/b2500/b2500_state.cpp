@@ -6,10 +6,6 @@
 namespace esphome {
 namespace b2500 {
 
-void B2500State::add_on_message_callback(std::function<void(B2500Message)> &&callback) {
-  this->message_callback_.add(std::move(callback));
-}
-
 void B2500State::message_received(B2500Message message, time_t timestamp) {
   info_timestamps_[message] = timestamp;
   this->last_message_received_timestamp_ = timestamp;

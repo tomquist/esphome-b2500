@@ -261,7 +261,7 @@ async def b2500_set_wifi(config, action_id, template_arg, args):
 async def b2500_set_mqtt(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
-    cg.add(var.set_ssl(config[CONF_SSL]))
+    cg.add(var.set_ssl(await cg.templatable(config[CONF_SSL], args, bool)))
     cg.add(var.set_host(await cg.templatable(
         config[CONF_HOST],
         args,
@@ -326,7 +326,8 @@ async def b2500_set_datetime(config, action_id, template_arg, args):
             ("month", datetime_config[CONF_MONTH]),
             ("year", datetime_config[CONF_YEAR]),
         )
-        cg.add(action_var.set_datetime(datetime_struct))
+        template_ = await cg.templatable(datetime_struct, [], cg.ESPTime)
+        cg.add(action_var.set_datetime(template_))
     return action_var
 
 
