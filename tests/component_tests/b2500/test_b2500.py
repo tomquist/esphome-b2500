@@ -60,3 +60,24 @@ def test_b2500_set_timer_generation_uses_integer_templates(generate_main):
         if "return 2;" in main_cpp[idx: idx + 200]:
             break
         search_start = idx + len(lambda_set_timer)
+
+    # ESPHome 2026.4 introduced TemplatableFn (4 bytes, function-pointer-only),
+    # which static_asserts when fed a raw value instead of a callable. All
+    # TEMPLATABLE_VALUE setters must therefore be passed via cg.templatable so
+    # constants are wrapped in stateless lambdas. On 2025.x raw values are
+    # still accepted, but the codegen path must go through cg.templatable.
+    from esphome.const import __version__ as esphome_version
+
+    major, minor = (int(p) for p in esphome_version.split(".", 2)[:2])
+    requires_lambda_wrap = (major, minor) >= (2026, 4)
+
+    # set_mqtt's `ssl` defaults to False (not exposed in YAML).
+    assert "set_ssl(" in main_cpp
+    # set_datetime with a struct literal.
+    assert "set_datetime(" in main_cpp
+    if requires_lambda_wrap:
+        # TemplatableFn rejects raw constants — both must be wrapped via
+        # cg.templatable into stateless lambdas.
+        assert "set_ssl(false)" not in main_cpp
+        assert "set_ssl(true)" not in main_cpp
+        assert "set_datetime(ESPTime" not in main_cpp

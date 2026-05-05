@@ -32,6 +32,21 @@ esphome:
           generation: 2
           timer: !lambda 'return 2;'
           start_hour: !lambda 'return 6;'
+      - b2500.set_mqtt:
+          id: b2500_device
+          host: "broker.local"
+          port: 1883
+          username: "user"
+          password: "pass"
+      - b2500.set_datetime:
+          id: b2500_device
+          datetime:
+            year: 2025
+            month: 1
+            day: 1
+            hour: 0
+            minute: 0
+            second: 0
 
 time:
   - platform: sntp
