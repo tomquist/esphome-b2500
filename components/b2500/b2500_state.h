@@ -23,7 +23,9 @@ class B2500State {
 
   // Receiving Packets
   bool receive_packet(uint8_t *data, uint16_t data_len, time_t timestamp);
-  void add_on_message_callback(std::function<void(B2500Message)> &&callback);
+  template<typename F> void add_on_message_callback(F &&callback) {
+    this->message_callback_.add(std::forward<F>(callback));
+  }
   bool is_message_received(B2500Message message) const;
 
   time_t get_last_message_received_timestamp() const { return this->last_message_received_timestamp_; }
