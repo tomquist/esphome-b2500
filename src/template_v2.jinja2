@@ -607,7 +607,7 @@ text_sensor:
       icon: mdi:identifier
 {% if storage.version >= 2 %}
     device_time:
-      name: "{{ sensor_prefix(loop.index, storage) }} Device Time"
+      name: "{{ sensor_prefix(loop.index, storage) }} Device Time UTC"
       id: b2500_device_time_{{ loop.index }}
       device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
