@@ -233,9 +233,10 @@ The base topic prefix is configurable via `mqtt.topic`, defaulting to `b2500`. A
 | Description | Read Topic | Write Topic | Value Format Example | Available in version |
 |------------|------------|-------------|---------------------|---------------------|
 | Timer Info | {topic_prefix}/{storage}/timer | - | see [Timer Info](#timer-info-b2500storagetimer---v2-only) | v2 only |
-| Set Timer Configuration | - | {topic_prefix}/{storage}/timer/set | `{"enabled": true, "outputPower": 500, "start": {"hour": 8, "minute": 0}, "end": {"hour": 17, "minute": 0}}` | v2 only |
+| Set Single Timer Slot | - | {topic_prefix}/{storage}/timer/{timer}/set | `{"enabled": true, "outputPower": 500, "start": {"hour": 8, "minute": 0}, "end": {"hour": 17, "minute": 0}}` | v2 only |
+| Set All Timer Slots | - | {topic_prefix}/{storage}/timer/set | `{"enabled": true, "outputPower": 500, "start": {"hour": 8, "minute": 0}, "end": {"hour": 17, "minute": 0}}` | v2 only |
 
-Publishing a JSON payload to `{topic_prefix}/{storage}/timer/set` writes the discharge timer schedule. See [Set Timer Configuration](#set-timer-configuration-b2500storagetimerset---v2-only) below for the full payload format, the list of optional fields, and important notes about which timer slots are affected.
+Replace `{timer}` with the timer slot number (`1` to `5`). Publish the JSON payload to `{topic_prefix}/{storage}/timer/{timer}/set` to change a **single** timer slot, or to `{topic_prefix}/{storage}/timer/set` to write **all** slots at once. See [Set Timer Configuration](#set-timer-configuration-b2500storagetimerset---v2-only) below for the full payload format, the list of optional fields, and important notes.
 
 ### Device Control
 
@@ -360,7 +361,10 @@ Payloads for the write topics above are sent as plain (non-JSON) MQTT messages. 
 
 #### Set Timer Configuration (b2500/{storage}/timer/set) - V2 Only:
 
-Publish a JSON object to `{topic_prefix}/{storage}/timer/set` to change the device's discharge timer schedule:
+There are two write topics for the discharge timer schedule, both accepting the same JSON payload:
+
+- **`{topic_prefix}/{storage}/timer/{timer}/set`** – writes a **single** timer slot. Replace `{timer}` with the slot number (`1`–`5`, matching `timer1`…`timer5` in the [Timer Info](#timer-info-b2500storagetimer---v2-only) read topic). Prefer this topic.
+- **`{topic_prefix}/{storage}/timer/set`** – writes the payload to **all** timer slots at once.
 
 ```json
 {
@@ -380,15 +384,11 @@ Fields:
 | `start.hour` / `start.minute` | integer | Start time of the discharge window (`hour` 0–23, `minute` 0–59). |
 | `end.hour` / `end.minute` | integer | End time of the discharge window (`hour` 0–23, `minute` 0–59). |
 
-**All fields are optional.** Only the values present in the payload are written; any omitted field keeps its current value on the device. For example, to change only the output power without touching the schedule, publish:
+**All fields are optional.** Only the values present in the payload are written; any omitted field keeps its current value on the device. For example, to change only the output power of slot 1 without touching its schedule, publish `{ "outputPower": 800 }` to `{topic_prefix}/{storage}/timer/1/set`.
 
-```json
-{ "outputPower": 800 }
-```
+> **⚠️ Do not use the timers for a fast control loop (e.g. zero-export regulation).** Every write is persisted to the device's flash/EEPROM over BLE, which has a limited number of write cycles — writing the timers frequently will wear it out and eventually damage the device. The timers are meant for occasional schedule changes, not for continuously steering output power. For a control loop, drive the output limit dynamically instead (e.g. via [hm2mqtt](https://github.com/tomquist/hm2mqtt), which does not write to flash by default).
 
-**Important – this topic updates *all* timer slots at once.** The minimal configuration does not expose a per-slot write topic: a single message published to `{topic_prefix}/{storage}/timer/set` is applied to every timer slot (slot 1 through the last slot the device supports). If you need to configure individual timer slots independently, use the full **Native ESPHome component** configuration instead, which exposes a separate entity and write topic per slot (`{topic_prefix}/{storage}/timer/{timer}/power/set`, etc. – see [Timer Settings](#timer-settings-v2-only)).
-
-> **Note:** V2 devices with firmware < 218 only have 3 timer slots, while newer firmware has 5. The configuration always registers handlers for 5 slots, so on a 3-slot device you will see harmless log warnings such as `SetTimerAction: invalid timer index 3 (valid range: 0-2)` when writing to `timer/set`. The valid slots (0–2) are still updated; the out-of-range slots are simply ignored.
+> **Note:** the all-slots `timer/set` topic writes every slot in one message. V2 devices with firmware < 218 only have 3 timer slots, while newer firmware has 5; the configuration always handles 5 slots, so on a 3-slot device writing to `timer/set` produces harmless log warnings such as `SetTimerAction: invalid timer index 3 (valid range: 0-2)`. The valid slots are still updated; the out-of-range slots are ignored. The per-slot `timer/{timer}/set` topic only touches the slot you address (and only warns if that specific slot doesn't exist).
 
 </details>
 

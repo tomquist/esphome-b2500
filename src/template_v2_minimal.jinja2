@@ -51,6 +51,18 @@
 {%- macro yaml_string(value) %}{% set escaped_value = value | replace('\\', '\\\\') | replace('"', '\\"') %}{{ escaped_value }}{% endmacro %}
 {%- macro yaml_lambda_string(value) %}{% set escaped_value = yaml_string(value) | replace('#', '\\#') %}{{ escaped_value }}{% endmacro %}
 {%- macro sensor_prefix(loopindex, storage) %}{%- if use_legacy_entity_names %}B2500 - {{ loopindex }} - {{ yaml_string(storage.name) }}:{% endif %}{% endmacro %}
+{%- macro set_timer_action(storage_index, storage_version, timer_index) %}
+        - b2500.set_timer:
+            id: b2500_{{ storage_index }}
+            generation: {{ storage_version }}
+            timer: {{ timer_index }}
+            enabled: !lambda 'return x["enabled"].is<bool>() ? make_optional(x["enabled"].as<bool>()) : optional<bool>();'
+            output_power: !lambda 'return x["outputPower"].is<int>() ? x["outputPower"].as<int>() : optional<int>();'
+            start_hour: !lambda 'return x["start"]["hour"].is<int>() ? x["start"]["hour"].as<int>() : optional<int>();'
+            start_minute: !lambda 'return x["start"]["minute"].is<int>() ? x["start"]["minute"].as<int>() : optional<int>();'
+            end_hour: !lambda 'return x["end"]["hour"].is<int>() ? x["end"]["hour"].as<int>() : optional<int>();'
+            end_minute: !lambda 'return x["end"]["minute"].is<int>() ? x["end"]["minute"].as<int>() : optional<int>();'
+{%- endmacro %}
 {%- set hasV1 = false %}
 {%- set hasV2 = false %}
 {%- for storage in storages %}
@@ -236,19 +248,12 @@ mqtt:
 {%- if storage.version >= 2 %}
 {%- if enable_timer_query %}
 {%- for _ in range(5) %}
+    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/timer/{{ loop.index }}/set"
+      then:{{ set_timer_action(storage_loop.index, storage.version, loop.index0) }}
+{%- endfor %}
     - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/timer/set"
       then:
-        - b2500.set_timer:
-            id: b2500_{{ storage_loop.index }}
-            generation: {{ storage.version }}
-            timer: {{ loop.index0 }}
-            enabled: !lambda 'return x["enabled"].is<bool>() ? make_optional(x["enabled"].as<bool>()) : optional<bool>();'
-            output_power: !lambda 'return x["outputPower"].is<int>() ? x["outputPower"].as<int>() : optional<int>();'
-            start_hour: !lambda 'return x["start"]["hour"].is<int>() ? x["start"]["hour"].as<int>() : optional<int>();'
-            start_minute: !lambda 'return x["start"]["minute"].is<int>() ? x["start"]["minute"].as<int>() : optional<int>();'
-            end_hour: !lambda 'return x["end"]["hour"].is<int>() ? x["end"]["hour"].as<int>() : optional<int>();'
-            end_minute: !lambda 'return x["end"]["minute"].is<int>() ? x["end"]["minute"].as<int>() : optional<int>();'
-{%- endfor %}
+{%- for _ in range(5) %}{{ set_timer_action(storage_loop.index, storage.version, loop.index0) }}{%- endfor %}
 {%- endif %}
 {%- endif %}
 {%- if enable_set_wifi %}
