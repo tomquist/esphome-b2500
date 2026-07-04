@@ -387,7 +387,7 @@ Fields:
 **All fields are optional.** Only the values present in the payload are written; any omitted field keeps its current value on the device. For example, to change only the output power of slot 1 without touching its schedule, publish `{ "outputPower": 800 }` to `{topic_prefix}/{storage}/timer/1/set`.
 
 > **⚠️ Do not use the timers for a fast control loop (e.g. zero-export regulation).** Every write is persisted to the device's flash/EEPROM over BLE, which has a limited number of write cycles — writing the timers frequently will wear it out and eventually damage the device. The timers are meant for occasional schedule changes, not for continuously steering output power. For a control loop, drive the output limit dynamically instead (e.g. via [hm2mqtt](https://github.com/tomquist/hm2mqtt), which does not write to flash by default).
-
+>
 > **Note:** the all-slots `timer/set` topic writes every slot in one message. V2 devices with firmware < 218 only have 3 timer slots, while newer firmware has 5; the configuration always handles 5 slots, so on a 3-slot device writing to `timer/set` produces harmless log warnings such as `SetTimerAction: invalid timer index 3 (valid range: 0-2)`. The valid slots are still updated; the out-of-range slots are ignored. The per-slot `timer/{timer}/set` topic only touches the slot you address (and only warns if that specific slot doesn't exist).
 
 </details>
