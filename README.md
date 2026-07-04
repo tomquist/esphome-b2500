@@ -156,10 +156,10 @@ Find a list of all MQTT topics, depending on the selected configuration version:
 | Timer End Time | b2500/{storage}/timer/{timer}/end | b2500/{storage}/timer/{timer}/end/set | v2 only |
 | Timer Output Power | b2500/{storage}/timer/{timer}/power | b2500/{storage}/timer/{timer}/power/set | v2 only |
 
-Replace `{timer}` with the timer slot number (`1` to `5`). Each slot is exposed as an individual Home Assistant entity, so the write topics take the plain command payload of that entity type:
+Replace `{timer}` with the timer slot number (`1` to `5`). Each slot is exposed as an individual Home Assistant entity, so the write topics take the command payload of that entity type:
 
 - **Timer Enabled**: `ON` or `OFF`
-- **Timer Start Time** / **Timer End Time**: a time string, e.g. `08:00:00` (`HH:MM:SS`)
+- **Timer Start Time** / **Timer End Time**: a JSON object `{"hour": 8, "minute": 0, "second": 0}` (each field is an optional integer; ESPHome time entities use JSON, not a `HH:MM:SS` string)
 - **Timer Output Power**: an integer number of watts, e.g. `500`
 
 Older devices (firmware < 218) only expose 3 timer slots; slots `4` and `5` require newer firmware.
