@@ -226,7 +226,7 @@ The base topic prefix is configurable via `mqtt.topic`, defaulting to `b2500`. A
 | Bluetooth Status | {topic_prefix}/{storage}/bluetooth/enabled | {topic_prefix}/{storage}/bluetooth/enabled/set | "ON" or "OFF" | v1, v2 |
 | WiFi Configuration | - | {topic_prefix}/{storage}/wifi/set | `{"ssid": "network_name", "password": "wifi_password"}` | v1, v2 |
 | MQTT Configuration | - | {topic_prefix}/{storage}/mqtt/set | `{"host": "mqtt.local", "port": 1883, "username": "user", "password": "pass"}` | v1, v2 |
-| MQTT Reset | - | {topic_prefix}/{storage}/mqtt/reset | - | v2 only |
+| MQTT Reset | - | {topic_prefix}/{storage}/mqtt/reset | `PRESS` | v2 only |
 
 ### Timer Control (V2 Only)
 
@@ -242,9 +242,9 @@ Replace `{timer}` with the timer slot number (`1` to `5`). Publish the JSON payl
 
 | Description | Read Topic | Write Topic | Value Format Example | Available in version |
 |------------|------------|-------------|---------------------|---------------------|
-| Device Reboot | - | {topic_prefix}/{storage}/reboot/set | - (any payload triggers it) | v1, v2 |
-| Factory Reset | - | {topic_prefix}/{storage}/factory_settings/set | - (any payload triggers it) | v1, v2 |
-| Hardware Reset | - | {topic_prefix}/{storage}/hardware_reset/set | - (any payload triggers it) | v1, v2 |
+| Device Reboot | - | {topic_prefix}/{storage}/reboot/set | `PRESS` | v1, v2 |
+| Factory Reset | - | {topic_prefix}/{storage}/factory_settings/set | `PRESS` | v1, v2 |
+| Hardware Reset | - | {topic_prefix}/{storage}/hardware_reset/set | `PRESS` | v1, v2 |
 | Charge Mode | - | {topic_prefix}/{storage}/charge_mode/set | "LoadFirst" or "SimultaneousChargeAndDischarge" (V2) or "PV2Passthrough" (V1) | v1, v2 |
 | Discharge Threshold | - | {topic_prefix}/{storage}/discharge_threshold/set | Integer value (watts) | v1 only |
 | Depth of Discharge | - | {topic_prefix}/{storage}/dod/set | Integer value (percent) | v1 only |
@@ -252,7 +252,7 @@ Replace `{timer}` with the timer slot number (`1` to `5`). Publish the JSON payl
 | SmartMeter / Adaptive Mode Enable | {topic_prefix}/{storage}/smartmeter/enabled | {topic_prefix}/{storage}/smartmeter/enabled/set | "ON" or "OFF" | v2 only |
 | Surplus Feed-in Enable | {topic_prefix}/{storage}/device/surplus_feed_in | {topic_prefix}/{storage}/device/surplus_feed_in/set | "ON" or "OFF" | v2 only |
 
-Payloads for the write topics above are sent as plain (non-JSON) MQTT messages. The `.../reboot/set`, `.../factory_settings/set` and `.../hardware_reset/set` topics act as buttons — any payload (e.g. `PRESS` or an empty message) triggers the action.
+Payloads for the write topics above are sent as plain (non-JSON) MQTT messages. The `.../reboot/set`, `.../factory_settings/set` and `.../hardware_reset/set` topics are momentary buttons and require the exact payload `PRESS` (case-sensitive) — any other payload is ignored (ESPHome logs a warning).
 
 ### PowerZero Features (Optional)
 
