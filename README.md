@@ -156,6 +156,14 @@ Find a list of all MQTT topics, depending on the selected configuration version:
 | Timer End Time | b2500/{storage}/timer/{timer}/end | b2500/{storage}/timer/{timer}/end/set | v2 only |
 | Timer Output Power | b2500/{storage}/timer/{timer}/power | b2500/{storage}/timer/{timer}/power/set | v2 only |
 
+Replace `{timer}` with the timer slot number (`1` to `5`). Each slot is exposed as an individual Home Assistant entity, so the write topics take the plain command payload of that entity type:
+
+- **Timer Enabled**: `ON` or `OFF`
+- **Timer Start Time** / **Timer End Time**: a time string, e.g. `08:00:00` (`HH:MM:SS`)
+- **Timer Output Power**: an integer number of watts, e.g. `500`
+
+Older devices (firmware < 218) only expose 3 timer slots; slots `4` and `5` require newer firmware.
+
 ### System Control
 
 | Description | Read Topic | Write Topic | Available in version |
@@ -224,18 +232,26 @@ The base topic prefix is configurable via `mqtt.topic`, defaulting to `b2500`. A
 
 | Description | Read Topic | Write Topic | Value Format Example | Available in version |
 |------------|------------|-------------|---------------------|---------------------|
+| Timer Info | {topic_prefix}/{storage}/timer | - | see [Timer Info](#timer-info-b2500storagetimer---v2-only) | v2 only |
 | Set Timer Configuration | - | {topic_prefix}/{storage}/timer/set | `{"enabled": true, "outputPower": 500, "start": {"hour": 8, "minute": 0}, "end": {"hour": 17, "minute": 0}}` | v2 only |
+
+Publishing a JSON payload to `{topic_prefix}/{storage}/timer/set` writes the discharge timer schedule. See [Set Timer Configuration](#set-timer-configuration-b2500storagetimerset---v2-only) below for the full payload format, the list of optional fields, and important notes about which timer slots are affected.
 
 ### Device Control
 
 | Description | Read Topic | Write Topic | Value Format Example | Available in version |
 |------------|------------|-------------|---------------------|---------------------|
-| Device Reboot | - | {topic_prefix}/{storage}/reboot/set | - | v1, v2 |
-| Factory Reset | - | {topic_prefix}/{storage}/factory_settings/set | - | v1, v2 |
+| Device Reboot | - | {topic_prefix}/{storage}/reboot/set | - (any payload triggers it) | v1, v2 |
+| Factory Reset | - | {topic_prefix}/{storage}/factory_settings/set | - (any payload triggers it) | v1, v2 |
+| Hardware Reset | - | {topic_prefix}/{storage}/hardware_reset/set | - (any payload triggers it) | v1, v2 |
 | Charge Mode | - | {topic_prefix}/{storage}/charge_mode/set | "LoadFirst" or "SimultaneousChargeAndDischarge" (V2) or "PV2Passthrough" (V1) | v1, v2 |
-| Discharge Threshold | - | {topic_prefix}/{storage}/discharge_threshold/set | Integer value | v1 only |
-| Depth of Discharge | - | {topic_prefix}/{storage}/dod/set | Integer value | v1 only |
+| Discharge Threshold | - | {topic_prefix}/{storage}/discharge_threshold/set | Integer value (watts) | v1 only |
+| Depth of Discharge | - | {topic_prefix}/{storage}/dod/set | Integer value (percent) | v1 only |
 | Output Enable | - | {topic_prefix}/{storage}/power{output}/enabled/set | "ON" or "OFF" | v1 only |
+| SmartMeter / Adaptive Mode Enable | {topic_prefix}/{storage}/smartmeter/enabled | {topic_prefix}/{storage}/smartmeter/enabled/set | "ON" or "OFF" | v2 only |
+| Surplus Feed-in Enable | {topic_prefix}/{storage}/device/surplus_feed_in | {topic_prefix}/{storage}/device/surplus_feed_in/set | "ON" or "OFF" | v2 only |
+
+Payloads for the write topics above are sent as plain (non-JSON) MQTT messages. The `.../reboot/set`, `.../factory_settings/set` and `.../hardware_reset/set` topics act as buttons — any payload (e.g. `PRESS` or an empty message) triggers the action.
 
 ### PowerZero Features (Optional)
 
@@ -341,6 +357,38 @@ The base topic prefix is configurable via `mqtt.topic`, defaulting to `b2500`. A
     // timer2 through timer5 follow same format
 }
 ```
+
+#### Set Timer Configuration (b2500/{storage}/timer/set) - V2 Only:
+
+Publish a JSON object to `{topic_prefix}/{storage}/timer/set` to change the device's discharge timer schedule:
+
+```json
+{
+    "enabled": true,
+    "outputPower": 500,
+    "start": { "hour": 8, "minute": 0 },
+    "end": { "hour": 17, "minute": 0 }
+}
+```
+
+Fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | boolean | Whether the timer slot is active. |
+| `outputPower` | integer | Discharge output power in watts while the timer is active. |
+| `start.hour` / `start.minute` | integer | Start time of the discharge window (`hour` 0–23, `minute` 0–59). |
+| `end.hour` / `end.minute` | integer | End time of the discharge window (`hour` 0–23, `minute` 0–59). |
+
+**All fields are optional.** Only the values present in the payload are written; any omitted field keeps its current value on the device. For example, to change only the output power without touching the schedule, publish:
+
+```json
+{ "outputPower": 800 }
+```
+
+**Important – this topic updates *all* timer slots at once.** The minimal configuration does not expose a per-slot write topic: a single message published to `{topic_prefix}/{storage}/timer/set` is applied to every timer slot (slot 1 through the last slot the device supports). If you need to configure individual timer slots independently, use the full **Native ESPHome component** configuration instead, which exposes a separate entity and write topic per slot (`{topic_prefix}/{storage}/timer/{timer}/power/set`, etc. – see [Timer Settings](#timer-settings-v2-only)).
+
+> **Note:** V2 devices with firmware < 218 only have 3 timer slots, while newer firmware has 5. The configuration always registers handlers for 5 slots, so on a 3-slot device you will see harmless log warnings such as `SetTimerAction: invalid timer index 3 (valid range: 0-2)` when writing to `timer/set`. The valid slots (0–2) are still updated; the out-of-range slots are simply ignored.
 
 </details>
 
