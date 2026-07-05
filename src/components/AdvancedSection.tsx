@@ -334,27 +334,6 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
                   error={webserverPortInvalid}
                 />
               </Grid>
-              {currentTemplate.capabilities.canDefineJsInclude && (
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="JS Include"
-                    name="js_include"
-                    value={formValues.web_server.js_include}
-                    onChange={handleWebServerChange}
-                    fullWidth
-                    margin="normal"
-                    helperText={
-                      <>
-                        Optional. Leave empty to load the web UI from the pinned
-                        hosted bundle (recommended). Set a local path (e.g.{' '}
-                        <code>./v2/www.js</code>) only to embed the UI into the
-                        firmware for offline use; the file must then be in the
-                        same directory as the config file at build time.
-                      </>
-                    }
-                  />
-                </Grid>
-              )}
             </Grid>
           </Box>
         )}

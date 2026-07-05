@@ -71,9 +71,6 @@ export const defaultFormValues: FormValues = {
   enable_web_server: true,
   web_server: {
     port: 80,
-    // Empty by default: the template references the pinned js_url instead of
-    // embedding a local bundle. Set a path here only for an offline/custom build.
-    js_include: '',
   },
   enable_ota: true,
   ota: {

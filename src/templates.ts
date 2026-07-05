@@ -19,7 +19,6 @@ interface TemplateCapability {
   readonly canConfigurePublishUnchangedSensorValues: boolean;
   readonly canEnableEnforceDod: boolean;
   readonly canEnableCmd30: boolean;
-  readonly canDefineJsInclude: boolean;
   readonly hasPowerZeroScript: boolean;
 }
 
@@ -52,7 +51,6 @@ export const templates = {
       canConfigurePublishUnchangedSensorValues: false,
       canEnableEnforceDod: true,
       canEnableCmd30: true,
-      canDefineJsInclude: true,
       hasPowerZeroScript: true,
     },
   },
@@ -78,7 +76,6 @@ export const templates = {
       canConfigurePublishUnchangedSensorValues: true,
       canEnableEnforceDod: false,
       canEnableCmd30: false,
-      canDefineJsInclude: true,
       hasPowerZeroScript: true,
     },
   },
@@ -104,7 +101,6 @@ export const templates = {
       canConfigurePublishUnchangedSensorValues: true,
       canEnableEnforceDod: false,
       canEnableCmd30: false,
-      canDefineJsInclude: false,
       hasPowerZeroScript: true,
     },
   },
