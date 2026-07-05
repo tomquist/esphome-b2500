@@ -51,7 +51,11 @@ export interface PowermeterSettings {
 
 export interface WebServerSettings {
   port: number;
-  js_include: string;
+  /**
+   * URL the browser loads the web UI bundle from. Defaults (in the template) to
+   * the pinned esphome-webserver-b2500 GitHub Pages build.
+   */
+  js_url?: string;
 }
 
 export interface FallbackHotspotSettings {

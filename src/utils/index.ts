@@ -71,7 +71,6 @@ export const defaultFormValues: FormValues = {
   enable_web_server: true,
   web_server: {
     port: 80,
-    js_include: './v2/www.js',
   },
   enable_ota: true,
   ota: {
