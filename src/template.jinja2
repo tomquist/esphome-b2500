@@ -43,7 +43,8 @@
 {%- set web_server_port = web_server.port or 80 %}
 {%- set web_server_ota = web_server.ota or False %}
 {%- set automated_build = automated_build or false %}
-{%- set web_server_js_include = web_server.js_include or './v2/www.js' %}
+{%- set web_server_js_include = web_server.js_include %}
+{%- set web_server_js_url = web_server.js_url or 'https://tomquist.github.io/esphome-webserver-b2500/latest/www.js' %}
 {%- set enable_ota = enable_ota %}
 {%- set ota = ota or {} %}
 {%- set ota_password = ota.password or '' %}
@@ -221,12 +222,12 @@ wifi:
 web_server:
   port: {{ web_server_port }}
   ota: false
-  {%- if automated_build %}
+  version: 3
+  {%- if web_server_js_include %}
   js_include: "{{ yaml_string(web_server_js_include) }}"
   js_url: ""
-  version: 2
   {%- else %}
-  version: 3
+  js_url: "{{ yaml_string(web_server_js_url) }}"
   {%- endif %}
 {%- endif %}
 

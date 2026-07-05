@@ -51,7 +51,16 @@ export interface PowermeterSettings {
 
 export interface WebServerSettings {
   port: number;
+  /**
+   * Optional local file to embed as the web UI (advanced/offline override).
+   * When empty, the firmware references the pinned js_url instead.
+   */
   js_include: string;
+  /**
+   * URL the browser loads the web UI bundle from. Defaults (in the template) to
+   * the pinned esphome-webserver-b2500 GitHub Pages build.
+   */
+  js_url?: string;
 }
 
 export interface FallbackHotspotSettings {

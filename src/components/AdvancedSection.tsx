@@ -345,9 +345,11 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
                     margin="normal"
                     helperText={
                       <>
-                        Note that the file must be in the same directory as the
-                        config file. If you intend to use the automatic build
-                        system, this must be set to <code>./v2/www.js</code>.
+                        Optional. Leave empty to load the web UI from the pinned
+                        hosted bundle (recommended). Set a local path (e.g.{' '}
+                        <code>./v2/www.js</code>) only to embed the UI into the
+                        firmware for offline use; the file must then be in the
+                        same directory as the config file at build time.
                       </>
                     }
                   />
