@@ -12,6 +12,7 @@ import {
   MenuItem,
   SelectChangeEvent,
   FormHelperText,
+  Alert,
 } from '@mui/material';
 import {
   EspTemperatureSettings,
@@ -139,6 +140,26 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
     formValues.friendly_name.trim() === '';
   return (
     <Paper elevation={3} sx={{ padding: 2 }}>
+      <Alert severity="warning" sx={{ mb: 2 }}>
+        <strong>
+          Don't use the timers to build a zero feed-in / zero-export automation.
+        </strong>{' '}
+        Repeatedly rewriting the timer output power based on your current
+        consumption seems like an easy way to keep grid feed-in at zero, but
+        every timer change is written to the device's flash/EEPROM, which only
+        tolerates a limited number of write cycles. Continuously steering the
+        output through the timers will wear the flash out and can permanently
+        damage the device. Use the timers only for occasional schedule changes.
+        For a dynamic control loop, drive the output limit instead (e.g. via{' '}
+        <Link
+          href="https://github.com/tomquist/hm2mqtt"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          hm2mqtt
+        </Link>
+        , which does not write to flash by default).
+      </Alert>
       <Typography variant="h6">General Settings</Typography>
       <FormControl fullWidth margin="normal">
         <InputLabel id="variant-label">Configuration Version</InputLabel>
