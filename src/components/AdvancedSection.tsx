@@ -13,6 +13,8 @@ import {
   FormHelperText,
   FormControl,
   SelectChangeEvent,
+  Alert,
+  Link,
 } from '@mui/material';
 import { ExpandMore } from '@mui/icons-material';
 import BooleanField from './BooleanField';
@@ -235,12 +237,36 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           />
         )}
         {currentTemplate.capabilities.canEnableTimerQuery && (
-          <BooleanField
-            value={formValues}
-            onChange={handleInputChange}
-            prop="enable_timer_query"
-            label="Enable Timer Query (v2 & 3 only)"
-          />
+          <>
+            <BooleanField
+              value={formValues}
+              onChange={handleInputChange}
+              prop="enable_timer_query"
+              label="Enable Timer Query (v2 & 3 only)"
+            />
+            <Alert severity="warning" sx={{ mt: 1, mb: 2 }}>
+              <strong>
+                Don't use the timers to build a zero feed-in / zero-export
+                automation.
+              </strong>{' '}
+              Repeatedly rewriting the timer output power based on your current
+              consumption seems like an easy way to keep grid feed-in at zero,
+              but every timer change is written to the device's flash/EEPROM,
+              which only tolerates a limited number of write cycles.
+              Continuously steering the output through the timers will wear the
+              flash out and can permanently damage the device. Use the timers
+              only for occasional schedule changes. For a dynamic control loop,
+              drive the output limit instead (e.g. via{' '}
+              <Link
+                href="https://github.com/tomquist/hm2mqtt"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                hm2mqtt
+              </Link>
+              , which does not write to flash by default).
+            </Alert>
+          </>
         )}
         {currentTemplate.capabilities.canEnableExperimentalCommands && (
           <BooleanField
