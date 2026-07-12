@@ -157,8 +157,16 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
           rel="noopener noreferrer"
         >
           hm2mqtt
+        </Link>{' '}
+        or{' '}
+        <Link
+          href="https://astrameter.com"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          AstraMeter
         </Link>
-        , which does not write to flash by default).
+        , which do not write to flash by default).
       </Alert>
       <Typography variant="h6">General Settings</Typography>
       <FormControl fullWidth margin="normal">
