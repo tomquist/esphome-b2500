@@ -207,14 +207,17 @@ bool B2500State::set_surplus_feed_in_enabled(bool enabled, std::vector<uint8_t> 
 }
 
 bool B2500State::set_datetime(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second,
-                              std::vector<uint8_t> &payload) {
+                              int16_t timezone_offset_minutes, std::vector<uint8_t> &payload) {
   DateTimePacket time_packet;
   time_packet.year = year - 1900;
-  time_packet.month = month;
+  // The device counts months from zero, unlike ESPTime and unlike the day field
+  // right below it.
+  time_packet.month = month > 0 ? month - 1 : 0;
   time_packet.day = day;
   time_packet.hour = hour;
   time_packet.minute = minute;
   time_packet.second = second;
+  time_packet.timezone_offset_minutes = timezone_offset_minutes;
   return this->codec_->encode_set_datetime(time_packet, payload);
 }
 

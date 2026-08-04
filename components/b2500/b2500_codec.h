@@ -137,12 +137,16 @@ struct TimerInfoPacket {
 } __attribute__((packed));
 
 struct DateTimePacket {
-  uint8_t year;
-  uint8_t month;
-  uint8_t day;
-  uint8_t hour;
-  uint8_t minute;
-  uint8_t second;
+  uint8_t year;   // year - 1900
+  uint8_t month;  // 0-based: 0 = January
+  uint8_t day;    // 1-based
+  uint8_t hour;    // UTC
+  uint8_t minute;  // UTC
+  uint8_t second;  // UTC
+  // Offset that has to be added to the transmitted UTC time to get local time.
+  // The device applies it itself when it evaluates the discharge timers, so
+  // leaving it out makes the schedule run on UTC.
+  int16_t timezone_offset_minutes;
 } __attribute__((packed));
 
 class B2500Codec {

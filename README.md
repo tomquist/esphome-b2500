@@ -91,7 +91,7 @@ Find a list of all MQTT topics, depending on the selected configuration version:
 | Device Scene | b2500/{storage}/device/scene | - | v1, v2 |
 | Device Region | b2500/{storage}/device/region | - | v1, v2 |
 | Last Response | b2500/{storage}/device/last_response | - | v1, v2 |
-| Device Time | b2500/{storage}/device/time | - | v2 only |
+| Device Time (UTC) | b2500/{storage}/device/time | - | v2 only |
 
 ### Connection Status
 
@@ -764,7 +764,7 @@ text_sensor:
 
 #### Text sensors (V2 only)
 
-- **device_time** (*Optional*): The current time reported by the device. Entity category: `diagnostic`.
+- **device_time** (*Optional*): The current time reported by the device, in UTC — the device reports its internal clock, which is kept in UTC. Entity category: `diagnostic`.
 
 All options from [Text Sensor](https://esphome.io/components/text_sensor/) are supported for each entry.
 
@@ -866,11 +866,23 @@ on_...:
   then:
     - b2500.set_datetime:
         id: b2500_device
-        datetime: !lambda 'return id(sntp_time).now();'
+        datetime: !lambda 'return id(sntp_time).utcnow();'
 ```
 
 - **id** (**Required**, [ID](https://esphome.io/guides/configuration-types#config-id)): The `b2500` component to control.
 - **datetime** (**Required**, datetime): The date and time to set. Accepts a lambda returning an `ESPTime` struct or a static datetime value.
+
+The device keeps its clock in UTC and stores, separately, the offset to local time. It needs both: the offset is what it applies when it decides whether a discharge timer is currently active, so a device that never received one runs its schedule on UTC. This action always sends the offset of the `timezone` configured for the `time` component, taking the current DST state into account.
+
+The device stores the clock as sent and keeps the offset separately. When it later evaluates a discharge timer, it converts the timer's start and end — which you configure in local time — into the clock's frame using the stored offset. A device holding an offset of 0 therefore runs your schedule on UTC.
+
+The device only accepts an offset within ±12 hours that is a whole multiple of 10 minutes; anything else is discarded and it keeps its previous offset. That rules out a handful of zones (Kathmandu at +5:45, Chatham at +12:45, and anything past UTC+12). The component logs a warning when the configured timezone produces such an offset.
+
+The `datetime` value is converted to UTC before it is sent whenever it carries an epoch timestamp, so both `now()` and `utcnow()` program the same instant. A datetime built from literal fields (`year:`/`month:`/…) has no timestamp and is sent as-is, i.e. it is interpreted as UTC.
+
+Because the offset is only stored when the clock is synchronized, a device that stays connected across a DST change keeps using the old offset. The generated configurations therefore re-run this action nightly (at 03:30 and 05:30 local — two hours, because in UTC+2 zones the local hour 03 does not exist on the spring-forward day) in addition to running it on every BLE connect.
+
+> **Upgrading:** before this was fixed the device received no offset at all, so it evaluated the discharge timers against UTC. If you compensated by shifting your configured timer hours, set them back to the local times you actually want.
 
 #### `b2500.reboot` Action
 

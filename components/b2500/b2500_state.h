@@ -45,7 +45,7 @@ class B2500State {
   bool set_adaptive_mode_enabled(bool enabled, std::vector<uint8_t> &payload);
   bool set_surplus_feed_in_enabled(bool enabled, std::vector<uint8_t> &payload);
   bool set_datetime(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second,
-                    std::vector<uint8_t> &payload);
+                    int16_t timezone_offset_minutes, std::vector<uint8_t> &payload);
   bool set_wifi(const std::string &ssid, const std::string &password, std::vector<uint8_t> &payload);
   bool set_mqtt(bool ssl, const std::string &host, uint16_t port, const std::string &username,
                 const std::string &password, std::vector<uint8_t> &payload);

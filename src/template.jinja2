@@ -301,6 +301,31 @@ time:
   - platform: sntp
     id: sntp_time
     timezone: "{{ yaml_string(timezone) }}"
+{%- if hasV1 %}
+    on_time:
+      # The device stores the timezone offset it received with the last time
+      # sync and uses it to evaluate the discharge timers. Re-sync daily so the
+      # offset follows DST changes even while the BLE connection stays up.
+      # Two hours: in UTC+2 zones the spring-forward jump is 03:00 -> 04:00
+      # local, so an 03:30 trigger alone would be skipped on exactly the day it
+      # is needed.
+      - seconds: 0
+        minutes: 30
+        hours: 3,5
+        then:
+{%- for storage in storages %}
+{%- if storage.version == 1 %}
+          - if:
+              condition:
+                lambda: 'return id(b2500_ble_connected_{{ loop.index }});'
+              then:
+                - script.execute:
+                    id: b2500_script_set_time
+                    ble_device_nr: {{ loop.index }}
+                - script.wait: b2500_script_set_time
+{%- endif %}
+{%- endfor %}
+{%- endif %}
 
 globals:
 {%- for storage in storages %}
@@ -1534,15 +1559,22 @@ script:
                 service_uuid: 0000ff00-0000-1000-8000-00805f9b34fb
                 characteristic_uuid: 0000ff01-0000-1000-8000-00805f9b34fb
                 value: !lambda |-
-                  std::vector<unsigned char> rdat{{ loop.index }}{ 0x73,0x0d,0x23,0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x00 };
+                  std::vector<unsigned char> rdat{{ loop.index }}{ 0x73,0x0d,0x23,0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-                  auto time = id(sntp_time).now();
+                  auto time = id(sntp_time).utcnow();
                   rdat{{ loop.index }}.at(4) = time.year - 1900;
-                  rdat{{ loop.index }}.at(5) = time.month;
+                  rdat{{ loop.index }}.at(5) = time.month - 1; // the device counts months from zero
                   rdat{{ loop.index }}.at(6) = time.day_of_month;
                   rdat{{ loop.index }}.at(7) = time.hour;
                   rdat{{ loop.index }}.at(8) = time.minute;
                   rdat{{ loop.index }}.at(9) = time.second;
+
+                  // Offset from the transmitted UTC time to local time in
+                  // minutes. The device applies it itself when it evaluates the
+                  // discharge timers, so it has to follow the current DST state.
+                  int16_t tz_offset = (int16_t)(ESPTime::timezone_offset() / 60);
+                  rdat{{ loop.index }}.at(10) = (unsigned char)(tz_offset & 0xff);
+                  rdat{{ loop.index }}.at(11) = (unsigned char)((tz_offset >> 8) & 0xff);
 
                   int rlen = rdat{{ loop.index }}.size();
                   rdat{{ loop.index }}.at(1) = rlen+1;

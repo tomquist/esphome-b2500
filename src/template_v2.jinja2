@@ -246,6 +246,28 @@ time:
   - platform: sntp
     id: sntp_time
     timezone: "{{ yaml_string(timezone) }}"
+{%- if storages|length > 0 %}
+    on_time:
+      # The device stores the timezone offset it received with the last time
+      # sync and uses it to evaluate the discharge timers. Re-sync daily so the
+      # offset follows DST changes even while the BLE connection stays up.
+      # Two hours: in UTC+2 zones the spring-forward jump is 03:00 -> 04:00
+      # local, so an 03:30 trigger alone would be skipped on exactly the day it
+      # is needed.
+      - seconds: 0
+        minutes: 30
+        hours: 3,5
+        then:
+{%- for storage in storages %}
+          - if:
+              condition:
+                binary_sensor.is_on: b2500_device_ble_ok_{{ loop.index }}
+              then:
+                - b2500.set_datetime:
+                    id: b2500_{{ loop.index }}
+                    datetime: !lambda 'return id(sntp_time).utcnow();'
+{%- endfor %}
+{%- endif %}
 
 esp32_ble:
   id: ble

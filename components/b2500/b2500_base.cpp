@@ -217,12 +217,37 @@ bool B2500ComponentBase::reset_mqtt() {
 }
 
 bool B2500ComponentBase::set_datetime(ESPTime datetime) {
+  // The device expects the clock in UTC together with the offset to local time,
+  // and applies that offset itself when it evaluates the discharge timers.
+  // Anything carrying a valid epoch (`now()` as well as `utcnow()`) is converted
+  // to UTC here so that both spellings program the same instant; a datetime
+  // built from literal fields is taken as UTC as-is.
+  ESPTime utc = datetime;
+  if (datetime.timestamp > 0) {
+    auto converted = ESPTime::from_epoch_utc(datetime.timestamp);
+    if (converted.is_valid()) {
+      utc = converted;
+    }
+  }
+  int16_t timezone_offset_minutes = static_cast<int16_t>(ESPTime::timezone_offset() / 60);
+  // The device validates the offset before storing it: it has to be within
+  // +/- 12 hours and a whole multiple of 10 minutes. Anything else is dropped
+  // and the device silently keeps whatever offset it had.
+  if (timezone_offset_minutes < -720 || timezone_offset_minutes > 720 || timezone_offset_minutes % 10 != 0) {
+    ESP_LOGW(TAG,
+             "Timezone offset %d minutes is not accepted by the device (needs -720..720 and a multiple of 10); "
+             "it will keep its previous offset and the timers may run at the wrong time",
+             timezone_offset_minutes);
+  }
+
   std::vector<uint8_t> payload;
-  if (!this->state_->set_datetime(datetime.year, datetime.month, datetime.day_of_month, datetime.hour, datetime.minute,
-                                  datetime.second, payload)) {
+  if (!this->state_->set_datetime(utc.year, utc.month, utc.day_of_month, utc.hour, utc.minute, utc.second,
+                                  timezone_offset_minutes, payload)) {
     ESP_LOGW(TAG, "Failed to set datetime");
     return false;
   }
+  ESP_LOGD(TAG, "Setting device time to %04d-%02d-%02d %02d:%02d:%02d UTC, timezone offset %d minutes", utc.year,
+           utc.month, utc.day_of_month, utc.hour, utc.minute, utc.second, timezone_offset_minutes);
   this->send_command(payload);
   return true;
 }
