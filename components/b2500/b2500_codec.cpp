@@ -159,18 +159,30 @@ bool B2500Codec::parse_wifi_info(uint8_t *data, uint16_t data_len, WifiInfoPacke
     ESP_LOGW(TAG, "Not a CMD_WIFI_INFO packet");
     return false;
   }
-  if (data_len < sizeof(B2500PacketHeader) + 2) {
-    ESP_LOGW(TAG, "Packet too short for CMD_WIFI_INFO, expected at least %d, got %d", sizeof(B2500PacketHeader) + 2,
-             data_len);
-    ESP_LOGW(TAG, "data: %s", format_hex_pretty(data, data_len).c_str());
-    return false;
+  const size_t header_size = sizeof(B2500PacketHeader);
+  const size_t payload_size = data_len > header_size ? (data_len - header_size) : 0;
+
+  // Devices which are not connected to a Wi-Fi network answer with a header-only
+  // packet (73 04 23 09). Report "no Wi-Fi" instead of failing to parse.
+  if (payload_size == 0) {
+    ESP_LOGD(TAG, "Empty CMD_WIFI_INFO payload, device is not connected to a Wi-Fi network");
+    payload.signal = 0;
+    payload.ssid = "";
+    return true;
   }
 
   // Extract the signal strength
-  payload.signal = data[sizeof(B2500PacketHeader)];
+  payload.signal = data[header_size];
+
+  // The SSID follows the signal strength and a separator byte
+  if (payload_size < 2) {
+    ESP_LOGD(TAG, "CMD_WIFI_INFO payload contains no SSID");
+    payload.ssid = "";
+    return true;
+  }
 
   // Calculate the start and end pointers for the SSID string
-  const char *start = reinterpret_cast<const char *>(data + sizeof(B2500PacketHeader) + 2);
+  const char *start = reinterpret_cast<const char *>(data + header_size + 2);
   const char *end = reinterpret_cast<const char *>(data + data_len);
 
   // Newer firmware versions may send invalid/empty SSID data, handle gracefully
