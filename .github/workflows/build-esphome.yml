@@ -63,7 +63,7 @@ jobs:
         uses: esphome/build-action@v7.1.0
         with:
           yaml-file: device.yaml
-          version: ${{ github.event.client_payload.esphome_version || '2026.3.0' }}
+          version: ${{ github.event.client_payload.esphome_version || '2026.8.1' }}
         continue-on-error: true
 
       - name: Debug on failure
