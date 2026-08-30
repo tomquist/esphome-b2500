@@ -78,6 +78,20 @@ function maskCommentsAndLiterals(source) {
       const stop = end < 0 ? source.length : end + 2;
       blank(i, stop);
       i = stop - 1;
+    } else if (source[i] === "R" && source[i + 1] === '"') {
+      // Raw string: R"delim( ... )delim", where the body may hold quotes and
+      // backslashes that the normal string scan below would misread.
+      const open = source.indexOf("(", i + 2);
+      const delim = open < 0 ? null : source.slice(i + 2, open);
+      const close = delim === null ? -1 : source.indexOf(`)${delim}"`, open);
+      if (close < 0) {
+        blank(i, source.length);
+        i = source.length;
+      } else {
+        const stop = close + delim.length + 2;
+        blank(i, stop);
+        i = stop - 1;
+      }
     } else if (source[i] === '"' || source[i] === "'") {
       const quote = source[i];
       let j = i + 1;
@@ -117,6 +131,14 @@ function idBuilder(source) {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+export { emittedKeys, idBuilder, maskCommentsAndLiterals, SOURCE };
+
+// Importable for tests (scripts/check-web-server-contract.test.mjs); everything
+// below runs only when the script is the program being executed.
+const isMain =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
 
 const args = process.argv.slice(2);
 const update = args.includes("--update");
@@ -209,3 +231,5 @@ if (failures.length) {
 }
 
 console.log(`✓ web_server event contract unchanged at ${ref} (${keys.length} keys)`);
+
+}

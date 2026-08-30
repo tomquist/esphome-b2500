@@ -39,7 +39,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node scripts/check-web-server-contract.mjs
+      - name: Extraction fixtures
+        run: node --test scripts/check-web-server-contract.test.mjs
+      - name: Check the pinned version
+        run: node scripts/check-web-server-contract.mjs
 
   upcoming:
     name: ESPHome ${{ matrix.ref }}
