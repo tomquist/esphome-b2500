@@ -17,11 +17,23 @@ on:
     - cron: '17 4 * * *'
   workflow_dispatch:
 
+# Read-only by default; the nightly job widens this to file its issue.
+permissions:
+  contents: read
+
+# One run per ref at a time: two overlapping runs would both find no open issue
+# and file the same one twice.
+concurrency:
+  group: esphome-contract-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   pinned:
     name: Pinned ESPHome version
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

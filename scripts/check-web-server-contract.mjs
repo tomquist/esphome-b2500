@@ -31,6 +31,15 @@ const BUILD_WORKFLOW = path.join(__dirname, "..", ".github", "workflows", "build
 const SOURCE = (ref) =>
   `https://raw.githubusercontent.com/esphome/esphome/${ref}/esphome/components/web_server/web_server.cpp`;
 
+// Exit 1 means a verdict: the format changed. Exit 2 means the check could not
+// reach a verdict at all -- an unreachable source, an unreadable snapshot. The
+// nightly workflow files an issue on 1 and only reddens the job on 2, so
+// conflating them would report ESPHome changes that never happened.
+function bail(message) {
+  console.error(`✗ ${message}`);
+  process.exit(2);
+}
+
 // The ESPHome version firmware is actually built with, so the check follows the
 // pinned version without a second place to update.
 function pinnedRef() {
@@ -53,9 +62,11 @@ function emittedKeys(source) {
 // are assembled does.
 function idBuilder(source) {
   const start = source.indexOf("static void set_json_id(");
-  if (start < 0) throw new Error("set_json_id() not found -- web_server.cpp was restructured");
+  // Not an extraction failure but a finding in its own right: the function that
+  // builds entity ids is gone, so the id format is anyone's guess.
+  if (start < 0) return null;
   let i = source.indexOf("{", start);
-  if (i < 0) throw new Error("set_json_id() body not found");
+  if (i < 0) return null;
   let depth = 0;
   let end = -1;
   for (; i < source.length; i++) {
@@ -65,7 +76,7 @@ function idBuilder(source) {
       break;
     }
   }
-  if (end < 0) throw new Error("set_json_id() body is unbalanced");
+  if (end < 0) return null;
   return source
     .slice(start, end)
     .replace(/\/\*[\s\S]*?\*\//g, " ")
@@ -77,21 +88,36 @@ function idBuilder(source) {
 const args = process.argv.slice(2);
 const update = args.includes("--update");
 const refArg = args.indexOf("--ref");
-const ref = refArg >= 0 ? args[refArg + 1] : pinnedRef();
 
-const res = await fetch(SOURCE(ref));
-if (!res.ok) {
-  console.error(`✗ could not fetch web_server.cpp at ${ref}: HTTP ${res.status}`);
-  process.exit(2);
+let ref;
+try {
+  ref = refArg >= 0 ? args[refArg + 1] : pinnedRef();
+} catch (e) {
+  bail(e.message);
 }
-const source = await res.text();
+
+let source;
+try {
+  // A rejected fetch -- DNS, TLS, a refused connection -- must not read as drift.
+  const res = await fetch(SOURCE(ref));
+  if (!res.ok) bail(`could not fetch web_server.cpp at ${ref}: HTTP ${res.status}`);
+  source = await res.text();
+} catch (e) {
+  bail(`could not fetch web_server.cpp at ${ref}: ${e.message}`);
+}
 
 const keys = emittedKeys(source);
 const builder = idBuilder(source);
-const builderHash = crypto.createHash("sha256").update(builder).digest("hex");
+const builderHash = builder && crypto.createHash("sha256").update(builder).digest("hex");
 
 if (update) {
-  const previous = JSON.parse(fs.readFileSync(SNAPSHOT, "utf8"));
+  if (!builder) bail(`set_json_id() not found at ${ref}; nothing to record`);
+  let previous;
+  try {
+    previous = JSON.parse(fs.readFileSync(SNAPSHOT, "utf8"));
+  } catch (e) {
+    bail(`could not read ${path.basename(SNAPSHOT)}: ${e.message}`);
+  }
   fs.writeFileSync(
     SNAPSHOT,
     JSON.stringify({ ...previous, ref, keys, idBuilder: builderHash }, null, 2) + "\n"
@@ -100,7 +126,12 @@ if (update) {
   process.exit(0);
 }
 
-const snapshot = JSON.parse(fs.readFileSync(SNAPSHOT, "utf8"));
+let snapshot;
+try {
+  snapshot = JSON.parse(fs.readFileSync(SNAPSHOT, "utf8"));
+} catch (e) {
+  bail(`could not read ${path.basename(SNAPSHOT)}: ${e.message}`);
+}
 const failures = [];
 
 // Keys the web UI reads. Losing one of these breaks it outright.
@@ -115,7 +146,13 @@ if (missing.length) {
 
 // How an entity id is assembled is the contract that broke in 2026.8: the keys
 // were all still there, the id simply meant something else.
-if (builderHash !== snapshot.idBuilder) {
+if (!builder) {
+  failures.push(
+    `set_json_id() is gone -- web_server.cpp was restructured, so entity ids are\n` +
+      `  built somewhere else now and may have a new format. Compare:\n` +
+      `  ${SOURCE(snapshot.ref)}\n  ${SOURCE(ref)}`
+  );
+} else if (builderHash !== snapshot.idBuilder) {
   failures.push(
     `set_json_id() changed -- entity ids may have a new format.\n` +
       `  Recorded at ${snapshot.ref}, now at ${ref}. Compare:\n` +
