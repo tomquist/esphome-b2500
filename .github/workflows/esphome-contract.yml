@@ -1,0 +1,100 @@
+name: ESPHome web_server contract
+
+# The web UI parses ESPHome's web_server event JSON, which is not a documented
+# API: 2026.8.0 changed the entity id format and silently emptied the storage
+# dashboard on every firmware built afterwards (discussion #305). This checks the
+# format the pinned ESPHome version emits, and looks ahead at dev/beta nightly so
+# the next change is known before it ships rather than after a rebuild.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/check-web-server-contract.mjs'
+      - 'scripts/web-server-contract.json'
+      - '.github/workflows/**'
+  schedule:
+    # Nightly, off the hour to avoid the top-of-hour rush on shared runners.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+# Read-only by default; the nightly job widens this to file its issue.
+permissions:
+  contents: read
+
+# One run per ref at a time: two overlapping runs would both find no open issue
+# and file the same one twice.
+concurrency:
+  group: esphome-contract-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pinned:
+    name: Pinned ESPHome version
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Extraction fixtures
+        run: node --test scripts/check-web-server-contract.test.mjs
+      - name: Check the pinned version
+        run: node scripts/check-web-server-contract.mjs
+
+  upcoming:
+    name: ESPHome ${{ matrix.ref }}
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [beta, dev]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check ${{ matrix.ref }}
+        id: check
+        run: |
+          set +e
+          node scripts/check-web-server-contract.mjs --ref ${{ matrix.ref }} 2>&1 | tee report.txt
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      # Exit 2 is a fetch failure, not a format change: leave the job red without
+      # filing anything.
+      - name: Fail on fetch error
+        if: steps.check.outputs.status == '2'
+        run: exit 1
+
+      # One open issue per branch is enough; a nightly comment on an issue nobody
+      # has got to yet is noise.
+      - name: File an issue on drift
+        if: steps.check.outputs.status == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ matrix.ref }}
+        run: |
+          title="ESPHome web_server event format changed on $REF"
+          open=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            echo "Already tracked in #$open."
+            exit 0
+          fi
+          {
+            printf 'The nightly contract check failed against `esphome/esphome@%s`.\n\n' "$REF"
+            printf 'The B2500 web UI parses these events (`parseStorageEntity()` in\n'
+            printf '[tomquist/esphome-webserver-b2500](https://github.com/tomquist/esphome-webserver-b2500)),\n'
+            printf 'so this needs a look before the pinned ESPHome version moves to a release\n'
+            printf 'containing the change.\n\n```\n'
+            cat report.txt
+            printf '\n```\n'
+          } > body.md
+          gh issue create --title "$title" --body-file body.md
