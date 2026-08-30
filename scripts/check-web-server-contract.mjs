@@ -57,6 +57,38 @@ function emittedKeys(source) {
   return [...keys].sort();
 }
 
+// Blank out comments and string/char literals, keeping length so offsets still
+// line up with the original. Brace matching runs over this: a stray "{" in a
+// comment ("the {device} form") would otherwise swallow or truncate the function
+// body and report a format change that never happened.
+function maskCommentsAndLiterals(source) {
+  const out = source.split("");
+  const blank = (from, to) => {
+    for (let k = from; k < to && k < out.length; k++) if (out[k] !== "\n") out[k] = " ";
+  };
+  for (let i = 0; i < source.length; i++) {
+    const two = source.slice(i, i + 2);
+    if (two === "//") {
+      const end = source.indexOf("\n", i);
+      const stop = end < 0 ? source.length : end;
+      blank(i, stop);
+      i = stop;
+    } else if (two === "/*") {
+      const end = source.indexOf("*/", i + 2);
+      const stop = end < 0 ? source.length : end + 2;
+      blank(i, stop);
+      i = stop - 1;
+    } else if (source[i] === '"' || source[i] === "'") {
+      const quote = source[i];
+      let j = i + 1;
+      while (j < source.length && source[j] !== quote) j += source[j] === "\\" ? 2 : 1;
+      blank(i, Math.min(j + 1, source.length));
+      i = j;
+    }
+  }
+  return out.join("");
+}
+
 // The body of set_json_id(), normalized: comments dropped and whitespace
 // collapsed, so formatting churn does not trip the check but a change to how ids
 // are assembled does.
@@ -65,13 +97,14 @@ function idBuilder(source) {
   // Not an extraction failure but a finding in its own right: the function that
   // builds entity ids is gone, so the id format is anyone's guess.
   if (start < 0) return null;
-  let i = source.indexOf("{", start);
+  const masked = maskCommentsAndLiterals(source);
+  let i = masked.indexOf("{", start);
   if (i < 0) return null;
   let depth = 0;
   let end = -1;
-  for (; i < source.length; i++) {
-    if (source[i] === "{") depth++;
-    else if (source[i] === "}" && --depth === 0) {
+  for (; i < masked.length; i++) {
+    if (masked[i] === "{") depth++;
+    else if (masked[i] === "}" && --depth === 0) {
       end = i + 1;
       break;
     }
