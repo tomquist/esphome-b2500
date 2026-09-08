@@ -395,11 +395,11 @@ export const generateRandomIdentifier = () => {
     'toucan',
   ];
 
-  // The identifier is the only thing protecting a build: the firmware object
-  // it names is world readable, and the image carries the user's WiFi and MQTT
-  // credentials. The words are there to make a build recognisable in the
-  // Actions list, so entropy comes from the suffix rather than from them -
-  // Math.random() is neither uniform nor unpredictable enough to rely on.
+  // Not a secret - it shows up in the workflow's run-name and in the run log,
+  // and the firmware object it names is sealed to the requesting page's key
+  // anyway. The entropy is so that two builds never land on the same object and
+  // so the bucket is not walkable; Math.random() is too weak for either. The
+  // words are there to make a build recognisable in the Actions list.
   // toString() rather than a Buffer read method: the bundle resolves `crypto`
   // to crypto-browserify, whose Buffer is the `buffer` polyfill.
   const pick = <T>(items: T[]): T =>

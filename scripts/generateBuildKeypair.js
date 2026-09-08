@@ -15,9 +15,9 @@
  *   - Secrets   > BUILD_PRIVATE_KEY   = the PEM below
  *   - Variables > BUILD_PUBLIC_KEY    = the base64 line below
  *
- * Builds started from a page that was deployed with the previous public key
- * fail to decrypt after a rotation, so publish the new page first, or expect
- * the handful of in-flight builds to fail.
+ * A rotation has a window in which builds fail whichever order you use - see
+ * "Setting the key pair" in infra/README.md. Set both, deploy immediately, and
+ * expect the builds in flight to need a retry.
  */
 
 const crypto = require('crypto');

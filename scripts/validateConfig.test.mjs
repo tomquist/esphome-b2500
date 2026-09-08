@@ -15,12 +15,15 @@ const baseConfig = () => ({
   mqtt: { enabled: true, topic: 'b2500', broker: 'mqtt.local', port: 1883 },
   wifi: { ssid: 'net', password: 'secret' },
   fallback_hotspot: { ssid: 'Fallback' },
-  powermeter: { tx_pin: 'GPIO6', rx_pin: 'GPIO7', baud_rate: 9600, stop_bits: 1 },
+  powermeter: {
+    tx_pin: 'GPIO6',
+    rx_pin: 'GPIO7',
+    baud_rate: 9600,
+    stop_bits: 1,
+  },
   auto_restart: { restart_after_error_count: 8 },
   web_server: { port: 80 },
-  storages: [
-    { name: 'Battery', version: 2, mac_address: '00:11:22:33:44:55' },
-  ],
+  storages: [{ name: 'Battery', version: 2, mac_address: '00:11:22:33:44:55' }],
 });
 
 test('accepts a representative config', () => {
@@ -73,6 +76,9 @@ const injections = {
   },
   'carriage return in a string': (c) => {
     c.mqtt.topic = 'a\rb';
+  },
+  'newline in an object key': (c) => {
+    c.mqtt['topic\nexternal_components'] = 'x';
   },
   'newline deep in an array element': (c) => {
     c.storages[0].name = 'x\npackages: {}';
@@ -134,6 +140,18 @@ const badShapes = {
   },
   'a platform_version pointing at a local path': (c) => {
     c.idf_platform_version = '/github/workspace/evil';
+  },
+  // The config is the nunjucks render context, and a context value shadows a
+  // global - so without this these would set the git ref the templates fetch
+  // the b2500 component from.
+  'a config that sets git_sha': (c) => {
+    c.git_sha = 'refs/pull/1/head';
+  },
+  'a config that sets automated_build': (c) => {
+    c.automated_build = false;
+  },
+  'a config that sets ref': (c) => {
+    c.ref = 'attacker-branch';
   },
 };
 

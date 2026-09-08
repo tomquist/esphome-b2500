@@ -5,14 +5,14 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { redactConfig } = require('./redactConfig.js');
 
-test('redacts free-form strings but keeps their length', () => {
+test('redacts free-form strings down to a length bucket', () => {
   const redacted = redactConfig({
     wifi: { ssid: 'MyHomeNet', password: 'hunter22' },
     mqtt: { broker: 'mqtt.local', username: 'tom' },
   });
   assert.deepEqual(redacted, {
-    wifi: { ssid: '<string:9>', password: '<string:8>' },
-    mqtt: { broker: '<string:10>', username: '<string:3>' },
+    wifi: { ssid: '<string:8-15>', password: '<string:8-15>' },
+    mqtt: { broker: '<string:8-15>', username: '<string:1-7>' },
   });
 });
 
@@ -34,8 +34,6 @@ test('keeps the allow-listed template selectors', () => {
     template_version: 'v2',
     log_level: 'DEBUG',
     flash_size: '4MB',
-    board: 'esp32dev',
-    variant: 'auto',
     idf_platform_version: '55.3.37',
     powermeter: { tx_pin: 'GPIO6', rx_pin: 'GPIO7' },
   });
@@ -43,8 +41,6 @@ test('keeps the allow-listed template selectors', () => {
     template_version: 'v2',
     log_level: 'DEBUG',
     flash_size: '4MB',
-    board: 'esp32dev',
-    variant: 'auto',
     idf_platform_version: '55.3.37',
     powermeter: { tx_pin: 'GPIO6', rx_pin: 'GPIO7' },
   });
@@ -59,9 +55,19 @@ test('redacts inside arrays and keeps the storage version', () => {
   });
   assert.deepEqual(redacted, {
     storages: [
-      { name: '<string:7>', version: 2, mac_address: '<string:17>' },
-      { name: '<string:6>', version: '1' },
+      { name: '<string:1-7>', version: 2, mac_address: '<string:16-31>' },
+      { name: '<string:1-7>', version: '1' },
     ],
+  });
+});
+
+test('redacts fields validateConfig does not constrain', () => {
+  // board and variant are free-form requester text; a public log is not the
+  // place for them verbatim.
+  const redacted = redactConfig({ board: 'esp32dev', variant: 'anything' });
+  assert.deepEqual(redacted, {
+    board: '<string:8-15>',
+    variant: '<string:8-15>',
   });
 });
 

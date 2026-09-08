@@ -12,24 +12,36 @@
  * Redaction keeps what a failed build actually needs: the shape of the config,
  * every number and boolean (so the feature flags stay readable), and a short
  * allow-list of fields that pick template branches and are already constrained
- * by `validateConfig`. Every other string is replaced by its length.
+ * by `validateConfig`. Every other string becomes a length bucket - an exact
+ * length is a real hint about a password.
  */
 
+// Only fields `validateConfig` constrains to a fixed shape, plus the template
+// selector `render.js` switches on. `board` and `variant` used to be here, but
+// nothing constrains them, so they were free-form requester text going verbatim
+// into a public log. The two sets should stay the same set.
 const KEEP = new Set([
   'template_version',
   'log_level',
   'flash_size',
-  'board',
-  'variant',
   'idf_platform_version',
   'tx_pin',
   'rx_pin',
   'version',
 ]);
 
+// An exact length is a real hint about a password, so report a bucket instead.
+const lengthBucket = (length) => {
+  if (length === 0) return '0';
+  if (length < 8) return '1-7';
+  if (length < 16) return '8-15';
+  if (length < 32) return '16-31';
+  return '32+';
+};
+
 const redact = (value, key) => {
   if (typeof value === 'string') {
-    return KEEP.has(key) ? value : `<string:${value.length}>`;
+    return KEEP.has(key) ? value : `<string:${lengthBucket(value.length)}>`;
   }
   if (Array.isArray(value)) {
     // Array elements inherit the key of the array they are in, so

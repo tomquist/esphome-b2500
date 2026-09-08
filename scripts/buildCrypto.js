@@ -22,9 +22,17 @@
  *             it published once the job is over.
  *
  * Both derive AES-256-GCM keys through HKDF-SHA256 over the ECDH shared secret,
- * with a per-direction `info` string so the two can never collide.
+ * with a per-direction `info` string so the two can never collide. The firmware
+ * direction also binds the sender's ephemeral public key into `info`, the way
+ * HPKE binds `enc`, so the key is tied to the header it travels with.
+ *
+ * What this does NOT give you is sender authentication: the firmware direction
+ * is anonymous, so anyone holding the browser's public key - the dispatch proxy
+ * sees it - could seal an archive the page would accept. Write access to the
+ * bucket is what stops that, not the crypto.
+ *
  * `src/crypto.ts` and `src/firmware/archiveCrypto.ts` are the browser halves;
- * `src/firmware/buildCrypto.test.ts` runs them against this file.
+ * `src/firmware/archiveCrypto.test.ts` runs them against this file.
  */
 
 const crypto = require('crypto');
@@ -40,6 +48,10 @@ const KEY_BYTES = 32;
 
 const CONFIG_INFO = 'esphome-b2500 config v1';
 const FIRMWARE_INFO = 'esphome-b2500 firmware v1';
+
+/** The firmware key is bound to the ephemeral public key in the header. */
+const firmwareInfo = (senderKey) =>
+  Buffer.concat([Buffer.from(FIRMWARE_INFO), senderKey]);
 
 class InvalidPublicKeyError extends Error {
   constructor(message) {
@@ -94,6 +106,8 @@ const parsePublicKey = (base64) => {
   return publicKeyFromRaw(Buffer.from(base64, 'base64'));
 };
 
+// `info` is bytes rather than a string: the firmware direction appends the
+// sender's public key to it.
 const deriveKey = (privateKey, publicKey, info) => {
   const shared = crypto.diffieHellman({ privateKey, publicKey });
   return Buffer.from(
@@ -153,12 +167,25 @@ const sealToClient = (plaintext, clientPublicKey) => {
   const ephemeral = crypto.generateKeyPairSync('ec', {
     namedCurve: CURVE_NODE,
   });
-  const key = deriveKey(ephemeral.privateKey, clientPublicKey, FIRMWARE_INFO);
-  return Buffer.concat([
-    rawFromPublicKey(ephemeral.publicKey),
-    encrypt(key, plaintext),
-  ]);
+  const senderKey = rawFromPublicKey(ephemeral.publicKey);
+  const key = deriveKey(
+    ephemeral.privateKey,
+    clientPublicKey,
+    firmwareInfo(senderKey)
+  );
+  return Buffer.concat([senderKey, encrypt(key, plaintext)]);
 };
+
+/**
+ * Seals a config to the repo's static key under `ephemeralPrivateKey`, which is
+ * what the browser does. Here so the PR job can build a payload without a
+ * second copy of the framing to keep in step.
+ */
+const sealToRepo = (plaintext, repoPublicKey, ephemeralPrivateKey) =>
+  encrypt(
+    deriveKey(ephemeralPrivateKey, repoPublicKey, Buffer.from(CONFIG_INFO)),
+    plaintext
+  );
 
 module.exports = {
   CONFIG_INFO,
@@ -168,9 +195,11 @@ module.exports = {
   KEY_BYTES,
   PUBLIC_KEY_BYTES,
   TAG_BYTES,
+  firmwareInfo,
   openConfig,
   parsePublicKey,
   publicKeyFromRaw,
   rawFromPublicKey,
   sealToClient,
+  sealToRepo,
 };

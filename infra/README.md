@@ -5,7 +5,7 @@ upload two objects to the `esphome-b2500-images` bucket:
 
 | Object                              | Purpose                                                                                                                                |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `firmware/<identifier>.zip.enc`     | The firmware archive, AES-256-GCM encrypted (see below).                                                                               |
+| `firmware/<identifier>.zip.enc`     | The firmware archive, sealed to the requesting page's key (see below).                                                                 |
 | `firmware/<identifier>.status.json` | Build status the web builder polls (`building`, `success`, `error`), including which step is running and how far along the compile is. |
 
 Both live under the same `firmware/` prefix so that a single public-read bucket
@@ -15,8 +15,9 @@ policy covers them.
 
 The web builder downloads the status document and the firmware archive with
 `fetch()` so it can decrypt the firmware and flash it via Web Serial. That
-requires CORS on the bucket - without it the browser blocks the responses and
-the builder falls back to the manual download instructions.
+requires CORS on the bucket - without it the browser blocks the responses, and
+since the published object is sealed to a key that only lives in that page,
+there is no manual download to fall back to.
 
 [`s3-cors.json`](./s3-cors.json) is the applied configuration. It is applied by
 hand rather than from a workflow: the IAM user the build workflow authenticates
@@ -51,17 +52,27 @@ Or check what a browser sees, against any firmware object that exists:
 ```bash
 curl -sS -o /dev/null -D - \
   -H "Origin: https://tomquist.github.io" \
-  https://esphome-b2500-images.s3.eu-west-1.amazonaws.com/firmware/<identifier>.zip \
+  https://esphome-b2500-images.s3.eu-west-1.amazonaws.com/firmware/<identifier>.zip.enc \
   | grep -i access-control
 ```
 
 ## Object lifetime
 
-Objects under `firmware/` are readable by anyone who knows the identifier, and a
-firmware image embeds the WiFi and MQTT credentials it was built with. Bucket
-listing is denied, so the identifier is the only thing guarding an object -
-`generateRandomIdentifier()` therefore ends in 96 bits of `randomBytes`, and the
-bucket should expire the objects rather than keep them forever.
+The identifier is not a secret: it appears in the workflow's `run-name` and in a
+`::notice::` in the run log, both public on a public repository. What guards a
+firmware object is that it is sealed to the requesting page's ephemeral key -
+knowing the URL gets you ciphertext and nothing else.
+
+The 96 bits in `generateRandomIdentifier()` are therefore collision and
+enumeration hygiene rather than a secret: two builds must never land on the same
+object, and the bucket should not be walkable. Because the identifier is public
+and the dispatch endpoint is unauthenticated, anyone who reads it out of the
+Actions list can start a build reusing it and clobber the objects of a build in
+flight. The `concurrency` group serialises those runs so they cannot interleave,
+but it does not prevent the overwrite - an accepted denial of service against a
+single build, not a disclosure.
+
+Objects should still expire rather than accumulate:
 
 The IAM user the build workflow uses cannot change bucket configuration, so this
 is applied by hand like the CORS rules above:
@@ -124,8 +135,15 @@ there is no round trip in which the runner could offer an ephemeral key before
 the browser encrypts, which means the recipient key is necessarily long-lived
 and anyone who kept old payloads can read them if it ever leaks.
 
-Deploy the page with the new public key *before* switching the secret, or the
-handful of builds in flight will fail to decrypt.
+A rotation has a window in which builds fail, whichever order you use, because
+`openConfig` only ever holds one key: a page loaded before the deploy still
+encrypts to the old public key and stops working the moment the secret changes,
+and a page loaded after it encrypts to the new one and does not work until the
+secret changes. The window is minutes, and a failed build costs the requester a
+retry, so the simple thing is to set the secret and the variable together and
+deploy immediately. If that ever stops being acceptable, the fix is to let
+`BUILD_PRIVATE_KEY` hold two concatenated PEMs and have `openConfig` try each,
+which makes the overlap free.
 
 ## Why the archive is not a password-protected ZIP
 

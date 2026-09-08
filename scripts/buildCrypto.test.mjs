@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   FIRMWARE_INFO,
+  firmwareInfo,
   InvalidPublicKeyError,
   PUBLIC_KEY_BYTES,
   openConfig,
@@ -16,7 +17,8 @@ const {
   sealToClient,
 } = require('./buildCrypto.js');
 
-const keyPair = () => crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+const keyPair = () =>
+  crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 
 const pem = (key) => key.export({ type: 'pkcs8', format: 'pem' });
 
@@ -163,4 +165,52 @@ test('the workflow pattern accepts the keys the browser produces', () => {
     const { publicKey } = keyPair();
     assert.match(rawFromPublicKey(publicKey).toString('base64'), pattern);
   }
+
+  // Accepting real keys is half of it: an over-permissive pattern would pass
+  // the loop above and let a malformed payload through.
+  const valid = rawFromPublicKey(keyPair().publicKey).toString('base64');
+  for (const rejected of [
+    valid.slice(0, -1), // 87 characters, padding dropped
+    `A${valid}`, // 89 characters
+    valid.replace('=', ''), // unpadded
+    `${valid}\nevil`,
+    '',
+  ]) {
+    assert.doesNotMatch(rejected, pattern, JSON.stringify(rejected.slice(-8)));
+  }
+});
+
+test('sealToClient binds the header into the derived key', () => {
+  const client = keyPair();
+  const clientPublic = parsePublicKey(
+    rawFromPublicKey(client.publicKey).toString('base64')
+  );
+  const sealed = sealToClient(Buffer.from('firmware'), clientPublic);
+  const senderKey = sealed.subarray(0, PUBLIC_KEY_BYTES);
+
+  // The info the browser will use is the label followed by the header key, so
+  // deriving with the bare label must not open it.
+  const withHeader = crypto.diffieHellman({
+    privateKey: client.privateKey,
+    publicKey: publicKeyFromRaw(senderKey),
+  });
+  const open = (info) => {
+    const key = Buffer.from(
+      crypto.hkdfSync('sha256', withHeader, Buffer.alloc(0), info, 32)
+    );
+    const body = sealed.subarray(PUBLIC_KEY_BYTES);
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      key,
+      body.subarray(0, 12)
+    );
+    decipher.setAuthTag(body.subarray(12, 28));
+    return Buffer.concat([
+      decipher.update(body.subarray(28)),
+      decipher.final(),
+    ]);
+  };
+
+  assert.equal(open(firmwareInfo(senderKey)).toString(), 'firmware');
+  assert.throws(() => open(Buffer.from(FIRMWARE_INFO)));
 });

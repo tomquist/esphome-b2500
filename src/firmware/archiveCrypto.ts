@@ -2,8 +2,8 @@
  * Decrypts the firmware archive the build published.
  *
  * The build seals the archive to this page's ephemeral public key under a
- * throwaway key pair of its own, and prefixes that pair's public half
- * (`scripts/buildCrypto.js`, `sealToClient`):
+ * throwaway key pair of its own, and prefixes that pair's public half, which is
+ * also bound into the key derivation (`scripts/buildCrypto.js`, `sealToClient`):
  *
  *     ephemeral public key (65) || iv (12) || auth tag (16) || ciphertext
  *
@@ -12,7 +12,7 @@
  * published once the job is over.
  */
 
-import { deriveSharedKey, importRemotePublicKey } from '../crypto';
+import { deriveSharedKey, encodeInfo, importRemotePublicKey } from '../crypto';
 
 const PUBLIC_KEY_BYTES = 65;
 const IV_BYTES = 12;
@@ -57,7 +57,9 @@ export const decryptFirmwareArchive = async (
     const key = await deriveSharedKey(
       privateKey,
       await importRemotePublicKey(senderKey),
-      FIRMWARE_INFO,
+      // The sender's public key is bound into the derivation, so a swapped
+      // header cannot be paired with a ciphertext it did not travel with.
+      encodeInfo(FIRMWARE_INFO, senderKey),
       'decrypt'
     );
     plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, payload);

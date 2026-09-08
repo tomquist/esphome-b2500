@@ -14,6 +14,18 @@ const TAG_BYTES = 16;
 
 const CONFIG_INFO = 'esphome-b2500 config v1';
 
+/** Matches `scripts/buildCrypto.js`; both sides derive from the same bytes. */
+export const encodeInfo = (label: string, suffix?: Uint8Array): Uint8Array => {
+  const labelBytes = new TextEncoder().encode(label);
+  if (!suffix) {
+    return labelBytes;
+  }
+  const info = new Uint8Array(labelBytes.length + suffix.length);
+  info.set(labelBytes);
+  info.set(suffix, labelBytes.length);
+  return info;
+};
+
 /**
  * The repo's long-lived public key, as base64 of an uncompressed P-256 point.
  *
@@ -64,12 +76,13 @@ const importPublicKey = (raw: Uint8Array): Promise<CryptoKey> =>
 
 /**
  * ECDH against `theirPublicKey`, then HKDF-SHA256 with a per-direction `info`
- * so the config key and the firmware key can never be the same.
+ * so the config key and the firmware key can never be the same. `info` is bytes
+ * because the firmware direction appends the sender's public key to it.
  */
 export const deriveSharedKey = async (
   privateKey: CryptoKey,
   theirPublicKey: CryptoKey,
-  info: string,
+  info: Uint8Array,
   usage: KeyUsage
 ): Promise<CryptoKey> => {
   const shared = await crypto.subtle.deriveBits(
@@ -85,7 +98,7 @@ export const deriveSharedKey = async (
       name: 'HKDF',
       hash: 'SHA-256',
       salt: new Uint8Array(0),
-      info: new TextEncoder().encode(info),
+      info: info as BufferSource,
     },
     hkdfKey,
     256
@@ -127,7 +140,7 @@ export const encryptConfig = async (
   const key = await deriveSharedKey(
     keyPair.privateKey,
     await importPublicKey(decodeBase64(publicKeyBase64)),
-    CONFIG_INFO,
+    encodeInfo(CONFIG_INFO),
     'encrypt'
   );
 

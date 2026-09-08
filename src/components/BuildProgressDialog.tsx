@@ -24,7 +24,10 @@ import FileSaver from 'file-saver';
 import { FormValues } from '../types';
 import { newIssueLink } from '../utils';
 import { BuildKeyPair } from '../crypto';
-import { decryptFirmwareArchive } from '../firmware/archiveCrypto';
+import {
+  UndecryptableArchiveError,
+  decryptFirmwareArchive,
+} from '../firmware/archiveCrypto';
 import {
   BuildStatus,
   BuildStep,
@@ -99,7 +102,8 @@ const errorMessage = (error: unknown): string => {
   if (error instanceof BuildTimeoutError) {
     return (
       'The build did not finish in time. It might still be running - check the ' +
-      'build log and use the manual instructions below once it succeeded.'
+      'build log, then use "Try again" to pick the firmware up. Do not reload ' +
+      'this page: the key that decrypts it only exists here.'
     );
   }
   if (error instanceof TypeError) {
@@ -194,7 +198,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         if (controller.signal.aborted) {
           return;
         }
-        setIsRetryable(true);
+        // Retrying re-downloads the same object and derives the same key, so an
+        // archive that does not belong to this build never will.
+        setIsRetryable(!(caught instanceof UndecryptableArchiveError));
         setError(errorMessage(caught));
         setPhase('error');
       }
@@ -228,8 +234,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       return;
     }
     const confirmed = window.confirm(
-      'The build is still running. If you close this dialog you have to ' +
-        'download and flash the firmware manually. Close anyway?'
+      'The build is still running. The key that decrypts your firmware only ' +
+        'exists in this dialog, so closing it means starting the build again. ' +
+        'Close anyway?'
     );
     if (confirmed) {
       onClose();
@@ -347,7 +354,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
                   <Alert severity="warning" sx={{ my: 1 }}>
                     We cannot read the build status from this browser. Your
                     build is most likely still running - follow it in the build
-                    log, then reopen this page to pick the firmware up.
+                    log and leave this page open. The key that decrypts your
+                    firmware only exists here, so reloading means starting the
+                    build again.
                   </Alert>
                 )}
                 <Typography variant="caption" color="text.secondary">

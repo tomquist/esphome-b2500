@@ -11,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       REACT_APP_S3_BUCKET: esphome-b2500-images
       REACT_APP_AWS_REGION: eu-west-1

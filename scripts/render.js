@@ -12,10 +12,7 @@ const configJSON = openConfig(
   parsePublicKey(process.env.CLIENT_PUBLIC_KEY)
 ).toString('utf-8');
 
-nunjucks
-  .configure({ autoescape: false })
-  .addGlobal('git_sha', process.env.GITHUB_SHA)
-  .addGlobal('automated_build', process.env.AUTOMATED_BUILD === 'true');
+nunjucks.configure({ autoescape: false });
 const { config, secrets } = JSON.parse(configJSON);
 
 // Reject anything in the config that could break out of the YAML the templates
@@ -23,9 +20,16 @@ const { config, secrets } = JSON.parse(configJSON);
 // dispatch proxy, so it is fully attacker controlled.
 validateConfig(config);
 
-// Mask all secrets
-for (const secret of secrets || []) {
-  if (typeof secret === 'string' && secret.trim() !== '') {
+// Mask all secrets. The list comes from the payload like everything else, so a
+// string here would iterate its characters and mask single letters across the
+// whole public log, and an enormous array would drown it.
+if (secrets !== undefined && !Array.isArray(secrets)) {
+  throw new Error('secrets must be an array');
+}
+for (const secret of (secrets || []).slice(0, 64)) {
+  // Too short to be worth masking, and masking it would redact ordinary words
+  // out of the log.
+  if (typeof secret === 'string' && secret.trim().length >= 4) {
     console.log(`::add-mask::${secret}`);
   }
 }
@@ -54,5 +58,13 @@ switch (config.template_version) {
   default:
     throw new Error(`Unknown template version: ${config.template_version}`);
 }
-const renderedConfig = nunjucks.renderString(template, config);
+// The config IS the render context, and in nunjucks a context value shadows a
+// global - so `addGlobal` would let the requester set `git_sha`, and with it the
+// `ref` the templates fetch the b2500 component from. Trusted values go in last
+// and win.
+const renderedConfig = nunjucks.renderString(template, {
+  ...config,
+  git_sha: process.env.GITHUB_SHA,
+  automated_build: process.env.AUTOMATED_BUILD === 'true',
+});
 fs.writeFileSync('device.yaml', renderedConfig);

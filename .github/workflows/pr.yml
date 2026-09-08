@@ -11,6 +11,8 @@ on:
 jobs:
   build_examples:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         esphome_version: ["latest", "2026.8.1"]
@@ -103,14 +105,14 @@ jobs:
             node scripts/encryptFirmware.js firmware.zip firmware.zip.enc
           rm -f firmware.zip
 
-      - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}-${{ matrix.template }}-${{ matrix.mqtt_enabled }}-${{ matrix.esphome_version }}
-          path: firmware.zip.enc
+      # No artifact: the archive is sealed to a key pair that dies with the
+      # runner, so uploading it would only publish something nobody can open.
+      # The job proves the build and the packaging work by completing.
 
   component_tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         esphome_version: ["latest", "2026.8.1"]

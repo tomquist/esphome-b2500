@@ -16,9 +16,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { CONFIG_INFO, rawFromPublicKey } = require('./buildCrypto');
-
-const IV_BYTES = 12;
+const { rawFromPublicKey, sealToRepo } = require('./buildCrypto');
 
 const [configPath, outputDirectory] = process.argv.slice(2);
 if (!configPath || !outputDirectory) {
@@ -31,30 +29,17 @@ if (!configPath || !outputDirectory) {
 const repo = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const client = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 
-const shared = crypto.diffieHellman({
-  privateKey: client.privateKey,
-  publicKey: repo.publicKey,
-});
-const key = Buffer.from(
-  crypto.hkdfSync(
-    'sha256',
-    shared,
-    Buffer.alloc(0),
-    Buffer.from(CONFIG_INFO),
-    32
-  )
-);
-
 const payload = {
   secrets: [],
   config: JSON.parse(fs.readFileSync(configPath, 'utf-8')),
 };
-const iv = crypto.randomBytes(IV_BYTES);
-const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-const ciphertext = Buffer.concat([
-  cipher.update(Buffer.from(JSON.stringify(payload))),
-  cipher.final(),
-]);
+// Through buildCrypto rather than a second copy of the framing, so a change to
+// the derivation or the layout cannot leave this file quietly wrong.
+const encryptedConfig = sealToRepo(
+  Buffer.from(JSON.stringify(payload)),
+  repo.publicKey,
+  client.privateKey
+);
 
 fs.mkdirSync(outputDirectory, { recursive: true });
 fs.writeFileSync(
@@ -67,5 +52,5 @@ fs.writeFileSync(
 );
 fs.writeFileSync(
   path.join(outputDirectory, 'encrypted_config.txt'),
-  Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64')
+  encryptedConfig.toString('base64')
 );

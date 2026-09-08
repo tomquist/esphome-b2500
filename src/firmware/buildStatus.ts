@@ -1,7 +1,7 @@
 /**
- * The build workflow publishes a small JSON status document next to the
- * firmware ZIP. The web UI polls it to follow the build without requiring the
- * user to watch the GitHub Actions run.
+ * The build workflow publishes a small JSON status document next to the sealed
+ * firmware archive. The web UI polls it to follow the build without requiring
+ * the user to watch the GitHub Actions run.
  */
 
 const S3_BUCKET = process.env.REACT_APP_S3_BUCKET;
@@ -10,8 +10,8 @@ const AWS_REGION = process.env.REACT_APP_AWS_REGION;
 const objectUrl = (key: string) =>
   `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
 
-// `.zip.enc` rather than `.zip`: the object is a ZIP encrypted with the build
-// password, not a ZIP the browser or an unzip tool can open on its own.
+// `.zip.enc` rather than `.zip`: the object is a ZIP sealed to the key pair the
+// page generated for this build, not a ZIP any unzip tool can open.
 export const firmwareDownloadUrl = (identifier: string) =>
   objectUrl(`firmware/${identifier}.zip.enc`);
 

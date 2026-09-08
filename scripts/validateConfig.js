@@ -41,6 +41,12 @@ class InvalidConfigError extends Error {
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\x00-\x08\x0a-\x1f\x7f]/;
 
+// Names the templates expect to come from the build, not from the requester.
+// `render.js` overrides them in the render context, so this is the second of
+// two layers: `git_sha` reaches the `ref` that ESPHome fetches the b2500
+// component from, which is a fetcher rather than a plain YAML scalar.
+const RESERVED_KEYS = ['git_sha', 'automated_build', 'ref'];
+
 const LOG_LEVELS = new Set([
   'NONE',
   'ERROR',
@@ -125,6 +131,14 @@ const validateConfig = (config) => {
   }
 
   rejectControlChars(config, 'config');
+
+  for (const key of RESERVED_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(config, key)) {
+      throw new InvalidConfigError(
+        `${key} is set by the build, not the config`
+      );
+    }
+  }
 
   // Bare-scalar fields: hold them to a strict shape so nothing but the expected
   // token can reach the YAML unquoted.
