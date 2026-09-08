@@ -50,7 +50,7 @@ Flashing from the browser uses the [Web Serial API](https://developer.mozilla.or
 
 If you prefer to flash yourself, or your browser does not support Web Serial, expand "Flash manually instead" in the same dialog:
 
-1. Download the firmware ZIP file and extract it using the password shown in the dialog (it is also copied to your clipboard when the build starts).
+1. Click "Download `<build>`.zip" and extract it. The page decrypts the firmware before handing it over, so it is an ordinary ZIP that any tool opens - there is no password to enter.
 2. Connect your ESP32 via USB.
 3. Go to the ESPHome Web Installer: [ESPHome Web Installer](https://web.esphome.io/).
 4. Click the "Install" button.

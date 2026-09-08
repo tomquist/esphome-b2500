@@ -184,7 +184,11 @@ jobs:
           STEP: packaging
         run: ./scripts/publish-build-status.sh building "Packaging the firmware" || true
 
-      - name: Zip the firmware with a password
+      # A plain ZIP, encrypted as a whole below. `zip -P` uses PKWARE's stream
+      # cipher, which a dozen bytes of known plaintext break - and a firmware
+      # archive is nearly all bytes an attacker can reproduce by running a build
+      # of their own at the pinned ESPHome version.
+      - name: Package and encrypt the firmware
         env:
           FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
         run: |
@@ -192,28 +196,32 @@ jobs:
             echo "::error::Unexpected firmware name"
             exit 1
           fi
-          zip -P "$PASSWORD" firmware.zip "$FIRMWARE_NAME"/*
+          zip firmware.zip "$FIRMWARE_NAME"/*
+          node scripts/encryptFirmware.js firmware.zip firmware.zip.enc
+          # The firmware carries the requester's WiFi and MQTT credentials, and
+          # artifacts on a public repository are public.
+          rm -f firmware.zip
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: esphome-firmware-${{ env.IDENTIFIER }}
-          path: firmware.zip
+          path: firmware.zip.enc
 
       - name: Upload firmware to S3
         run: |
-          aws s3 cp firmware.zip "s3://$S3_BUCKET/firmware/$IDENTIFIER.zip"
+          aws s3 cp firmware.zip.enc "s3://$S3_BUCKET/firmware/$IDENTIFIER.zip.enc"
 
       - name: Publish build result
         env:
-          FIRMWARE_URL: https://${{ env.S3_BUCKET }}.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/${{ env.IDENTIFIER }}.zip
+          FIRMWARE_URL: https://${{ env.S3_BUCKET }}.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/${{ env.IDENTIFIER }}.zip.enc
           FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
           ESPHOME_VERSION: ${{ steps.esphome-build.outputs.version }}
         run: ./scripts/publish-build-status.sh success
 
       - name: Output firmware URL
         run: |
-          echo "::notice::Firmware available at: https://$S3_BUCKET.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/$IDENTIFIER.zip"
+          echo "::notice::Firmware available at: https://$S3_BUCKET.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/$IDENTIFIER.zip.enc"
 
       - name: Publish build failure
         if: failure()

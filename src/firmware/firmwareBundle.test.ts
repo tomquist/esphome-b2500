@@ -1,17 +1,14 @@
 import fs from 'fs';
 import path from 'path';
-import {
-  createFileIndex,
-  extractFirmwareBundle,
-  WrongPasswordError,
-} from './firmwareBundle';
+import { createFileIndex, extractFirmwareBundle } from './firmwareBundle';
 
 // A ZIP created the same way the build workflow does it:
-//   zip -P test-password firmware.zip b2500-esp32s3/*
+//   zip firmware.zip b2500-esp32s3/*
+// It is plain: the workflow encrypts the archive as a whole afterwards, which
+// archiveCrypto.test.ts covers.
 const archiveBytes = fs.readFileSync(
   path.join(__dirname, '__fixtures__', 'firmware.zip')
 );
-const password = 'test-password';
 const metadata = { name: 'B2500', version: '2026.8.1' };
 
 const blobs = new Map<string, Blob>();
@@ -43,8 +40,8 @@ const textOf = async (url: string) => {
 };
 
 describe('extractFirmwareBundle', () => {
-  it('decrypts the archive and rewrites the manifest', async () => {
-    const bundle = await extractFirmwareBundle(archive(), password, metadata);
+  it('reads the archive and rewrites the manifest', async () => {
+    const bundle = await extractFirmwareBundle(archive(), metadata);
 
     expect(bundle.chipFamily).toBe('ESP32-S3');
     expect(bundle.manifest.name).toBe('B2500');
@@ -60,10 +57,10 @@ describe('extractFirmwareBundle', () => {
     expect(blobs.size).toBe(0);
   });
 
-  it('reports a wrong password', async () => {
+  it('releases its blob URLs when the archive is unusable', async () => {
     await expect(
-      extractFirmwareBundle(archive(), 'wrong-password', metadata)
-    ).rejects.toBeInstanceOf(WrongPasswordError);
+      extractFirmwareBundle(new Blob([Buffer.from('not a zip')]), metadata)
+    ).rejects.toThrow();
     expect(blobs.size).toBe(0);
   });
 });

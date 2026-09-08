@@ -60,11 +60,6 @@ const BuildModal: React.FC<BuildModalProps> = ({
           },
         }
       );
-      // navigator.clipboard is undefined in insecure contexts, and reading
-      // through it would throw before there is a promise to catch.
-      navigator.clipboard?.writeText(password).catch(() => {
-        // Copying is a convenience for the manual flashing route only.
-      });
       setIsBuildStarted(true);
     } catch (error) {
       console.error('Error triggering build:', error);

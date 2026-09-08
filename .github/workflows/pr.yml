@@ -95,15 +95,19 @@ jobs:
           yaml-file: device.yaml
           version: ${{ matrix.esphome_version }}
 
-      - name: Create zip with password
+      - name: Package and encrypt the firmware
+        env:
+          FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
         run: |
-          zip -P "$PASSWORD" firmware.zip ${{ steps.esphome-build.outputs.name }}/*
+          zip firmware.zip "$FIRMWARE_NAME"/*
+          node scripts/encryptFirmware.js firmware.zip firmware.zip.enc
+          rm -f firmware.zip
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}-${{ matrix.template }}-${{ matrix.mqtt_enabled }}-${{ matrix.esphome_version }}
-          path: firmware.zip
+          path: firmware.zip.enc
 
   component_tests:
     runs-on: ubuntu-latest

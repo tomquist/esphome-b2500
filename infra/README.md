@@ -5,7 +5,7 @@ upload two objects to the `esphome-b2500-images` bucket:
 
 | Object                              | Purpose                                                                                                                                |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `firmware/<identifier>.zip`         | The password protected firmware archive.                                                                                               |
+| `firmware/<identifier>.zip.enc`     | The firmware archive, AES-256-GCM encrypted (see below).                                                                               |
 | `firmware/<identifier>.status.json` | Build status the web builder polls (`building`, `success`, `error`), including which step is running and how far along the compile is. |
 
 Both live under the same `firmware/` prefix so that a single public-read bucket
@@ -82,11 +82,31 @@ aws s3api put-bucket-lifecycle-configuration \
 A day is generous: the web builder downloads the archive as soon as the build
 finishes, and the manual route is a link the user follows in the same sitting.
 
-## Why the archive is still ZipCrypto
+## How the archive is encrypted
 
-`zip -P` uses PKWARE's legacy stream cipher, which a known-plaintext attack
-breaks - and a firmware archive has very predictable contents. AES-encrypted
-ZIPs (`7z a -tzip -mem=AES256`) would fix that and `@zip.js/zip.js` reads them,
-but Windows Explorer cannot, which would break the documented "download it and
-flash it yourself" route. Short object lifetimes and an unguessable identifier
-are what stand in for it; revisit if the manual route ever stops mattering.
+The archive used to rely on the ZIP format's own encryption (`zip -P`), which is
+PKWARE's stream cipher: a dozen bytes of known plaintext recover the internal
+keys and unlock the whole archive. A firmware archive is close to worst case for
+that, because anyone can run a build of their own at the pinned ESPHome version
+and get byte-identical bootloader and partition images to use as that plaintext.
+
+So the ZIP is written plain and the whole file is encrypted with AES-256-GCM
+under sha256 of the build password - the same key the browser already uses for
+the config, in the other direction. `scripts/encryptFirmware.js` writes it and
+`src/firmware/archiveCrypto.ts` reads it; they share the framing
+
+    iv (12 bytes) || auth tag (16 bytes) || ciphertext
+
+and `src/firmware/archiveCrypto.test.ts` runs both halves against each other so
+the two cannot drift apart.
+
+The AES-encrypted ZIP format (`7z a -tzip -mem=AES256`) was the other candidate.
+`@zip.js/zip.js` reads it, but Windows Explorer, macOS Archive Utility and
+Info-ZIP `unzip` all refuse it, so the manual route would have started with
+"install 7-Zip". Encrypting the container instead keeps the manual route on an
+ordinary ZIP: the page decrypts in the browser and offers the plain archive as a
+download, so nobody has to type the build password at all.
+
+One thing this gives up: the object served from the bucket is no longer useful
+on its own. If a browser cannot fetch it, there is no "download it by hand"
+fallback to fall back to - the page is the only thing holding the key.

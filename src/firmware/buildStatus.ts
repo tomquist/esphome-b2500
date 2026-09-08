@@ -10,8 +10,10 @@ const AWS_REGION = process.env.REACT_APP_AWS_REGION;
 const objectUrl = (key: string) =>
   `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
 
+// `.zip.enc` rather than `.zip`: the object is a ZIP encrypted with the build
+// password, not a ZIP the browser or an unzip tool can open on its own.
 export const firmwareDownloadUrl = (identifier: string) =>
-  objectUrl(`firmware/${identifier}.zip`);
+  objectUrl(`firmware/${identifier}.zip.enc`);
 
 export const buildStatusUrl = (identifier: string) =>
   objectUrl(`firmware/${identifier}.status.json`);

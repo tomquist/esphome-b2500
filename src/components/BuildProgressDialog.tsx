@@ -19,9 +19,11 @@ import {
   Stepper,
   Typography,
 } from '@mui/material';
-import { ContentCopy, ExpandMore } from '@mui/icons-material';
+import { Download, ExpandMore } from '@mui/icons-material';
+import FileSaver from 'file-saver';
 import { FormValues } from '../types';
 import { newIssueLink } from '../utils';
+import { decryptFirmwareArchive } from '../firmware/archiveCrypto';
 import {
   BuildStatus,
   BuildStep,
@@ -101,10 +103,11 @@ const errorMessage = (error: unknown): string => {
   }
   if (error instanceof TypeError) {
     // fetch() rejects with a TypeError when the request never made it through,
-    // e.g. when it was blocked by CORS or the network.
+    // e.g. when it was blocked by CORS or the network. The published object is
+    // encrypted, so there is no useful manual route to fall back to here.
     return (
-      'The firmware could not be downloaded in this browser. Please use the ' +
-      'manual instructions below.'
+      'The firmware could not be downloaded in this browser. Check your ' +
+      'network connection and try again.'
     );
   }
   if (error instanceof Error) {
@@ -126,6 +129,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   const [isRetryable, setIsRetryable] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [bundle, setBundle] = useState<FirmwareBundle | null>(null);
+  const [archive, setArchive] = useState<Blob | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [isStatusUnreachable, setIsStatusUnreachable] = useState(false);
@@ -138,6 +142,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       setPhase('building');
       setError(null);
       setProgress(null);
+      setArchive(null);
       setIsStatusUnreachable(false);
       try {
         const finalStatus = await pollBuildStatus({
@@ -163,11 +168,15 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         }
 
         setPhase('preparing');
-        const archive = await downloadFirmwareArchive(
+        const encrypted = await downloadFirmwareArchive(
           finalStatus.firmwareUrl ?? firmwareDownloadUrl(identifier),
           { signal: controller.signal, onProgress: setProgress }
         );
-        const extracted = await extractFirmwareBundle(archive, password, {
+        const archive = await decryptFirmwareArchive(encrypted, password);
+        // Kept so the manual route can hand over a ZIP that opens anywhere,
+        // without the user ever seeing the build password.
+        setArchive(archive);
+        const extracted = await extractFirmwareBundle(archive, {
           name: deviceName,
           version: finalStatus.esphomeVersion ?? 'ESPHome',
         });
@@ -194,6 +203,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       controller.abort();
       created?.release();
       setBundle(null);
+      setArchive(null);
     };
   }, [identifier, password, deviceName, attempt]);
 
@@ -223,18 +233,15 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
     }
   }, [phase, onClose]);
 
-  const handlePasswordCopy = () => {
-    // Optional: navigator.clipboard is undefined in insecure contexts.
-    navigator.clipboard?.writeText(password).catch(() => {
-      // Clipboard access can be denied, the password is visible anyway.
-    });
+  const handleArchiveDownload = () => {
+    if (archive) {
+      FileSaver.saveAs(archive, `${identifier}.zip`);
+    }
   };
 
   const runLink = status?.runUrl ?? buildListUrl;
   const buildPercent = percentComplete(status);
   const buildFiles = compiledFiles(status);
-  const downloadUrl = status?.firmwareUrl ?? firmwareDownloadUrl(identifier);
-  const isBuilt = phase === 'ready' || (phase === 'error' && isRetryable);
   const activeStep = phase === 'building' ? 0 : phase === 'preparing' ? 1 : 2;
 
   const manualInstructions = (
@@ -248,28 +255,27 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         <Typography variant="body2" component="div">
           <ol style={{ paddingLeft: '1.2em', margin: 0 }}>
             <li>
-              {isBuilt ? (
+              {archive ? (
                 <>
-                  Download the firmware:{' '}
-                  <Link href={downloadUrl}>{identifier}.zip</Link>
+                  Save the firmware to your computer and unzip it:
+                  <Box sx={{ my: 1 }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<Download />}
+                      onClick={handleArchiveDownload}
+                    >
+                      Download {identifier}.zip
+                    </Button>
+                  </Box>
                 </>
               ) : (
                 <>
-                  Wait for the build to finish, then download the firmware from{' '}
-                  <Link href={downloadUrl}>{identifier}.zip</Link>
+                  Wait for the build to finish - this page decrypts the firmware
+                  and offers it here as a ZIP you can save and unzip with any
+                  tool.
                 </>
               )}
-            </li>
-            <li>
-              Unzip it using this password:{' '}
-              <Box
-                component="strong"
-                onClick={handlePasswordCopy}
-                sx={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
-                title="Copy to clipboard"
-              >
-                {password} <ContentCopy fontSize="inherit" />
-              </Box>
             </li>
             <li>Connect your ESP32 to your computer.</li>
             <li>
@@ -338,7 +344,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
                   <Alert severity="warning" sx={{ my: 1 }}>
                     We cannot read the build status from this browser. Your
                     build is most likely still running - follow it in the build
-                    log and use the manual instructions below once it finished.
+                    log, then reopen this page to pick the firmware up.
                   </Alert>
                 )}
                 <Typography variant="caption" color="text.secondary">
