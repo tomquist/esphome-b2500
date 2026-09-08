@@ -1,0 +1,199 @@
+'use strict';
+
+/**
+ * Validates the decrypted build configuration before it is rendered into the
+ * ESPHome YAML.
+ *
+ * The config arrives from the browser via a public, unauthenticated dispatch
+ * proxy, so every value is attacker controlled. The Jinja templates interpolate
+ * most values inside double-quoted YAML strings through the `yaml_string`
+ * escaper, but a handful of fields (versions, ports, pins, log level, flash
+ * size, ...) are emitted as bare YAML scalars. Without validation an attacker
+ * could smuggle a newline into one of those and inject arbitrary top-level YAML
+ * such as `packages:` or `external_components:`, which ESPHome would fetch and
+ * execute as Python at compile time on the build runner.
+ *
+ * Two layers guard against that:
+ *   1. No string anywhere in the config may contain a control character
+ *      (newline, carriage return, ...). A YAML-structure injection needs a line
+ *      break to open a new key, so this alone stops the class of attack.
+ *   2. The fields that are rendered as bare scalars are additionally held to a
+ *      strict shape, which also rejects same-line YAML tricks (`!include`,
+ *      `&anchor`, `*alias`, ...) that do not need a newline.
+ */
+
+class InvalidConfigError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'InvalidConfigError';
+  }
+}
+
+// Matches any control character except tab (0x09): 0x00-0x08, 0x0a-0x1f
+// and DEL (0x7f). Notably matches newline and carriage return, which is what
+// a YAML-structure injection needs to open a new key.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\x00-\x08\x0a-\x1f\x7f]/;
+
+const LOG_LEVELS = new Set([
+  'NONE',
+  'ERROR',
+  'WARN',
+  'INFO',
+  'DEBUG',
+  'VERBOSE',
+  'VERY_VERBOSE',
+]);
+
+const rejectControlChars = (value, path) => {
+  if (typeof value === 'string') {
+    if (CONTROL_CHARS.test(value)) {
+      throw new InvalidConfigError(
+        `Value at ${path} contains a control character`
+      );
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => rejectControlChars(item, `${path}[${index}]`));
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      // Keys are template-selected, but guard them too for good measure.
+      if (CONTROL_CHARS.test(key)) {
+        throw new InvalidConfigError(
+          `Object key at ${path} contains a control character`
+        );
+      }
+      rejectControlChars(item, `${path}.${key}`);
+    }
+  }
+};
+
+// Accepts a value that is either absent/empty (template default kicks in) or a
+// non-negative integer, whether it arrived as a number or a numeric string.
+const isBlank = (value) =>
+  value === undefined || value === null || value === '';
+
+const asInteger = (value) => {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? value : undefined;
+  }
+  if (typeof value === 'string' && /^[0-9]+$/.test(value)) {
+    return Number.parseInt(value, 10);
+  }
+  return undefined;
+};
+
+const requireInteger = (value, path, { min, max }) => {
+  if (isBlank(value)) {
+    return;
+  }
+  const parsed = asInteger(value);
+  if (parsed === undefined || parsed < min || parsed > max) {
+    throw new InvalidConfigError(
+      `${path} must be an integer between ${min} and ${max}`
+    );
+  }
+};
+
+const requirePattern = (value, path, pattern, description) => {
+  if (isBlank(value)) {
+    return;
+  }
+  if (typeof value !== 'string' || !pattern.test(value)) {
+    throw new InvalidConfigError(`${path} must be ${description}`);
+  }
+};
+
+/**
+ * Throws {@link InvalidConfigError} if the config could break out of the YAML
+ * the templates generate. Returns nothing; the caller renders `config` as-is.
+ */
+const validateConfig = (config) => {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw new InvalidConfigError('Configuration must be an object');
+  }
+
+  rejectControlChars(config, 'config');
+
+  // Bare-scalar fields: hold them to a strict shape so nothing but the expected
+  // token can reach the YAML unquoted.
+  requirePattern(
+    config.flash_size,
+    'flash_size',
+    /^[0-9]{1,3}MB$/,
+    'a flash size such as 4MB'
+  );
+
+  if (!isBlank(config.log_level) && !LOG_LEVELS.has(String(config.log_level))) {
+    throw new InvalidConfigError(
+      `log_level must be one of ${[...LOG_LEVELS].join(', ')}`
+    );
+  }
+
+  requireInteger(config.poll_interval_seconds, 'poll_interval_seconds', {
+    min: 1,
+    max: 86400,
+  });
+
+  const webServer = config.web_server;
+  if (webServer && typeof webServer === 'object') {
+    requireInteger(webServer.port, 'web_server.port', { min: 1, max: 65535 });
+  }
+
+  const mqtt = config.mqtt;
+  if (mqtt && typeof mqtt === 'object') {
+    requireInteger(mqtt.port, 'mqtt.port', { min: 1, max: 65535 });
+  }
+
+  const powermeter = config.powermeter;
+  if (powermeter && typeof powermeter === 'object') {
+    requirePattern(
+      powermeter.tx_pin,
+      'powermeter.tx_pin',
+      /^[A-Za-z0-9_]+$/,
+      'a pin name such as GPIO6'
+    );
+    requirePattern(
+      powermeter.rx_pin,
+      'powermeter.rx_pin',
+      /^[A-Za-z0-9_]+$/,
+      'a pin name such as GPIO7'
+    );
+    requireInteger(powermeter.baud_rate, 'powermeter.baud_rate', {
+      min: 1,
+      max: 1000000,
+    });
+    requireInteger(powermeter.stop_bits, 'powermeter.stop_bits', {
+      min: 1,
+      max: 2,
+    });
+  }
+
+  const autoRestart = config.auto_restart;
+  if (autoRestart && typeof autoRestart === 'object') {
+    requireInteger(
+      autoRestart.restart_after_error_count,
+      'auto_restart.restart_after_error_count',
+      { min: 0, max: 1000000 }
+    );
+  }
+
+  if (config.storages !== undefined) {
+    if (!Array.isArray(config.storages)) {
+      throw new InvalidConfigError('storages must be an array');
+    }
+    config.storages.forEach((storage, index) => {
+      if (storage && typeof storage === 'object') {
+        requireInteger(storage.version, `storages[${index}].version`, {
+          min: 0,
+          max: 99,
+        });
+      }
+    });
+  }
+};
+
+module.exports = { validateConfig, InvalidConfigError };

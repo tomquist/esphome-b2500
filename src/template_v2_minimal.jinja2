@@ -168,7 +168,7 @@ wifi:
 {%- if enable_fallback_hotspot %}
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "{{ fallback_hotspot_ssid }}"
+    ssid: "{{ yaml_string(fallback_hotspot_ssid) }}"
 {%- endif %}
 
 {%- if enable_web_server %}
@@ -206,25 +206,25 @@ mqtt:
   on_message:
 {%- for storage in storages %}
 {%- set storage_loop = loop %}
-    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/charge_mode/set"
+    - topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/charge_mode/set"
       then:
         - b2500.set_charge_mode:
             id: b2500_{{ storage_loop.index }}
             charge_mode: !lambda "return x;"
 {%- if storage.version == 1 %}
-    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/discharge_threshold/set"
+    - topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/discharge_threshold/set"
       then:
         - b2500.set_discharge_threshold:
             id: b2500_{{ storage_loop.index }}
             generation: {{ storage.version }}
             threshold: !lambda "return atoi(x.c_str());"
-    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/dod/set"
+    - topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/dod/set"
       then:
         - b2500.set_dod:
             id: b2500_{{ storage_loop.index }}
             dod: !lambda "return atoi(x.c_str());"
 {%- for _ in range(2) %}
-    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled/set"
+    - topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/power{{ loop.index }}/enabled/set"
       then:
         - b2500.set_out_active:
             id: b2500_{{ storage_loop.index }}
@@ -233,7 +233,7 @@ mqtt:
             active: !lambda 'return x == "ON";'
 {%- endfor %}
 {%- elif storage.version >= 2 %}
-    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/smartmeter/enabled/set"
+    - topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/smartmeter/enabled/set"
       then:
         - b2500.set_adaptive_mode_enabled:
             id: b2500_{{ storage_loop.index }}
@@ -248,16 +248,16 @@ mqtt:
 {%- if storage.version >= 2 %}
 {%- if enable_timer_query %}
 {%- for _ in range(5) %}
-    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/timer/{{ loop.index }}/set"
+    - topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/{{ loop.index }}/set"
       then:{{ set_timer_action(storage_loop.index, storage.version, loop.index0) }}
 {%- endfor %}
-    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/timer/set"
+    - topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/timer/set"
       then:
 {%- for _ in range(5) %}{{ set_timer_action(storage_loop.index, storage.version, loop.index0) }}{%- endfor %}
 {%- endif %}
 {%- endif %}
 {%- if enable_set_wifi %}
-    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/wifi/set"
+    - topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/wifi/set"
       then:
         - b2500.set_wifi:
             id: b2500_{{ storage_loop.index }}
@@ -265,7 +265,7 @@ mqtt:
             password: !lambda 'return x["password"].as<std::string>();'
 {%- endif %}
 {%- if enable_set_mqtt %}
-    - topic: "{{ mqtt_topic }}/{{ storage_loop.index }}/mqtt/set"
+    - topic: "{{ yaml_string(mqtt_topic) }}/{{ storage_loop.index }}/mqtt/set"
       then:
         - b2500.set_mqtt:
             id: b2500_{{ storage_loop.index }}
@@ -291,7 +291,7 @@ b2500:
               root["id"] = x.id;
               root["mac"] = x.mac;
             });
-            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/device", device_info_json);
+            id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/device", device_info_json);
     on_runtime_info:
       then:
         - lambda: |-
@@ -390,7 +390,7 @@ b2500:
               energy["loadDischarge"] = x.daily_total_load_discharge;
 {%- endif %}
             });
-            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/runtime", runtime_info_json);
+            id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/runtime", runtime_info_json);
     on_cell_info:
       then:
         - lambda: |-
@@ -416,7 +416,7 @@ b2500:
               root["sum"] = (sum / 1000.0);
               root["delta"] = ((max - min) / 1000.0);
             });
-            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/cell", cell_info_json);
+            id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/cell", cell_info_json);
     on_wifi_info:
       then:
         - lambda: |-
@@ -424,14 +424,14 @@ b2500:
               root["ssid"] = x.ssid;
               root["rssi"] = x.signal;
             });
-            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/wifi", wifi_info_json);
+            id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/wifi", wifi_info_json);
     on_fc41d_info:
       then:
         - lambda: |-
             auto fc41d_info_json = json::build_json([x](JsonObject root) {
               root["version"] = x.firmware;
             });
-            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/fc41d", fc41d_info_json);
+            id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/fc41d", fc41d_info_json);
 {%- if storage.version >= 2 %}
     on_timer_info:
       then:
@@ -462,7 +462,7 @@ b2500:
                 end["minute"] = timer->end.minute;
               }
             });
-            id(mqtt_client).publish("{{ mqtt_topic }}/{{ loop.index }}/timer", timer_info_json);
+            id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/timer", timer_info_json);
 {%- endif %}
 {%- endfor %}
 

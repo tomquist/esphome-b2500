@@ -29,7 +29,7 @@ jobs:
     - name: Run tests
       run: |
         npm test -- --watchAll=false
-        node --test scripts/watch-build-progress.test.mjs
+        node --test scripts/watch-build-progress.test.mjs scripts/validateConfig.test.mjs
 
     - name: Build the app
       run: npm run build

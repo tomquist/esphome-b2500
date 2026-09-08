@@ -20,6 +20,7 @@ jobs:
       AWS_REGION: eu-west-1
       AUTOMATED_BUILD: 'true'
       IDENTIFIER: ${{ github.event.client_payload.identifier }}
+      ESPHOME_VERSION: ${{ github.event.client_payload.esphome_version || '2026.8.1' }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     permissions:
       contents: write
@@ -33,6 +34,12 @@ jobs:
         run: |
           if [[ ! "$IDENTIFIER" =~ ^[a-z0-9-]{1,64}$ ]]; then
             echo "::error::Invalid build identifier"
+            exit 1
+          fi
+          # esphome_version also comes from the dispatch payload and is passed
+          # to the build action, so constrain it to a plain version or "latest".
+          if [[ ! "$ESPHOME_VERSION" =~ ^(latest|[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2})$ ]]; then
+            echo "::error::Invalid ESPHome version"
             exit 1
           fi
 
@@ -66,11 +73,16 @@ jobs:
       - name: Decrypt the ZIP password
         id: decrypt_password
         run: |
-          echo "${{ env.PRIVATE_KEY }}" > private_key.pem
-          echo "${{ env.ENCRYPTED_ZIP_PASSWORD }}" > encrypted_password.txt
+          # PRIVATE_KEY and ENCRYPTED_ZIP_PASSWORD are read from the environment
+          # (set at job level) rather than interpolated with ${{ }}. The
+          # encrypted password comes straight from the repository dispatch
+          # payload and is fully attacker controlled, so it must never be
+          # spliced into the script text where $(...) or backticks would run.
+          printf '%s\n' "$PRIVATE_KEY" > private_key.pem
+          printf '%s' "$ENCRYPTED_ZIP_PASSWORD" > encrypted_password.txt
           DECRYPTED_PASSWORD=$(openssl rsautl -decrypt -inkey private_key.pem -in <(base64 -d encrypted_password.txt) -oaep)
-          echo "PASSWORD=$DECRYPTED_PASSWORD" >> $GITHUB_ENV
           echo "::add-mask::$DECRYPTED_PASSWORD"
+          echo "PASSWORD=$DECRYPTED_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Install yq
         run: |
@@ -100,7 +112,7 @@ jobs:
         uses: esphome/build-action@v7.1.0
         with:
           yaml-file: device.yaml
-          version: ${{ github.event.client_payload.esphome_version || '2026.8.1' }}
+          version: ${{ env.ESPHOME_VERSION }}
           # Required so that the browser can flash the firmware without having
           # to assemble an esp-web-tools manifest itself.
           complete-manifest: true
@@ -146,8 +158,14 @@ jobs:
         run: ./scripts/publish-build-status.sh building "Packaging the firmware" || true
 
       - name: Zip the firmware with a password
+        env:
+          FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
         run: |
-          zip -P "$PASSWORD" firmware.zip ${{ steps.esphome-build.outputs.name }}/*
+          if [[ ! "$FIRMWARE_NAME" =~ ^[a-z0-9_-]+$ ]]; then
+            echo "::error::Unexpected firmware name"
+            exit 1
+          fi
+          zip -P "$PASSWORD" firmware.zip "$FIRMWARE_NAME"/*
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4

@@ -168,7 +168,7 @@ wifi:
 {%- if enable_fallback_hotspot %}
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "{{ fallback_hotspot_ssid }}"
+    ssid: "{{ yaml_string(fallback_hotspot_ssid) }}"
 {%- endif %}
 
 {%- if enable_web_server %}
@@ -362,7 +362,7 @@ button:
 {%- if enable_set_mqtt %}
   - platform: template
     id: b2500_button_set_mqtt_{{ loop.index }}
-    name: "{{ sensor_prefix(loop.index, storage) }} Set MQTT to {{ mqtt_broker }}"
+    name: "{{ sensor_prefix(loop.index, storage) }} Set MQTT to {{ yaml_string(mqtt_broker) }}"
     device_id: b2500_device_{{ loop.index }}
 {%- if mqtt.enabled %}
     command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/mqtt/set"

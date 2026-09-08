@@ -137,21 +137,21 @@ logger:
       lambda: |-
         if (strstr(message, "BT_BTC") != NULL) {
           id(mqtt_client).publish("b2500/debug",message);
-          id(mqtt_client).publish("{{ mqtt_topic }}/debug","B_T_C FOUND: restart ESP32");
+          id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/debug","B_T_C FOUND: restart ESP32");
 {%- if enable_auto_restart %}
           id(controller_restart).press();
 {%- endif %}
         }
         if (strstr(message, "btc_transfer_context") != NULL) {
           id(mqtt_client).publish("b2500/debug",message);
-          id(mqtt_client).publish("{{ mqtt_topic }}/debug","B_T_C FOUND: restart ESP32");
+          id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/debug","B_T_C FOUND: restart ESP32");
 {%- if enable_auto_restart %}
           id(controller_restart).press();
 {%- endif %}
         }
         if (strstr(message, "mode: single") != NULL) {
           id(mqtt_client).publish("b2500/debug",message);
-          id(mqtt_client).publish("{{ mqtt_topic }}/debug","single mode: restart ESP32");
+          id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/debug","single mode: restart ESP32");
 {%- if enable_auto_restart %}
           id(controller_restart).press();
 {%- endif %}
@@ -160,12 +160,12 @@ logger:
           id(b2500_internal_error_count)++;
           char mvalue[48];
           snprintf(mvalue, 48,"handle error counter: %i",id(b2500_internal_error_count));
-          id(mqtt_client).publish("{{ mqtt_topic }}/debug",mvalue);
+          id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/debug",mvalue);
 {%- if enable_auto_restart %}
           if(id(b2500_internal_error_count) > {{ auto_restart_after_error_count }}) {
             ESP_LOGI("b2500","handle error counter: RESET");
             id(b2500_internal_error_count) = 0;
-            id(mqtt_client).publish("{{ mqtt_topic }}/debug","handle error counter: RESET");
+            id(mqtt_client).publish("{{ yaml_string(mqtt_topic) }}/debug","handle error counter: RESET");
             id(controller_restart).press();
           }
 {%- endif %}
@@ -214,7 +214,7 @@ wifi:
 {%- if enable_fallback_hotspot %}
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "{{ fallback_hotspot_ssid }}"
+    ssid: "{{ yaml_string(fallback_hotspot_ssid) }}"
 {%- endif %}
 
 {%- if enable_web_server %}
@@ -566,7 +566,7 @@ button:
   - platform: template
     id: b2500_button_set_mqtt_{{ loop.index }}
     command_topic: "{{ yaml_string(mqtt_topic) }}/{{ loop.index }}/mqtt/set"
-    name: "{{ sensor_prefix(loop.index, storage) }} Set MQTT to {{ mqtt_broker }}"
+    name: "{{ sensor_prefix(loop.index, storage) }} Set MQTT to {{ yaml_string(mqtt_broker) }}"
     disabled_by_default: True
     on_press:
       then:
@@ -2219,9 +2219,9 @@ script:
             }
             {%- endfor %}
 
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/temp1",ble_device_nr);
+            snprintf(mtopic, 48,"{{ yaml_string(mqtt_topic) }}/%i/battery/temp1",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(t1));
-            snprintf(mtopic, 48,"{{ mqtt_topic }}/%i/battery/temp2",ble_device_nr);
+            snprintf(mtopic, 48,"{{ yaml_string(mqtt_topic) }}/%i/battery/temp2",ble_device_nr);
             id(mqtt_client).publish(mtopic,to_string(t2));
           {%- endif %}
           }   

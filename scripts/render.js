@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const nunjucks = require('nunjucks');
+const { validateConfig } = require('./validateConfig');
 
 const password = process.env.PASSWORD;
 const encryptedConfigJson = Buffer.from(process.env.ENCRYPTED_CONFIG, 'base64');
@@ -23,9 +24,14 @@ nunjucks
   .addGlobal('automated_build', process.env.AUTOMATED_BUILD === 'true');
 const { config, secrets } = JSON.parse(configJSON);
 
+// Reject anything in the config that could break out of the YAML the templates
+// generate before it is rendered. The config comes from a public, unauthenticated
+// dispatch proxy, so it is fully attacker controlled.
+validateConfig(config);
+
 // Mask all secrets
-for (const secret of secrets) {
-  if (secret.trim() !== '') {
+for (const secret of secrets || []) {
+  if (typeof secret === 'string' && secret.trim() !== '') {
     console.log(`::add-mask::${secret}`);
   }
 }
