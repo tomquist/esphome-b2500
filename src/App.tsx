@@ -255,7 +255,7 @@ const App: React.FC = () => {
           </Box>
         )}
       </Container>
-      {isModalOpen && (
+      {isModalOpen && debouncedFormValues && (
         <BuildModal
           closeModal={closeModal}
           debouncedFormValues={debouncedFormValues}

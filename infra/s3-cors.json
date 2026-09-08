@@ -1,0 +1,17 @@
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["https://tomquist.github.io", "http://localhost:3000"],
+      "AllowedMethods": ["GET", "HEAD"],
+      "AllowedHeaders": ["*"],
+      "ExposeHeaders": [
+        "Content-Length",
+        "Content-Type",
+        "ETag",
+        "Accept-Ranges",
+        "Content-Range"
+      ],
+      "MaxAgeSeconds": 3000
+    }
+  ]
+}

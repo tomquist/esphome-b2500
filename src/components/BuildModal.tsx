@@ -7,31 +7,27 @@ import {
   DialogTitle,
   Button,
   CircularProgress,
-  Link,
 } from '@mui/material';
-import { ContentCopy } from '@mui/icons-material';
 import axios from 'axios';
 import {
   getAllSecrets,
   generateRandomIdentifier,
   generatePassword,
-  newIssueLink,
 } from '../utils';
 import { encryptConfig, encryptPassword } from '../crypto';
-
-const S3_BUCKET = process.env.REACT_APP_S3_BUCKET;
-const AWS_REGION = process.env.REACT_APP_AWS_REGION;
+import BuildProgressDialog from './BuildProgressDialog';
+import { FormValues } from '../types';
 
 interface BuildModalProps {
   closeModal: () => void;
-  debouncedFormValues: any;
+  debouncedFormValues: FormValues;
 }
 
 const BuildModal: React.FC<BuildModalProps> = ({
   closeModal,
   debouncedFormValues,
 }) => {
-  const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
+  const [isBuildStarted, setIsBuildStarted] = useState(false);
   const [identifier] = useState(() => generateRandomIdentifier());
   const [password] = useState(() => generatePassword());
   const [isLoading, setIsLoading] = useState(false);
@@ -64,8 +60,10 @@ const BuildModal: React.FC<BuildModalProps> = ({
           },
         }
       );
-      navigator.clipboard.writeText(password);
-      setIsInstructionsModalOpen(true);
+      navigator.clipboard.writeText(password).catch(() => {
+        // Copying is a convenience for the manual flashing route only.
+      });
+      setIsBuildStarted(true);
     } catch (error) {
       console.error('Error triggering build:', error);
       alert('Failed to trigger build. Check the console for more details.');
@@ -74,126 +72,54 @@ const BuildModal: React.FC<BuildModalProps> = ({
     }
   };
 
-  const handlePasswordCopy = () => {
-    navigator.clipboard.writeText(password);
-    alert('Password copied to clipboard');
-  };
-
-  const handleCloseInstructionsModal = () => {
-    setIsInstructionsModalOpen(false);
-    closeModal();
-  };
+  if (isBuildStarted) {
+    return (
+      <BuildProgressDialog
+        identifier={identifier}
+        password={password}
+        deviceName={
+          debouncedFormValues.friendly_name || debouncedFormValues.name
+        }
+        config={debouncedFormValues}
+        onClose={closeModal}
+      />
+    );
+  }
 
   return (
-    <>
-      <Dialog open={true} onClose={closeModal} disableEscapeKeyDown={isLoading}>
-        <DialogTitle>Build Image</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            <p>
-              This allows you to directly build the firmware image on GitHub
-              Actions.
-            </p>
-            <p>
-              Once you press "Start Build", we'll <strong>encrypt</strong> your
-              configuration and send it over to GitHub to build the ESPHome
-              image. Once the build is complete, you can download a password
-              protected Zip-file from the "Artifacts" section of your build.
-            </p>
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeModal} color="primary" disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleBuild}
-            color="primary"
-            disabled={
-              isLoading || password.length < 8 || identifier.trim().length === 0
-            }
-          >
-            {isLoading ? <CircularProgress size={24} /> : 'Start Build'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
-        open={isInstructionsModalOpen}
-        onClose={handleCloseInstructionsModal}
-      >
-        <DialogTitle>Next Steps</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Your build has been started now. Here's what you need to do next:
-            <ol>
-              <li>
-                Open the list of builds:{' '}
-                <Link
-                  href="https://github.com/tomquist/esphome-b2500/actions"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  Build List
-                </Link>{' '}
-                and locate your build: <strong>[B2500] {identifier}</strong>.
-                Keep this page open for the next steps!
-              </li>
-              <li>
-                Wait for the build to finish. If the build fails, please{' '}
-                <Link
-                  href={newIssueLink({
-                    config: debouncedFormValues,
-                    build: identifier,
-                  })}
-                  target="_blank"
-                  rel="noopener"
-                >
-                  open an issue
-                </Link>{' '}
-                with details of your configuration.
-              </li>
-              <li>
-                Once the build completed, download your firmware using this
-                link:{' '}
-                <Link
-                  href={`https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/firmware/${identifier}.zip`}
-                >
-                  Firmware Download
-                </Link>
-              </li>
-              <li>
-                Unzip the file using the entered password:
-                <strong
-                  onClick={handlePasswordCopy}
-                  style={{ cursor: 'pointer', marginLeft: '5px' }}
-                >
-                  {password} <ContentCopy />
-                </strong>
-              </li>
-              <li>Connect your ESP32 to your computer.</li>
-              <li>
-                Open{' '}
-                <Link
-                  href="https://web.esphome.io/"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  ESPHome Web
-                </Link>
-                , connect to your ESP32, click "Install" and select the unzipped
-                <code>*.bin</code> file.
-              </li>
-            </ol>
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseInstructionsModal} color="primary">
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
+    <Dialog open={true} onClose={closeModal} disableEscapeKeyDown={isLoading}>
+      <DialogTitle>Build Image</DialogTitle>
+      <DialogContent>
+        <DialogContentText component="div">
+          <p>
+            This builds your firmware image on GitHub Actions and then installs
+            it on your ESP32 directly from this page.
+          </p>
+          <p>
+            Once you press "Start Build", we'll <strong>encrypt</strong> your
+            configuration and send it over to GitHub. When the build is done,
+            this page downloads the firmware, decrypts it in your browser and
+            offers to flash it via USB. Flashing requires a Chromium based
+            browser such as Google Chrome or Microsoft Edge - you can always
+            download the firmware and flash it manually instead.
+          </p>
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={closeModal} color="primary" disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleBuild}
+          color="primary"
+          disabled={
+            isLoading || password.length < 8 || identifier.trim().length === 0
+          }
+        >
+          {isLoading ? <CircularProgress size={24} /> : 'Start Build'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 

@@ -1,0 +1,33 @@
+name: Apply S3 CORS configuration
+
+# The web builder fetches the firmware and the build status from S3, which only
+# works when the bucket allows cross-origin requests. Run this workflow after
+# changing infra/s3-cors.json.
+on:
+  workflow_dispatch:
+
+jobs:
+  apply_cors:
+    runs-on: ubuntu-latest
+    env:
+      S3_BUCKET: esphome-b2500-images
+      AWS_REGION: eu-west-1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Apply the CORS configuration
+        run: |
+          aws s3api put-bucket-cors \
+            --bucket "$S3_BUCKET" \
+            --cors-configuration "file://infra/s3-cors.json"
+
+      - name: Show the applied configuration
+        run: aws s3api get-bucket-cors --bucket "$S3_BUCKET"
