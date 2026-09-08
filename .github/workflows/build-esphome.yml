@@ -59,7 +59,9 @@ jobs:
       # The web builder polls this document to follow the build and to offer
       # flashing the firmware right after it finished.
       - name: Publish build status
-        run: ./scripts/publish-build-status.sh building
+        env:
+          STEP: preparing
+        run: ./scripts/publish-build-status.sh building "Preparing the build" || true
 
       - name: Decrypt the ZIP password
         id: decrypt_password
@@ -81,6 +83,18 @@ jobs:
         run: |
           node scripts/render.js
 
+      # The compile is by far the longest part of a build, so a watcher reports
+      # how far along it is while the step below runs. It keeps going until the
+      # step after the build stops it.
+      - name: Report compile progress
+        env:
+          STEP: compiling
+        run: |
+          ./scripts/publish-build-status.sh building "Compiling the firmware" || true
+          rm -f progress-watcher.stop
+          nohup ./scripts/watch-build-progress.sh > progress-watcher.log 2>&1 &
+          echo "PROGRESS_WATCHER_PID=$!" >> "$GITHUB_ENV"
+
       - name: Build firmware
         id: esphome-build
         uses: esphome/build-action@v7.1.0
@@ -91,6 +105,28 @@ jobs:
           # to assemble an esp-web-tools manifest itself.
           complete-manifest: true
         continue-on-error: true
+
+      # Before any of the paths below publish a status of their own, so that a
+      # late progress update cannot overwrite the build result. The watcher only
+      # stops between polls, so waiting for it to exit means any upload it had
+      # in flight has finished rather than racing the status published next.
+      - name: Stop reporting compile progress
+        if: always()
+        run: |
+          touch progress-watcher.stop
+          if [[ -n "${PROGRESS_WATCHER_PID:-}" ]]; then
+            for _ in $(seq 60); do
+              kill -0 "$PROGRESS_WATCHER_PID" 2> /dev/null || break
+              sleep 1
+            done
+            # Only reached if an upload hung well past its own timeout.
+            kill "$PROGRESS_WATCHER_PID" 2> /dev/null || true
+          fi
+          if [[ -s progress-watcher.log ]]; then
+            echo "::group::Compile progress reporting"
+            cat progress-watcher.log
+            echo "::endgroup::"
+          fi
 
       - name: Debug on failure
         if: steps.esphome-build.outcome == 'failure'
@@ -103,6 +139,11 @@ jobs:
       - name: Exit on build failure  
         if: steps.esphome-build.outcome == 'failure'
         run: exit 1
+
+      - name: Publish packaging status
+        env:
+          STEP: packaging
+        run: ./scripts/publish-build-status.sh building "Packaging the firmware" || true
 
       - name: Zip the firmware with a password
         run: |

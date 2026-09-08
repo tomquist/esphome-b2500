@@ -27,10 +27,45 @@ describe('parseBuildStatus', () => {
       state: 'success',
       runUrl: 'https://github.com/run/1',
       message: undefined,
+      step: undefined,
+      progress: undefined,
       firmwareUrl: 'https://example.com/firmware.zip',
       firmwareName: 'b2500-esp32',
       esphomeVersion: '2026.8.1',
     });
+  });
+
+  it('reads the build step and its compile progress', () => {
+    const status = parseBuildStatus({
+      status: 'building',
+      step: 'compiling',
+      message: 'Compiling the firmware',
+      progress: { completed: 842, total: 1505 },
+    });
+
+    expect(status?.step).toBe('compiling');
+    expect(status?.progress).toEqual({ completed: 842, total: 1505 });
+  });
+
+  it('ignores steps and progress it does not understand', () => {
+    expect(
+      parseBuildStatus({ status: 'building', step: 'polishing' })?.step
+    ).toBeUndefined();
+    expect(
+      parseBuildStatus({ status: 'building', progress: { total: 1505 } })
+        ?.progress
+    ).toBeUndefined();
+  });
+
+  it('drops a total the build can never reach', () => {
+    // The workflow counts finished object files against the object files the
+    // ninja graph declares; a stale graph must not pin the bar below 100%.
+    const status = parseBuildStatus({
+      status: 'building',
+      progress: { completed: 1600, total: 1505 },
+    });
+
+    expect(status?.progress).toEqual({ completed: 1600, total: undefined });
   });
 
   it('returns null for documents it does not understand', () => {

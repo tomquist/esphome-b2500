@@ -10,6 +10,9 @@
 #   IDENTIFIER       build identifier from the repository dispatch (required)
 #   S3_BUCKET        target bucket (required)
 #   RUN_URL          link to this workflow run
+#   STEP             what the build is doing: preparing, compiling, packaging
+#   PROGRESS_DONE    compile units finished so far (with PROGRESS_TOTAL)
+#   PROGRESS_TOTAL   compile units the build expects in total
 #   FIRMWARE_URL     download URL of the firmware ZIP (success only)
 #   FIRMWARE_NAME    name of the firmware directory inside the ZIP
 #   ESPHOME_VERSION  ESPHome version the firmware was built with
@@ -28,15 +31,24 @@ jq -n \
   --arg status "$STATUS" \
   --arg identifier "$IDENTIFIER" \
   --arg message "$MESSAGE" \
+  --arg step "${STEP:-}" \
   --arg run_url "${RUN_URL:-}" \
   --arg firmware_url "${FIRMWARE_URL:-}" \
   --arg firmware_name "${FIRMWARE_NAME:-}" \
   --arg esphome_version "${ESPHOME_VERSION:-}" \
+  --argjson done "${PROGRESS_DONE:-0}" \
+  --argjson total "${PROGRESS_TOTAL:-0}" \
   --arg updated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   '{status: $status, identifier: $identifier, updated_at: $updated_at}
-    + ({run_url: $run_url, message: $message, firmware_url: $firmware_url,
-        firmware_name: $firmware_name, esphome_version: $esphome_version}
-       | with_entries(select(.value != "")))' > build-status.json
+    + ({run_url: $run_url, message: $message, step: $step,
+        firmware_url: $firmware_url, firmware_name: $firmware_name,
+        esphome_version: $esphome_version}
+       | with_entries(select(.value != "")))
+    + (if $done > 0 or $total > 0
+       then {progress: ({completed: $done}
+                        + (if $total > 0 then {total: $total} else {} end))}
+       else {} end)' \
+  > build-status.json
 
 cat build-status.json
 

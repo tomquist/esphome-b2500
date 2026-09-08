@@ -20,12 +20,24 @@ export const buildListUrl = 'https://github.com/tomquist/esphome-b2500/actions';
 
 export type BuildState = 'building' | 'success' | 'error';
 
+/** What a running build is currently doing. */
+export type BuildStep = 'preparing' | 'compiling' | 'packaging';
+
+export interface BuildProgress {
+  completed: number;
+  /** Absent until the build knows how much work there is. */
+  total?: number;
+}
+
 export interface BuildStatus {
   state: BuildState;
   /** Link to the GitHub Actions run that builds the firmware. */
   runUrl?: string;
   /** Error message, only set for failed builds. */
   message?: string;
+  step?: BuildStep;
+  /** Compile units finished so far, reported while compiling. */
+  progress?: BuildProgress;
   firmwareUrl?: string;
   /** Name of the firmware directory inside the ZIP, e.g. `b2500-esp32`. */
   firmwareName?: string;
@@ -44,8 +56,34 @@ const STATES: Record<string, BuildState> = {
   cancelled: 'error',
 };
 
+const STEPS: BuildStep[] = ['preparing', 'compiling', 'packaging'];
+
 const optionalString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;
+
+const optionalCount = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+
+const parseStep = (value: unknown): BuildStep | undefined => {
+  const step = optionalString(value)?.toLowerCase();
+  return STEPS.find((known) => known === step);
+};
+
+const parseProgress = (value: unknown): BuildProgress | undefined => {
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const completed = optionalCount(record.completed);
+  if (completed === undefined) {
+    return undefined;
+  }
+  const total = optionalCount(record.total);
+  // A total that cannot be reached would only ever show a stuck bar.
+  return { completed, total: total && total >= completed ? total : undefined };
+};
 
 /**
  * Parses the status document. Returns `null` for anything we don't understand
@@ -65,6 +103,8 @@ export const parseBuildStatus = (raw: unknown): BuildStatus | null => {
     state,
     runUrl: optionalString(record.run_url),
     message: optionalString(record.message),
+    step: parseStep(record.step),
+    progress: parseProgress(record.progress),
     firmwareUrl: optionalString(record.firmware_url),
     firmwareName: optionalString(record.firmware_name),
     esphomeVersion: optionalString(record.esphome_version),

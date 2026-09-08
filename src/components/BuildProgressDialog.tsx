@@ -24,6 +24,7 @@ import { FormValues } from '../types';
 import { newIssueLink } from '../utils';
 import {
   BuildStatus,
+  BuildStep,
   BuildTimeoutError,
   buildListUrl,
   firmwareDownloadUrl,
@@ -47,6 +48,43 @@ interface BuildProgressDialogProps {
   config: FormValues;
   onClose: () => void;
 }
+
+const STEP_LABELS: Record<BuildStep, string> = {
+  preparing: 'Preparing the build',
+  compiling: 'Compiling the firmware',
+  packaging: 'Packaging the firmware',
+};
+
+const stepLabel = (status: BuildStatus | null): string => {
+  if (!status) {
+    return 'Waiting for the build to start';
+  }
+  return (
+    (status.step && STEP_LABELS[status.step]) ??
+    status.message ??
+    'Build running'
+  );
+};
+
+/** How much of the compile is done, or null while that is unknown. */
+const percentComplete = (status: BuildStatus | null): number | null => {
+  const progress = status?.progress;
+  if (!progress?.total) {
+    return null;
+  }
+  // Never show a full bar: the build is only done once the status says so.
+  return Math.min(99, (progress.completed / progress.total) * 100);
+};
+
+const compiledFiles = (status: BuildStatus | null): string | null => {
+  const progress = status?.progress;
+  if (!progress) {
+    return null;
+  }
+  return progress.total
+    ? `${progress.completed} of ${progress.total} files`
+    : `${progress.completed} files`;
+};
 
 const formatDuration = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
@@ -193,6 +231,8 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   };
 
   const runLink = status?.runUrl ?? buildListUrl;
+  const buildPercent = percentComplete(status);
+  const buildFiles = compiledFiles(status);
   const downloadUrl = status?.firmwareUrl ?? firmwareDownloadUrl(identifier);
   const isBuilt = phase === 'ready' || (phase === 'error' && isRetryable);
   const activeStep = phase === 'building' ? 0 : phase === 'preparing' ? 1 : 2;
@@ -284,10 +324,16 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
               <StepLabel>Building your firmware</StepLabel>
               <StepContent>
                 <Typography variant="body2" gutterBottom>
-                  GitHub Actions is compiling your configuration. This usually
-                  takes 3 to 10 minutes - keep this dialog open.
+                  GitHub Actions is building your configuration. This usually
+                  takes around five minutes - keep this dialog open.
                 </Typography>
-                <LinearProgress sx={{ my: 1 }} />
+                <LinearProgress
+                  sx={{ my: 1 }}
+                  variant={
+                    buildPercent === null ? 'indeterminate' : 'determinate'
+                  }
+                  value={buildPercent ?? undefined}
+                />
                 {isStatusUnreachable && (
                   <Alert severity="warning" sx={{ my: 1 }}>
                     We cannot read the build status from this browser. Your
@@ -296,10 +342,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
                   </Alert>
                 )}
                 <Typography variant="caption" color="text.secondary">
-                  {status?.state === 'building'
-                    ? 'Build running'
-                    : 'Waiting for the build to start'}{' '}
-                  · {formatDuration(elapsedSeconds)} ·{' '}
+                  {stepLabel(status)}
+                  {buildFiles ? ` · ${buildFiles}` : ''} ·{' '}
+                  {formatDuration(elapsedSeconds)} ·{' '}
                   <Link href={runLink} target="_blank" rel="noopener">
                     View build log
                   </Link>
@@ -307,7 +352,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
               </StepContent>
             </Step>
             <Step>
-              <StepLabel>Preparing the firmware</StepLabel>
+              <StepLabel>Downloading the firmware</StepLabel>
               <StepContent>
                 <Typography variant="body2" gutterBottom>
                   Downloading and decrypting the firmware in your browser.
