@@ -20,8 +20,10 @@ jobs:
   build_esphome:
     runs-on: ubuntu-latest
     env:
-      ENCRYPTED_ZIP_PASSWORD: ${{ github.event.client_payload.password }}
       ENCRYPTED_CONFIG: ${{ github.event.client_payload.config }}
+      # The browser's ephemeral public key. Public material, so unlike the
+      # password it replaces there is nothing here to protect.
+      CLIENT_PUBLIC_KEY: ${{ github.event.client_payload.public_key }}
       S3_BUCKET: esphome-b2500-images
       AWS_REGION: eu-west-1
       AUTOMATED_BUILD: 'true'
@@ -40,11 +42,18 @@ jobs:
         uses: actions/checkout@v4
 
       # The identifier ends up in an S3 object key and in shell commands, so it
-      # has to match what the web builder generates.
-      - name: Validate the build identifier
+      # has to match what the web builder generates. The public key is checked
+      # properly where it is parsed (scripts/buildCrypto.js, which also rejects
+      # a point that is not on the curve); this is only so a malformed payload
+      # fails before the job spends five minutes on a compile.
+      - name: Validate the dispatch payload
         run: |
           if [[ ! "$IDENTIFIER" =~ ^[a-z0-9-]{1,64}$ ]]; then
             echo "::error::Invalid build identifier"
+            exit 1
+          fi
+          if [[ ! "$CLIENT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/]{86}==$ ]]; then
+            echo "::error::Invalid build public key"
             exit 1
           fi
 
@@ -60,7 +69,7 @@ jobs:
 
       # From the lockfile, so nunjucks is the reviewed version rather than
       # whatever the registry resolves today, and without lifecycle scripts:
-      # this job holds the AWS credentials and the RSA key.
+      # this job holds the AWS credentials and the build private key.
       - name: Install dependencies
         run: npm ci --omit=dev --ignore-scripts
 
@@ -78,44 +87,13 @@ jobs:
           STEP: preparing
         run: ./scripts/publish-build-status.sh building "Preparing the build" || true
 
-      - name: Decrypt the ZIP password
-        id: decrypt_password
-        # Scoped to this step: at job level the key sits in the environment of
-        # every step, third-party actions included.
-        env:
-          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-        run: |
-          # PRIVATE_KEY and ENCRYPTED_ZIP_PASSWORD are read from the environment
-          # as plain shell variables rather than expanded by GitHub into the
-          # script text. The encrypted password comes straight from the
-          # repository dispatch payload and is fully attacker controlled, so it
-          # must never be spliced into the script where a command substitution
-          # or backticks would run.
-          #
-          # Both files live in RUNNER_TEMP rather than the workspace: the
-          # workspace is bind-mounted into the ESPHome build container, so a
-          # key written there is readable by whatever runs inside it.
-          KEY_FILE="$RUNNER_TEMP/private_key.pem"
-          CIPHERTEXT_FILE="$RUNNER_TEMP/encrypted_password.txt"
-          trap 'rm -f "$KEY_FILE" "$CIPHERTEXT_FILE"' EXIT
-          (umask 077; printf '%s\n' "$PRIVATE_KEY" > "$KEY_FILE")
-          printf '%s' "$ENCRYPTED_ZIP_PASSWORD" > "$CIPHERTEXT_FILE"
-          DECRYPTED_PASSWORD=$(openssl rsautl -decrypt -inkey "$KEY_FILE" -in <(base64 -d "$CIPHERTEXT_FILE") -oaep)
-          echo "::add-mask::$DECRYPTED_PASSWORD"
-          # The plaintext is chosen by whoever asked for the build - they
-          # encrypt it themselves with the public key the web builder ships -
-          # and RSA-OAEP carries far more than a password's worth of bytes. A
-          # newline in it would append arbitrary NAME=VALUE lines to GITHUB_ENV
-          # and so rewrite the environment of every later step. generatePassword()
-          # only ever produces base64, so require exactly that.
-          if [[ ! "$DECRYPTED_PASSWORD" =~ ^[A-Za-z0-9+/=]{8,64}$ ]]; then
-            echo "::error::Invalid build password"
-            exit 1
-          fi
-          echo "PASSWORD=$DECRYPTED_PASSWORD" >> "$GITHUB_ENV"
-
+      # The only step that needs the repo's private key: it derives the config
+      # key from it and the requester's public key, in node rather than in the
+      # shell, so no secret is ever written to GITHUB_ENV.
       - name: Render ESPHome configuration
         id: generate_config
+        env:
+          BUILD_PRIVATE_KEY: ${{ secrets.BUILD_PRIVATE_KEY }}
         run: |
           node scripts/render.js
 
@@ -197,6 +175,8 @@ jobs:
             exit 1
           fi
           zip firmware.zip "$FIRMWARE_NAME"/*
+          # Sealed to the requester's public key under a throwaway key pair, so
+          # this step needs no secret and the runner cannot read the result.
           node scripts/encryptFirmware.js firmware.zip firmware.zip.enc
           # The firmware carries the requester's WiFi and MQTT credentials, and
           # artifacts on a public repository are public.

@@ -44,7 +44,9 @@ When using these boards, set the following options:
 3. Once the build finished, the page downloads the firmware, decrypts it in your browser and shows a "Connect & Install" button.
 4. Connect your ESP32 via USB, click "Connect & Install", pick the serial port of your ESP32 and follow the on-screen instructions.
 
-Flashing from the browser uses the [Web Serial API](https://developer.mozilla.org/docs/Web/API/Web_Serial_API), which is available in Chromium based desktop browsers such as Google Chrome, Microsoft Edge and Opera. The firmware never leaves your machine unencrypted: it is decrypted inside your browser.
+Flashing from the browser uses the [Web Serial API](https://developer.mozilla.org/docs/Web/API/Web_Serial_API), which is available in Chromium based desktop browsers such as Google Chrome, Microsoft Edge and Opera.
+
+Your browser generates a key pair for each build and keeps the private half, so the finished firmware is encrypted to that page and nothing else - not the build, not the bucket it is published to - can read it. That also means the key is gone once you close the page: a build whose tab you closed has to be started again.
 
 #### Flashing manually
 

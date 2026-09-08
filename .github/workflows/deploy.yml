@@ -14,6 +14,10 @@ jobs:
     env:
       REACT_APP_S3_BUCKET: esphome-b2500-images
       REACT_APP_AWS_REGION: eu-west-1
+      # The public half of the build key pair. A repository variable rather
+      # than a constant in the source, so rotating the pair (see
+      # scripts/generateBuildKeypair.js) needs no code change.
+      REACT_APP_BUILD_PUBLIC_KEY: ${{ vars.BUILD_PUBLIC_KEY }}
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -29,13 +33,14 @@ jobs:
     - name: Run tests
       run: |
         npm test -- --watchAll=false
-        node --test scripts/watch-build-progress.test.mjs scripts/validateConfig.test.mjs scripts/redactConfig.test.mjs
+        node --test scripts/watch-build-progress.test.mjs scripts/validateConfig.test.mjs scripts/redactConfig.test.mjs scripts/buildCrypto.test.mjs
 
     - name: Build the app
       run: npm run build
       env:
         REACT_APP_S3_BUCKET: ${{ env.REACT_APP_S3_BUCKET }}
         REACT_APP_AWS_REGION: ${{ env.REACT_APP_AWS_REGION }}
+        REACT_APP_BUILD_PUBLIC_KEY: ${{ env.REACT_APP_BUILD_PUBLIC_KEY }}
 
     - name: Upload artifact
       if: github.event_name == 'push'

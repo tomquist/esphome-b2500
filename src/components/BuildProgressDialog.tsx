@@ -23,6 +23,7 @@ import { Download, ExpandMore } from '@mui/icons-material';
 import FileSaver from 'file-saver';
 import { FormValues } from '../types';
 import { newIssueLink } from '../utils';
+import { BuildKeyPair } from '../crypto';
 import { decryptFirmwareArchive } from '../firmware/archiveCrypto';
 import {
   BuildStatus,
@@ -45,7 +46,7 @@ type Phase = 'building' | 'preparing' | 'ready' | 'error';
 
 interface BuildProgressDialogProps {
   identifier: string;
-  password: string;
+  keyPair: BuildKeyPair;
   deviceName: string;
   config: FormValues;
   onClose: () => void;
@@ -118,7 +119,7 @@ const errorMessage = (error: unknown): string => {
 
 const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   identifier,
-  password,
+  keyPair,
   deviceName,
   config,
   onClose,
@@ -172,9 +173,11 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
           finalStatus.firmwareUrl ?? firmwareDownloadUrl(identifier),
           { signal: controller.signal, onProgress: setProgress }
         );
-        const archive = await decryptFirmwareArchive(encrypted, password);
-        // Kept so the manual route can hand over a ZIP that opens anywhere,
-        // without the user ever seeing the build password.
+        const archive = await decryptFirmwareArchive(
+          encrypted,
+          keyPair.privateKey
+        );
+        // Kept so the manual route can hand over a ZIP that opens anywhere.
         setArchive(archive);
         const extracted = await extractFirmwareBundle(archive, {
           name: deviceName,
@@ -205,7 +208,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       setBundle(null);
       setArchive(null);
     };
-  }, [identifier, password, deviceName, attempt]);
+  }, [identifier, keyPair, deviceName, attempt]);
 
   useEffect(() => {
     if (phase !== 'building') {

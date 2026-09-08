@@ -329,10 +329,6 @@ ${build ? `- Build: [${build}]\n` : ''}
   return `https://github.com/tomquist/esphome-b2500/issues/new?body=${encodeURIComponent(body)}`;
 };
 
-export const generatePassword = () => {
-  return crypto.randomBytes(16).toString('base64').slice(0, 16);
-};
-
 export const generateRandomIdentifier = () => {
   const adjectives = [
     'tiny',
@@ -405,8 +401,7 @@ export const generateRandomIdentifier = () => {
   // Actions list, so entropy comes from the suffix rather than from them -
   // Math.random() is neither uniform nor unpredictable enough to rely on.
   // toString() rather than a Buffer read method: the bundle resolves `crypto`
-  // to crypto-browserify, and this is the shape generatePassword() already
-  // relies on there.
+  // to crypto-browserify, whose Buffer is the `buffer` polyfill.
   const pick = <T>(items: T[]): T =>
     items[parseInt(crypto.randomBytes(4).toString('hex'), 16) % items.length];
 

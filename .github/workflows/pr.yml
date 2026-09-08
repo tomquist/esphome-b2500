@@ -73,20 +73,19 @@ jobs:
           HAME_BROKER: ${{ secrets.HAME_BROKER }}
         shell: bash
 
-      - name: Generate build password
-        id: generate_password
-        run: |
-          PASSWORD=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")
-          echo "PASSWORD=$PASSWORD" >> $GITHUB_ENV
-          echo "::add-mask::$PASSWORD"
-      
+      # Stands in for the browser and the repository at once: both key pairs are
+      # generated here and die with the runner, so the PR job needs no secret.
       - name: Encrypt configuration
         run: |
           cat examples/${{ matrix.example }}.json | jq --arg template_version ${{ matrix.template }} --arg mqtt_enabled ${{ matrix.mqtt_enabled }} '.template_version = $template_version | .mqtt.enabled = ($mqtt_enabled == "true")' > config.json
-          echo "ENCRYPTED_CONFIG=$(npx ts-node ./scripts/encrypt-config.ts config.json "${PASSWORD}")" >> $GITHUB_ENV
+          node scripts/encryptExampleConfig.js config.json "$RUNNER_TEMP"
 
       - name: Render configuration
-        run: node scripts/render.js
+        run: |
+          BUILD_PRIVATE_KEY="$(cat "$RUNNER_TEMP/private_key.pem")" \
+          CLIENT_PUBLIC_KEY="$(cat "$RUNNER_TEMP/client_public_key.txt")" \
+          ENCRYPTED_CONFIG="$(cat "$RUNNER_TEMP/encrypted_config.txt")" \
+            node scripts/render.js
 
       - name: Build firmware
         id: esphome-build
@@ -100,7 +99,8 @@ jobs:
           FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
         run: |
           zip firmware.zip "$FIRMWARE_NAME"/*
-          node scripts/encryptFirmware.js firmware.zip firmware.zip.enc
+          CLIENT_PUBLIC_KEY="$(cat "$RUNNER_TEMP/client_public_key.txt")" \
+            node scripts/encryptFirmware.js firmware.zip firmware.zip.enc
           rm -f firmware.zip
 
       - name: Upload firmware artifact

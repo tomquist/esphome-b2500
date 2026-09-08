@@ -1,22 +1,16 @@
-const crypto = require('crypto');
 const fs = require('fs');
 const nunjucks = require('nunjucks');
+const { openConfig, parsePublicKey } = require('./buildCrypto');
 const { validateConfig } = require('./validateConfig');
 
-const password = process.env.PASSWORD;
-const encryptedConfigJson = Buffer.from(process.env.ENCRYPTED_CONFIG, 'base64');
-// AES-256-GCM with a 12-byte IV and 16-byte tag
-const key = crypto.createHash('sha256').update(password).digest();
-const decipher = crypto.createDecipheriv(
-  'aes-256-gcm',
-  key,
-  encryptedConfigJson.subarray(0, 12)
-);
-decipher.setAuthTag(encryptedConfigJson.subarray(12, 12 + 16));
-const configJSON = Buffer.concat([
-  decipher.update(encryptedConfigJson.subarray(12 + 16)),
-  decipher.final(),
-]).toString('utf-8');
+// The config is addressed to the repo's static key, so this step needs the
+// private half - and it is the only step that does. Deriving the key here
+// rather than in the workflow keeps it out of the shell and out of GITHUB_ENV.
+const configJSON = openConfig(
+  process.env.ENCRYPTED_CONFIG,
+  process.env.BUILD_PRIVATE_KEY,
+  parsePublicKey(process.env.CLIENT_PUBLIC_KEY)
+).toString('utf-8');
 
 nunjucks
   .configure({ autoescape: false })
