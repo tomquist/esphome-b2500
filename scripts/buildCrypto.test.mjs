@@ -172,7 +172,7 @@ test('the workflow pattern accepts the keys the browser produces', () => {
   for (const rejected of [
     valid.slice(0, -1), // 87 characters, padding dropped
     `A${valid}`, // 89 characters
-    valid.replace('=', ''), // unpadded
+    `${valid.slice(0, -2)}-=`, // right length, character outside the class
     `${valid}\nevil`,
     '',
   ]) {

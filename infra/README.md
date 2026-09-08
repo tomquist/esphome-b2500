@@ -72,7 +72,7 @@ flight. The `concurrency` group serialises those runs so they cannot interleave,
 but it does not prevent the overwrite - an accepted denial of service against a
 single build, not a disclosure.
 
-Objects should still expire rather than accumulate:
+Objects should still expire rather than accumulate.
 
 The IAM user the build workflow uses cannot change bucket configuration, so this
 is applied by hand like the CORS rules above:

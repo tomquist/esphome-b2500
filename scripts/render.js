@@ -20,17 +20,20 @@ const { config, secrets } = JSON.parse(configJSON);
 // dispatch proxy, so it is fully attacker controlled.
 validateConfig(config);
 
-// Mask all secrets. The list comes from the payload like everything else, so a
-// string here would iterate its characters and mask single letters across the
-// whole public log, and an enormous array would drown it.
-if (secrets !== undefined && !Array.isArray(secrets)) {
+// Mask all secrets. The list comes from the payload like everything else, and
+// unlike `config` it does not go through validateConfig: a string here would
+// iterate its characters and mask single letters across the whole log, an
+// enormous array would drown it, and a newline would end the ::add-mask::
+// command and let the rest of the line run as a workflow command of its own
+// (::stop-commands:: would silence every mask that follows).
+if (secrets != null && !Array.isArray(secrets)) {
   throw new Error('secrets must be an array');
 }
 for (const secret of (secrets || []).slice(0, 64)) {
   // Too short to be worth masking, and masking it would redact ordinary words
   // out of the log.
   if (typeof secret === 'string' && secret.trim().length >= 4) {
-    console.log(`::add-mask::${secret}`);
+    console.log(`::add-mask::${secret.replace(/[\r\n]/g, '')}`);
   }
 }
 

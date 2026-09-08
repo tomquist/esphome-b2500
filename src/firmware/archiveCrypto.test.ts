@@ -115,6 +115,20 @@ describe('the firmware the build publishes', () => {
     ).rejects.toBeInstanceOf(UndecryptableArchiveError);
   });
 
+  it('is refused when a valid header from another archive is swapped in', async () => {
+    // The sender's public key is bound into the derivation, so a header that is
+    // perfectly well formed still cannot be paired with a body it did not
+    // travel with. This is the browser-side half of that binding.
+    const keyPair = await generateBuildKeyPair();
+    const mine = Buffer.from(sealToClient(archive, clientPublicKey(keyPair)));
+    const theirs = Buffer.from(sealToClient(archive, clientPublicKey(keyPair)));
+    const swapped = Buffer.concat([theirs.subarray(0, 65), mine.subarray(65)]);
+
+    await expect(
+      decryptFirmwareArchive(new Blob([swapped]), keyPair.privateKey)
+    ).rejects.toBeInstanceOf(UndecryptableArchiveError);
+  });
+
   it('is refused when its key header is not a point on the curve', async () => {
     const keyPair = await generateBuildKeyPair();
     const sealed = Buffer.from(sealToClient(archive, clientPublicKey(keyPair)));
