@@ -92,7 +92,9 @@ jobs:
         run: |
           ./scripts/publish-build-status.sh building "Compiling the firmware" || true
           rm -f progress-watcher.stop
-          nohup ./scripts/watch-build-progress.sh > progress-watcher.log 2>&1 &
+          # Its own process group, so that stopping it can reach an upload it
+          # leaves behind rather than only its shell.
+          setsid ./scripts/watch-build-progress.sh > progress-watcher.log 2>&1 &
           echo "PROGRESS_WATCHER_PID=$!" >> "$GITHUB_ENV"
 
       - name: Build firmware
@@ -113,15 +115,7 @@ jobs:
       - name: Stop reporting compile progress
         if: always()
         run: |
-          touch progress-watcher.stop
-          if [[ -n "${PROGRESS_WATCHER_PID:-}" ]]; then
-            for _ in $(seq 60); do
-              kill -0 "$PROGRESS_WATCHER_PID" 2> /dev/null || break
-              sleep 1
-            done
-            # Only reached if an upload hung well past its own timeout.
-            kill "$PROGRESS_WATCHER_PID" 2> /dev/null || true
-          fi
+          ./scripts/stop-build-progress.sh
           if [[ -s progress-watcher.log ]]; then
             echo "::group::Compile progress reporting"
             cat progress-watcher.log

@@ -17,9 +17,20 @@ import { fileURLToPath } from 'node:url';
 const watcher = fileURLToPath(
   new URL('./watch-build-progress.sh', import.meta.url)
 );
+const stopper = fileURLToPath(
+  new URL('./stop-build-progress.sh', import.meta.url)
+);
 const workspaces = [];
+const groups = [];
 
 after(() => {
+  for (const pid of groups) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      // Already gone, which is what every test here asserts anyway.
+    }
+  }
   for (const dir of workspaces) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -71,9 +82,11 @@ const workspace = ({ objects, expected, publishSeconds = 0 }) => {
   };
 };
 
-const start = (space, { intervalSeconds = 1 } = {}) =>
-  spawn('bash', [watcher], {
+const start = (space, { intervalSeconds = 1 } = {}) => {
+  // detached puts it in its own process group, as setsid does in the workflow.
+  const child = spawn('bash', [watcher], {
     cwd: space.dir,
+    detached: true,
     env: {
       ...process.env,
       PROGRESS_INTERVAL_SECONDS: String(intervalSeconds),
@@ -82,6 +95,33 @@ const start = (space, { intervalSeconds = 1 } = {}) =>
     },
     stdio: 'ignore',
   });
+  groups.push(child.pid);
+  return child;
+};
+
+/** Runs the workflow's stop step against a watcher. */
+const stop = (space, child, { stopSeconds = 2, killSeconds = 2 } = {}) =>
+  spawn('bash', [stopper], {
+    cwd: space.dir,
+    env: {
+      ...process.env,
+      PROGRESS_WATCHER_PID: String(child.pid),
+      PROGRESS_STOP_FILE: space.stopFile,
+      PROGRESS_STOP_TIMEOUT_SECONDS: String(stopSeconds),
+      PROGRESS_KILL_TIMEOUT_SECONDS: String(killSeconds),
+    },
+    stdio: 'ignore',
+  });
+
+/** Whether anything is left running in the watcher's process group. */
+const groupRunning = (pid) => {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const waitFor = async (predicate, { timeoutMs = 15000 } = {}) => {
   const deadline = Date.now() + timeoutMs;
@@ -139,4 +179,47 @@ test('finishes an upload that overlaps being stopped, and publishes nothing afte
     ['start 2/4', 'end 2/4'],
     'the in-flight upload must finish, and nothing may be published after the stop'
   );
+});
+
+test('stopping waits for an upload in flight rather than racing it', async () => {
+  const space = workspace({ objects: 2, expected: 4, publishSeconds: 3 });
+  const child = start(space);
+
+  assert.ok(
+    await waitFor(() => space.published().includes('start 2/4')),
+    'the watcher never started publishing'
+  );
+
+  const stopping = stop(space, child, { stopSeconds: 30 });
+  const [stopCode] = await Promise.all([exited(stopping), exited(child)]);
+
+  assert.equal(stopCode, 0, 'the stop script failed');
+  assert.deepEqual(
+    space.published(),
+    ['start 2/4', 'end 2/4'],
+    'the upload must have finished before the stop step returned'
+  );
+  assert.equal(groupRunning(child.pid), false, 'something survived the stop');
+});
+
+test('a wedged upload is gone before stopping returns', async () => {
+  // A publish that hangs far past its own timeout: the watcher cannot notice
+  // the stop file until it returns, so the stop step has to force the issue.
+  const space = workspace({ objects: 2, expected: 4, publishSeconds: 300 });
+  const child = start(space);
+
+  assert.ok(
+    await waitFor(() => space.published().includes('start 2/4')),
+    'the watcher never started publishing'
+  );
+
+  await exited(stop(space, child, { stopSeconds: 2, killSeconds: 2 }));
+
+  // The point of the forced path: once it returns, nothing can publish again.
+  assert.equal(
+    groupRunning(child.pid),
+    false,
+    'the wedged upload outlived the stop step and could still publish'
+  );
+  assert.deepEqual(space.published(), ['start 2/4']);
 });
