@@ -3,10 +3,10 @@
 Builds started from the [web builder](https://tomquist.github.io/esphome-b2500/)
 upload two objects to the `esphome-b2500-images` bucket:
 
-| Object                              | Purpose                                                              |
-| ----------------------------------- | -------------------------------------------------------------------- |
-| `firmware/<identifier>.zip`         | The password protected firmware archive.                             |
-| `firmware/<identifier>.status.json` | Build status the web builder polls (`building`, `success`, `error`). |
+| Object                              | Purpose                                                                                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `firmware/<identifier>.zip`         | The password protected firmware archive.                                                                                               |
+| `firmware/<identifier>.status.json` | Build status the web builder polls (`building`, `success`, `error`), including which step is running and how far along the compile is. |
 
 Both live under the same `firmware/` prefix so that a single public-read bucket
 policy covers them.
