@@ -41,23 +41,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # The identifier ends up in an S3 object key and in shell commands, so it
-      # has to match what the web builder generates. The public key is checked
-      # properly where it is parsed (scripts/buildCrypto.js, which also rejects
-      # a point that is not on the curve); this is only so a malformed payload
-      # fails before the job spends five minutes on a compile.
-      - name: Validate the dispatch payload
-        run: |
-          if [[ ! "$IDENTIFIER" =~ ^[a-z0-9-]{1,64}$ ]]; then
-            echo "::error::Invalid build identifier"
-            exit 1
-          fi
-          # 65 bytes of uncompressed point: 87 base64 characters and one "=".
-          if [[ ! "$CLIENT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/]{87}=$ ]]; then
-            echo "::error::Invalid build public key"
-            exit 1
-          fi
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -80,6 +63,27 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
+      # After the AWS credentials, so that a payload rejected here still reaches
+      # the requesting page: "Publish build failure" needs the credentials, and
+      # without it the page polls until it times out instead of being told what
+      # went wrong. publish-build-status.sh re-checks the identifier itself and
+      # skips the upload when it is the malformed part, which is the one case
+      # there is nowhere to publish to.
+      - name: Validate the dispatch payload
+        run: |
+          if [[ ! "$IDENTIFIER" =~ ^[a-z0-9-]{1,64}$ ]]; then
+            echo "::error::Invalid build identifier"
+            exit 1
+          fi
+          # 65 bytes of uncompressed point: 87 base64 characters and one "=".
+          # Checked properly where it is parsed (scripts/buildCrypto.js, which
+          # also rejects a point that is not on the curve); this is so a
+          # malformed payload fails before a five-minute compile.
+          if [[ ! "$CLIENT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/]{87}=$ ]]; then
+            echo "::error::Invalid build public key"
+            exit 1
+          fi
 
       # The web builder polls this document to follow the build and to offer
       # flashing the firmware right after it finished.

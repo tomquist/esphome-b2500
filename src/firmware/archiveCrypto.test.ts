@@ -5,6 +5,8 @@ import nodeCrypto from 'node:crypto';
 // and nothing else checks that they still do.
 /* eslint-disable @typescript-eslint/no-var-requires */
 const {
+  FIRMWARE_INFO,
+  firmwareInfo,
   openConfig,
   parsePublicKey,
   rawFromPublicKey,
@@ -32,8 +34,9 @@ const repoPrivateKeyPem = repo.privateKey.export({
   format: 'pem',
 });
 
+const clientPublicKeyOf = (publicKey: string) => parsePublicKey(publicKey);
 const clientPublicKey = (keyPair: { publicKey: string }) =>
-  parsePublicKey(keyPair.publicKey);
+  clientPublicKeyOf(keyPair.publicKey);
 
 describe('the config the browser sends', () => {
   it('is readable by the build and nothing else', async () => {
@@ -82,6 +85,8 @@ describe('the config the browser sends', () => {
 
 describe('the firmware the build publishes', () => {
   const archive = Buffer.from('a plain ZIP would go here');
+  // Set by the two binding cases before they call sealWithInfo.
+  let pendingPublicKey = '';
 
   it('is readable by the browser that asked for the build', async () => {
     const keyPair = await generateBuildKeyPair();
@@ -116,9 +121,8 @@ describe('the firmware the build publishes', () => {
   });
 
   it('is refused when a valid header from another archive is swapped in', async () => {
-    // The sender's public key is bound into the derivation, so a header that is
-    // perfectly well formed still cannot be paired with a body it did not
-    // travel with. This is the browser-side half of that binding.
+    // Swapping the header changes the ECDH input, so this holds with or without
+    // the binding - the binding itself is covered by the pair of cases below.
     const keyPair = await generateBuildKeyPair();
     const mine = Buffer.from(sealToClient(archive, clientPublicKey(keyPair)));
     const theirs = Buffer.from(sealToClient(archive, clientPublicKey(keyPair)));
@@ -137,6 +141,56 @@ describe('the firmware the build publishes', () => {
     await expect(
       decryptFirmwareArchive(new Blob([sealed]), keyPair.privateKey)
     ).rejects.toBeInstanceOf(UndecryptableArchiveError);
+  });
+
+  // The two below vary only the HKDF `info`, holding the ECDH secret and the
+  // header fixed, which is the only way to show the binding is load bearing:
+  // the first would decrypt if `info` were the bare label, the second proves
+  // the construction is otherwise sound.
+  const sealWithInfo = (info: (senderKey: Buffer) => Buffer) => {
+    const ephemeral = nodeCrypto.generateKeyPairSync('ec', {
+      namedCurve: 'prime256v1',
+    });
+    const senderKey = rawFromPublicKey(ephemeral.publicKey);
+    const shared = nodeCrypto.diffieHellman({
+      privateKey: ephemeral.privateKey,
+      publicKey: clientPublicKeyOf(pendingPublicKey),
+    });
+    const key = Buffer.from(
+      nodeCrypto.hkdfSync(
+        'sha256',
+        shared,
+        Buffer.alloc(0),
+        info(senderKey),
+        32
+      )
+    );
+    const iv = nodeCrypto.randomBytes(12);
+    const cipher = nodeCrypto.createCipheriv('aes-256-gcm', key, iv);
+    const body = Buffer.concat([cipher.update(archive), cipher.final()]);
+    return Buffer.concat([senderKey, iv, cipher.getAuthTag(), body]);
+  };
+
+  it('is refused when the key was derived without binding the header', async () => {
+    const keyPair = await generateBuildKeyPair();
+    pendingPublicKey = keyPair.publicKey;
+    const sealed = sealWithInfo(() => Buffer.from(FIRMWARE_INFO));
+
+    await expect(
+      decryptFirmwareArchive(new Blob([sealed]), keyPair.privateKey)
+    ).rejects.toBeInstanceOf(UndecryptableArchiveError);
+  });
+
+  it('opens when the same construction binds the header', async () => {
+    const keyPair = await generateBuildKeyPair();
+    pendingPublicKey = keyPair.publicKey;
+    const sealed = sealWithInfo(firmwareInfo);
+
+    const plain = await decryptFirmwareArchive(
+      new Blob([sealed]),
+      keyPair.privateKey
+    );
+    expect(Buffer.from(await plain.arrayBuffer())).toEqual(archive);
   });
 
   it('is refused when it is too short to hold a header', async () => {

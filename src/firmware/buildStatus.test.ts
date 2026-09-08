@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import {
   BuildStatus,
   BuildTimeoutError,
@@ -5,6 +7,32 @@ import {
   parseBuildStatus,
   pollBuildStatus,
 } from './buildStatus';
+
+describe('the object layout', () => {
+  // The suffix is spelled in the workflow's `aws s3 cp`, in
+  // publish-build-status.sh and here. A drift is invisible until a browser
+  // 404s on a build that actually succeeded, so read the workflow's copy.
+  it('matches the key the build workflow uploads to', () => {
+    const workflow = fs.readFileSync(
+      path.join(
+        __dirname,
+        '..',
+        '..',
+        '.github',
+        'workflows',
+        'build-esphome.yml'
+      ),
+      'utf-8'
+    );
+    const uploaded = workflow.match(
+      /aws s3 cp \S+ "s3:\/\/\$S3_BUCKET\/firmware\/\$IDENTIFIER(?<suffix>\S*)"/
+    );
+    expect(uploaded).not.toBeNull();
+    expect(firmwareDownloadUrl('a-build')).toMatch(
+      new RegExp(`/firmware/a-build${uploaded!.groups!.suffix}$`)
+    );
+  });
+});
 
 describe('parseBuildStatus', () => {
   it('maps the workflow status to a build state', () => {

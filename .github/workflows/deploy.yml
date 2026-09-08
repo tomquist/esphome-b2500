@@ -35,7 +35,7 @@ jobs:
     - name: Run tests
       run: |
         npm test -- --watchAll=false
-        node --test scripts/watch-build-progress.test.mjs scripts/validateConfig.test.mjs scripts/redactConfig.test.mjs scripts/buildCrypto.test.mjs
+        node --test scripts/*.test.mjs
 
     - name: Build the app
       run: npm run build

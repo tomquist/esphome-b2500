@@ -1,11 +1,22 @@
+import fs from 'fs';
+import path from 'path';
 import { generateRandomIdentifier } from './index';
 
-// The build workflow rejects anything that does not match this, and the
-// identifier is used unquoted in an S3 object key.
-const IDENTIFIER = /^[a-z0-9-]{1,64}$/;
+// Read out of the workflow rather than copied: the identifier is used unquoted
+// in an S3 object key, and a copy here would stay green while the workflow
+// rejected every build.
+const workflow = fs.readFileSync(
+  path.join(__dirname, '..', '..', '.github', 'workflows', 'build-esphome.yml'),
+  'utf-8'
+);
+const declared = workflow.match(/"\$IDENTIFIER" =~ \^(?<pattern>\S+) \]\]/);
+if (!declared) {
+  throw new Error('no IDENTIFIER check found in the build workflow');
+}
+const IDENTIFIER = new RegExp(`^${declared.groups!.pattern}`);
 
 describe('generateRandomIdentifier', () => {
-  it('matches what the build workflow accepts', () => {
+  it('matches the pattern the build workflow enforces', () => {
     for (let i = 0; i < 200; i += 1) {
       const identifier = generateRandomIdentifier();
       expect(identifier).toMatch(IDENTIFIER);

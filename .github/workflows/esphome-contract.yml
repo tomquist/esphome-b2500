@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - 'scripts/check-web-server-contract.mjs'
+      - 'scripts/check-web-server-contract.test.mjs'
       - 'scripts/web-server-contract.json'
       - '.github/workflows/**'
   schedule:
