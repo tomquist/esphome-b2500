@@ -91,6 +91,7 @@ jobs:
           STEP: compiling
         run: |
           ./scripts/publish-build-status.sh building "Compiling the firmware" || true
+          rm -f progress-watcher.stop
           nohup ./scripts/watch-build-progress.sh > progress-watcher.log 2>&1 &
           echo "PROGRESS_WATCHER_PID=$!" >> "$GITHUB_ENV"
 
@@ -106,11 +107,19 @@ jobs:
         continue-on-error: true
 
       # Before any of the paths below publish a status of their own, so that a
-      # late progress update cannot overwrite the build result.
+      # late progress update cannot overwrite the build result. The watcher only
+      # stops between polls, so waiting for it to exit means any upload it had
+      # in flight has finished rather than racing the status published next.
       - name: Stop reporting compile progress
         if: always()
         run: |
+          touch progress-watcher.stop
           if [[ -n "${PROGRESS_WATCHER_PID:-}" ]]; then
+            for _ in $(seq 60); do
+              kill -0 "$PROGRESS_WATCHER_PID" 2> /dev/null || break
+              sleep 1
+            done
+            # Only reached if an upload hung well past its own timeout.
             kill "$PROGRESS_WATCHER_PID" 2> /dev/null || true
           fi
           if [[ -s progress-watcher.log ]]; then

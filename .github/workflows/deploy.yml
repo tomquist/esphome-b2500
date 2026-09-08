@@ -27,7 +27,9 @@ jobs:
       run: npm ci
 
     - name: Run tests
-      run: npm test -- --watchAll=false
+      run: |
+        npm test -- --watchAll=false
+        node --test scripts/watch-build-progress.test.mjs
 
     - name: Build the app
       run: npm run build
