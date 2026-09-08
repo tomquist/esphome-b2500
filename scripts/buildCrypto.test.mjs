@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -142,3 +143,24 @@ for (const [name, value] of Object.entries(badKeys)) {
     assert.throws(() => parsePublicKey(value), InvalidPublicKeyError);
   });
 }
+
+// The workflow rejects a malformed payload before it spends five minutes on a
+// compile, which only helps if its pattern actually matches a real key. Reading
+// it back out of the workflow is the only way that stays true: a base64 length
+// is easy to get wrong by one character, and nothing else would notice.
+test('the workflow pattern accepts the keys the browser produces', () => {
+  const workflow = fs.readFileSync(
+    new URL('../.github/workflows/build-esphome.yml', import.meta.url),
+    'utf-8'
+  );
+  const declared = workflow.match(
+    /CLIENT_PUBLIC_KEY" =~ \^(?<pattern>\S+)\s*\]\]/
+  );
+  assert.ok(declared, 'no CLIENT_PUBLIC_KEY check found in the workflow');
+  const pattern = new RegExp(`^${declared.groups.pattern}`);
+
+  for (let index = 0; index < 20; index += 1) {
+    const { publicKey } = keyPair();
+    assert.match(rawFromPublicKey(publicKey).toString('base64'), pattern);
+  }
+});

@@ -52,7 +52,8 @@ jobs:
             echo "::error::Invalid build identifier"
             exit 1
           fi
-          if [[ ! "$CLIENT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/]{86}==$ ]]; then
+          # 65 bytes of uncompressed point: 87 base64 characters and one "=".
+          if [[ ! "$CLIENT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/]{87}=$ ]]; then
             echo "::error::Invalid build public key"
             exit 1
           fi
