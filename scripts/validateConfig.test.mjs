@@ -18,7 +18,9 @@ const baseConfig = () => ({
   powermeter: { tx_pin: 'GPIO6', rx_pin: 'GPIO7', baud_rate: 9600, stop_bits: 1 },
   auto_restart: { restart_after_error_count: 8 },
   web_server: { port: 80 },
-  storages: [{ name: 'Battery', version: 2 }],
+  storages: [
+    { name: 'Battery', version: 2, mac_address: '00:11:22:33:44:55' },
+  ],
 });
 
 test('accepts a representative config', () => {
@@ -46,7 +48,16 @@ test('accepts a config that omits optional scalar fields', () => {
   delete config.flash_size;
   delete config.log_level;
   delete config.powermeter;
+  delete config.storages[0].mac_address;
   config.web_server.port = '';
+  assert.doesNotThrow(() => validateConfig(config));
+});
+
+test('accepts a plain platform version', () => {
+  const config = baseConfig();
+  config.idf_platform_version = '55.3.37';
+  assert.doesNotThrow(() => validateConfig(config));
+  config.idf_platform_version = '55.3.37-1';
   assert.doesNotThrow(() => validateConfig(config));
 });
 
@@ -103,6 +114,26 @@ const badShapes = {
   },
   'storages that is not an array': (c) => {
     c.storages = { length: 1 };
+  },
+  'a MAC address that is not one': (c) => {
+    c.storages[0].mac_address = '00:11:22:33:44:55 evil';
+  },
+  'a MAC address carrying a YAML tag': (c) => {
+    c.storages[0].mac_address = '!include /etc/passwd';
+  },
+  'a MAC address closing the quoted scalar': (c) => {
+    c.storages[0].mac_address = 'AA", id: x, foo: "bar';
+  },
+  'a platform_version pointing at a URL': (c) => {
+    c.idf_platform_version =
+      'https://attacker.example/platform-espressif32.zip';
+  },
+  'a platform_version pointing at a git repository': (c) => {
+    c.idf_platform_version =
+      'https://github.com/attacker/platform-espressif32.git#main';
+  },
+  'a platform_version pointing at a local path': (c) => {
+    c.idf_platform_version = '/github/workspace/evil';
   },
 };
 

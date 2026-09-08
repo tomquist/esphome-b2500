@@ -46,10 +46,17 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline
       
+      # Pinned and checksummed: this step runs just before the one that handles
+      # the certificate secrets, and `releases/latest` is whatever the yq repo
+      # published most recently.
       - name: Install yq
+        env:
+          YQ_VERSION: v4.53.6
+          YQ_SHA256: c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385
         run: |
-          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-          chmod +x /usr/local/bin/yq
+          wget -q "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -O /tmp/yq
+          echo "${YQ_SHA256}  /tmp/yq" | sha256sum --check --strict
+          install -m 0755 /tmp/yq /usr/local/bin/yq
         shell: bash
       
       - name: Write certificates to secrets.yaml

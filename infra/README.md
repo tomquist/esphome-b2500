@@ -54,3 +54,39 @@ curl -sS -o /dev/null -D - \
   https://esphome-b2500-images.s3.eu-west-1.amazonaws.com/firmware/<identifier>.zip \
   | grep -i access-control
 ```
+
+## Object lifetime
+
+Objects under `firmware/` are readable by anyone who knows the identifier, and a
+firmware image embeds the WiFi and MQTT credentials it was built with. Bucket
+listing is denied, so the identifier is the only thing guarding an object -
+`generateRandomIdentifier()` therefore ends in 96 bits of `randomBytes`, and the
+bucket should expire the objects rather than keep them forever.
+
+The IAM user the build workflow uses cannot change bucket configuration, so this
+is applied by hand like the CORS rules above:
+
+```bash
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket esphome-b2500-images \
+  --lifecycle-configuration '{
+    "Rules": [{
+      "ID": "expire-firmware",
+      "Status": "Enabled",
+      "Filter": {"Prefix": "firmware/"},
+      "Expiration": {"Days": 1}
+    }]
+  }'
+```
+
+A day is generous: the web builder downloads the archive as soon as the build
+finishes, and the manual route is a link the user follows in the same sitting.
+
+## Why the archive is still ZipCrypto
+
+`zip -P` uses PKWARE's legacy stream cipher, which a known-plaintext attack
+breaks - and a firmware archive has very predictable contents. AES-encrypted
+ZIPs (`7z a -tzip -mem=AES256`) would fix that and `@zip.js/zip.js` reads them,
+but Windows Explorer cannot, which would break the documented "download it and
+flash it yourself" route. Short object lifetimes and an unguessable identifier
+are what stand in for it; revisit if the manual route ever stops mattering.

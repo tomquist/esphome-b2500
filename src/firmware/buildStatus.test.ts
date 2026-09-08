@@ -1,6 +1,7 @@
 import {
   BuildStatus,
   BuildTimeoutError,
+  firmwareDownloadUrl,
   parseBuildStatus,
   pollBuildStatus,
 } from './buildStatus';
@@ -15,10 +16,11 @@ describe('parseBuildStatus', () => {
   });
 
   it('reads the optional fields', () => {
+    const firmwareUrl = firmwareDownloadUrl('happy-tiny-otter-abc');
     const status = parseBuildStatus({
       status: 'SUCCESS',
       run_url: 'https://github.com/run/1',
-      firmware_url: 'https://example.com/firmware.zip',
+      firmware_url: firmwareUrl,
       firmware_name: 'b2500-esp32',
       esphome_version: '2026.8.1',
     });
@@ -29,10 +31,37 @@ describe('parseBuildStatus', () => {
       message: undefined,
       step: undefined,
       progress: undefined,
-      firmwareUrl: 'https://example.com/firmware.zip',
+      firmwareUrl,
       firmwareName: 'b2500-esp32',
       esphomeVersion: '2026.8.1',
     });
+  });
+
+  it('drops URLs that are not https on an expected origin', () => {
+    const status = parseBuildStatus({
+      status: 'success',
+      // eslint-disable-next-line no-script-url
+      run_url: 'javascript:alert(1)',
+      firmware_url: 'https://evil.example/firmware.zip',
+    });
+
+    expect(status?.runUrl).toBeUndefined();
+    expect(status?.firmwareUrl).toBeUndefined();
+  });
+
+  it('drops a run URL on a look-alike host', () => {
+    expect(
+      parseBuildStatus({
+        status: 'success',
+        run_url: 'https://github.com.evil.example/run/1',
+      })?.runUrl
+    ).toBeUndefined();
+    expect(
+      parseBuildStatus({
+        status: 'success',
+        run_url: 'http://github.com/run/1',
+      })?.runUrl
+    ).toBeUndefined();
   });
 
   it('reads the build step and its compile progress', () => {

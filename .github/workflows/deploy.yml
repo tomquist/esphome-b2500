@@ -16,7 +16,7 @@ jobs:
       REACT_APP_AWS_REGION: eu-west-1
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -29,7 +29,7 @@ jobs:
     - name: Run tests
       run: |
         npm test -- --watchAll=false
-        node --test scripts/watch-build-progress.test.mjs scripts/validateConfig.test.mjs
+        node --test scripts/watch-build-progress.test.mjs scripts/validateConfig.test.mjs scripts/redactConfig.test.mjs
 
     - name: Build the app
       run: npm run build

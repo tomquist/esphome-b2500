@@ -399,12 +399,23 @@ export const generateRandomIdentifier = () => {
     'toucan',
   ];
 
-  const randomAdjective1 =
-    adjectives[Math.floor(Math.random() * adjectives.length)];
-  const randomAdjective2 =
-    adjectives[Math.floor(Math.random() * adjectives.length)];
-  const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
-  const randomNumber = Math.floor(Math.random() * 1000); // Adding a random number between 0 and 999
+  // The identifier is the only thing protecting a build: the firmware object
+  // it names is world readable, and the image carries the user's WiFi and MQTT
+  // credentials. The words are there to make a build recognisable in the
+  // Actions list, so entropy comes from the suffix rather than from them -
+  // Math.random() is neither uniform nor unpredictable enough to rely on.
+  // toString() rather than a Buffer read method: the bundle resolves `crypto`
+  // to crypto-browserify, and this is the shape generatePassword() already
+  // relies on there.
+  const pick = <T>(items: T[]): T =>
+    items[parseInt(crypto.randomBytes(4).toString('hex'), 16) % items.length];
 
-  return `${randomAdjective1}-${randomAdjective2}-${randomAnimal}-${randomNumber}`;
+  const randomAdjective1 = pick(adjectives);
+  const randomAdjective2 = pick(adjectives);
+  const randomAnimal = pick(animals);
+  // 96 bits, lowercase hex so the result still matches the ^[a-z0-9-]{1,64}$
+  // the build workflow enforces.
+  const randomSuffix = crypto.randomBytes(12).toString('hex');
+
+  return `${randomAdjective1}-${randomAdjective2}-${randomAnimal}-${randomSuffix}`;
 };

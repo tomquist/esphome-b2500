@@ -20,6 +20,12 @@
  *   2. The fields that are rendered as bare scalars are additionally held to a
  *      strict shape, which also rejects same-line YAML tricks (`!include`,
  *      `&anchor`, `*alias`, ...) that do not need a newline.
+ *
+ * Escaping is not the whole story, though. A value can be perfectly quoted and
+ * still be dangerous because of what ESPHome does with it: `platform_version`
+ * is handed to PlatformIO as its `platform` spec, and PlatformIO accepts a URL
+ * or a git repository there and runs the Python inside the package it fetches.
+ * Fields like that need an allow-list of their own, whatever the escaping.
  */
 
 class InvalidConfigError extends Error {
@@ -55,7 +61,9 @@ const rejectControlChars = (value, path) => {
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((item, index) => rejectControlChars(item, `${path}[${index}]`));
+    value.forEach((item, index) =>
+      rejectControlChars(item, `${path}[${index}]`)
+    );
     return;
   }
   if (value && typeof value === 'object') {
@@ -127,6 +135,17 @@ const validateConfig = (config) => {
     'a flash size such as 4MB'
   );
 
+  // Reaches ESPHome as `platform_version`, which it forwards to PlatformIO as
+  // the `platform` spec. PlatformIO resolves a URL, a git repository or a local
+  // path there and executes the platform package's build scripts, so anything
+  // but a plain version number is remote code execution on the build runner.
+  requirePattern(
+    config.idf_platform_version,
+    'idf_platform_version',
+    /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(-[0-9A-Za-z]{1,16})?$/,
+    'a version number such as 55.3.37'
+  );
+
   if (!isBlank(config.log_level) && !LOG_LEVELS.has(String(config.log_level))) {
     throw new InvalidConfigError(
       `log_level must be one of ${[...LOG_LEVELS].join(', ')}`
@@ -191,6 +210,12 @@ const validateConfig = (config) => {
           min: 0,
           max: 99,
         });
+        requirePattern(
+          storage.mac_address,
+          `storages[${index}].mac_address`,
+          /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/,
+          'a MAC address such as 00:11:22:33:44:55'
+        );
       }
     });
   }

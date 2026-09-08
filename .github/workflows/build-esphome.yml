@@ -9,21 +9,32 @@ on:
     types:
       - build_esphome
 
+# The dispatch endpoint is public, so the same identifier can be submitted more
+# than once. Serialising per identifier keeps two runs from interleaving their
+# writes to the same firmware and status objects.
+concurrency:
+  group: build-esphome-${{ github.event.client_payload.identifier }}
+  cancel-in-progress: false
+
 jobs:
   build_esphome:
     runs-on: ubuntu-latest
     env:
       ENCRYPTED_ZIP_PASSWORD: ${{ github.event.client_payload.password }}
       ENCRYPTED_CONFIG: ${{ github.event.client_payload.config }}
-      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
       S3_BUCKET: esphome-b2500-images
       AWS_REGION: eu-west-1
       AUTOMATED_BUILD: 'true'
       IDENTIFIER: ${{ github.event.client_payload.identifier }}
-      ESPHOME_VERSION: ${{ github.event.client_payload.esphome_version || '2026.8.1' }}
+      # Pinned rather than read from the dispatch payload. The build action
+      # splices this straight into a docker tag and a shell command, and which
+      # config keys ESPHome honours (platform_version, among others) differs
+      # per version, so letting a requester choose it hands them both a shell
+      # context and a pick of ESPHome's validation behaviour.
+      ESPHOME_VERSION: '2026.8.1'
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,12 +45,6 @@ jobs:
         run: |
           if [[ ! "$IDENTIFIER" =~ ^[a-z0-9-]{1,64}$ ]]; then
             echo "::error::Invalid build identifier"
-            exit 1
-          fi
-          # esphome_version also comes from the dispatch payload and is passed
-          # to the build action, so constrain it to a plain version or "latest".
-          if [[ ! "$ESPHOME_VERSION" =~ ^(latest|[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2})$ ]]; then
-            echo "::error::Invalid ESPHome version"
             exit 1
           fi
 
@@ -53,8 +58,11 @@ jobs:
         with:
           node-version: '18'
 
+      # From the lockfile, so nunjucks is the reviewed version rather than
+      # whatever the registry resolves today, and without lifecycle scripts:
+      # this job holds the AWS credentials and the RSA key.
       - name: Install dependencies
-        run: npm install nunjucks
+        run: npm ci --omit=dev --ignore-scripts
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
@@ -72,25 +80,40 @@ jobs:
 
       - name: Decrypt the ZIP password
         id: decrypt_password
+        # Scoped to this step: at job level the key sits in the environment of
+        # every step, third-party actions included.
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
         run: |
           # PRIVATE_KEY and ENCRYPTED_ZIP_PASSWORD are read from the environment
-          # (set at job level) as plain shell variables rather than expanded by
-          # GitHub into the script text. The encrypted password comes straight
-          # from the repository dispatch payload and is fully attacker
-          # controlled, so it must never be spliced into the script where a
-          # command substitution or backticks would run.
-          printf '%s\n' "$PRIVATE_KEY" > private_key.pem
-          printf '%s' "$ENCRYPTED_ZIP_PASSWORD" > encrypted_password.txt
-          DECRYPTED_PASSWORD=$(openssl rsautl -decrypt -inkey private_key.pem -in <(base64 -d encrypted_password.txt) -oaep)
+          # as plain shell variables rather than expanded by GitHub into the
+          # script text. The encrypted password comes straight from the
+          # repository dispatch payload and is fully attacker controlled, so it
+          # must never be spliced into the script where a command substitution
+          # or backticks would run.
+          #
+          # Both files live in RUNNER_TEMP rather than the workspace: the
+          # workspace is bind-mounted into the ESPHome build container, so a
+          # key written there is readable by whatever runs inside it.
+          KEY_FILE="$RUNNER_TEMP/private_key.pem"
+          CIPHERTEXT_FILE="$RUNNER_TEMP/encrypted_password.txt"
+          trap 'rm -f "$KEY_FILE" "$CIPHERTEXT_FILE"' EXIT
+          (umask 077; printf '%s\n' "$PRIVATE_KEY" > "$KEY_FILE")
+          printf '%s' "$ENCRYPTED_ZIP_PASSWORD" > "$CIPHERTEXT_FILE"
+          DECRYPTED_PASSWORD=$(openssl rsautl -decrypt -inkey "$KEY_FILE" -in <(base64 -d "$CIPHERTEXT_FILE") -oaep)
           echo "::add-mask::$DECRYPTED_PASSWORD"
+          # The plaintext is chosen by whoever asked for the build - they
+          # encrypt it themselves with the public key the web builder ships -
+          # and RSA-OAEP carries far more than a password's worth of bytes. A
+          # newline in it would append arbitrary NAME=VALUE lines to GITHUB_ENV
+          # and so rewrite the environment of every later step. generatePassword()
+          # only ever produces base64, so require exactly that.
+          if [[ ! "$DECRYPTED_PASSWORD" =~ ^[A-Za-z0-9+/=]{8,64}$ ]]; then
+            echo "::error::Invalid build password"
+            exit 1
+          fi
           echo "PASSWORD=$DECRYPTED_PASSWORD" >> "$GITHUB_ENV"
 
-      - name: Install yq
-        run: |
-          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-          chmod +x /usr/local/bin/yq
-        shell: bash
-      
       - name: Render ESPHome configuration
         id: generate_config
         run: |
@@ -141,12 +164,15 @@ jobs:
             echo "::endgroup::"
           fi
 
+      # Logs on a public repository are world readable, and the config holds
+      # the requester's SSID, MQTT broker and username. The redacted form keeps
+      # the shape and the feature flags, which is what a failed build needs.
       - name: Debug on failure
         if: steps.esphome-build.outcome == 'failure'
         run: |
           echo "Build failed"
-          echo "::group::Original Config File"
-          cat config.json
+          echo "::group::Config (redacted)"
+          node scripts/redactConfig.js config.json
           echo "::endgroup::"
 
       - name: Exit on build failure  

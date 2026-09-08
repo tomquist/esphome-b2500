@@ -61,6 +61,46 @@ const STEPS: BuildStep[] = ['preparing', 'compiling', 'packaging'];
 const optionalString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;
 
+/**
+ * The status document is fetched over the network, and the URLs in it end up in
+ * `href` attributes and in `fetch()`. Accept only absolute https URLs on the
+ * origins we publish to, so a document that ever came from somewhere else - or
+ * was written by a build step with a rewritten environment - cannot turn a link
+ * into `javascript:` or point the download at another host.
+ */
+const trustedUrl = (
+  value: unknown,
+  allowedOrigins: readonly string[]
+): string | undefined => {
+  const raw = optionalString(value);
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' && allowedOrigins.includes(url.origin)
+      ? raw
+      : undefined;
+  } catch (error) {
+    return undefined;
+  }
+};
+
+const originOf = (url: string): string | undefined => {
+  try {
+    return new URL(url).origin;
+  } catch (error) {
+    return undefined;
+  }
+};
+
+const bucketOrigins = (): readonly string[] => {
+  const origin = originOf(objectUrl(''));
+  return origin ? [origin] : [];
+};
+
+const GITHUB_ORIGINS = ['https://github.com'] as const;
+
 const optionalCount = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0
     ? value
@@ -101,11 +141,11 @@ export const parseBuildStatus = (raw: unknown): BuildStatus | null => {
   }
   return {
     state,
-    runUrl: optionalString(record.run_url),
+    runUrl: trustedUrl(record.run_url, GITHUB_ORIGINS),
     message: optionalString(record.message),
     step: parseStep(record.step),
     progress: parseProgress(record.progress),
-    firmwareUrl: optionalString(record.firmware_url),
+    firmwareUrl: trustedUrl(record.firmware_url, bucketOrigins()),
     firmwareName: optionalString(record.firmware_name),
     esphomeVersion: optionalString(record.esphome_version),
   };
