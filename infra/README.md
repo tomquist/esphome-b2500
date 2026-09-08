@@ -23,7 +23,12 @@ hand rather than from a workflow: the IAM user the build workflow authenticates
 as can write objects but not change bucket configuration, which is the way
 round it should be.
 
-With credentials that may change bucket configuration:
+Applying the configuration needs `s3:PutBucketCORS` and reading it back needs
+`s3:GetBucketCORS`, both on `arn:aws:s3:::esphome-b2500-images` - the bucket ARN
+itself, with no `/*` suffix, because CORS is bucket-level configuration rather
+than an object action.
+
+With credentials that hold those permissions:
 
 ```bash
 aws s3api put-bucket-cors \
