@@ -74,10 +74,11 @@ jobs:
         id: decrypt_password
         run: |
           # PRIVATE_KEY and ENCRYPTED_ZIP_PASSWORD are read from the environment
-          # (set at job level) rather than interpolated with ${{ }}. The
-          # encrypted password comes straight from the repository dispatch
-          # payload and is fully attacker controlled, so it must never be
-          # spliced into the script text where $(...) or backticks would run.
+          # (set at job level) as plain shell variables rather than expanded by
+          # GitHub into the script text. The encrypted password comes straight
+          # from the repository dispatch payload and is fully attacker
+          # controlled, so it must never be spliced into the script where a
+          # command substitution or backticks would run.
           printf '%s\n' "$PRIVATE_KEY" > private_key.pem
           printf '%s' "$ENCRYPTED_ZIP_PASSWORD" > encrypted_password.txt
           DECRYPTED_PASSWORD=$(openssl rsautl -decrypt -inkey private_key.pem -in <(base64 -d encrypted_password.txt) -oaep)
