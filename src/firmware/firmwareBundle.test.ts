@@ -1,6 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { extractFirmwareBundle, WrongPasswordError } from './firmwareBundle';
+import {
+  createFileIndex,
+  extractFirmwareBundle,
+  WrongPasswordError,
+} from './firmwareBundle';
 
 // A ZIP created the same way the build workflow does it:
 //   zip -P test-password firmware.zip b2500-esp32s3/*
@@ -61,5 +65,39 @@ describe('extractFirmwareBundle', () => {
       extractFirmwareBundle(archive(), 'wrong-password', metadata)
     ).rejects.toBeInstanceOf(WrongPasswordError);
     expect(blobs.size).toBe(0);
+  });
+});
+
+describe('createFileIndex', () => {
+  it('resolves manifest paths relative to the manifest directory', () => {
+    const findFile = createFileIndex([
+      'b2500-esp32s3/manifest.json',
+      'b2500-esp32s3/b2500-esp32s3.factory.bin',
+    ]);
+
+    expect(findFile('b2500-esp32s3.factory.bin', 'b2500-esp32s3')).toBe(
+      'b2500-esp32s3/b2500-esp32s3.factory.bin'
+    );
+    expect(findFile('manifest.json')).toBe('b2500-esp32s3/manifest.json');
+  });
+
+  it('keeps same-named files in different directories apart', () => {
+    const findFile = createFileIndex([
+      'esp32/firmware.bin',
+      'esp32s3/firmware.bin',
+    ]);
+
+    expect(findFile('firmware.bin', 'esp32')).toBe('esp32/firmware.bin');
+    expect(findFile('firmware.bin', 'esp32s3')).toBe('esp32s3/firmware.bin');
+    // Ambiguous without a directory: better to fail than to flash the wrong one.
+    expect(findFile('firmware.bin')).toBeUndefined();
+  });
+
+  it('falls back to an unambiguous file name', () => {
+    const findFile = createFileIndex(['firmware/b2500.factory.bin']);
+
+    expect(findFile('b2500.factory.bin', 'somewhere-else')).toBe(
+      'firmware/b2500.factory.bin'
+    );
   });
 });

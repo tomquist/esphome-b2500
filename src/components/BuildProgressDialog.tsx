@@ -186,7 +186,8 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   }, [phase, onClose]);
 
   const handlePasswordCopy = () => {
-    navigator.clipboard.writeText(password).catch(() => {
+    // Optional: navigator.clipboard is undefined in insecure contexts.
+    navigator.clipboard?.writeText(password).catch(() => {
       // Clipboard access can be denied, the password is visible anyway.
     });
   };

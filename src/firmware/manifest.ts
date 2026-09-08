@@ -101,16 +101,33 @@ export const normalizeManifest = (
   };
 };
 
+/** Brings a manifest or ZIP entry path into a comparable form. */
+export const normalizePath = (path: string): string =>
+  path.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+
 /** Strips any directory prefix from a path found in a manifest or ZIP entry. */
 export const fileName = (path: string): string =>
-  path.split(/[\\/]/).pop() ?? path;
+  normalizePath(path).split('/').pop() ?? path;
 
-/** All firmware files referenced by the manifest, without directory prefixes. */
-export const manifestFileNames = (manifest: FirmwareManifest): string[] => {
-  const names = manifest.builds.flatMap((build) =>
-    build.parts.map((part) => fileName(part.path))
+/** The directory a path lives in, empty for a path without one. */
+export const directoryName = (path: string): string => {
+  const normalized = normalizePath(path);
+  const separator = normalized.lastIndexOf('/');
+  return separator === -1 ? '' : normalized.slice(0, separator);
+};
+
+/** Resolves a manifest path against the directory the manifest lives in. */
+export const resolvePath = (directory: string, path: string): string => {
+  const normalized = normalizePath(path);
+  return directory ? `${directory}/${normalized}` : normalized;
+};
+
+/** All firmware files referenced by the manifest, as written in it. */
+export const manifestPartPaths = (manifest: FirmwareManifest): string[] => {
+  const paths = manifest.builds.flatMap((build) =>
+    build.parts.map((part) => part.path)
   );
-  return Array.from(new Set(names));
+  return Array.from(new Set(paths));
 };
 
 /**
@@ -119,16 +136,16 @@ export const manifestFileNames = (manifest: FirmwareManifest): string[] => {
  */
 export const withResolvedPaths = (
   manifest: FirmwareManifest,
-  resolve: (name: string) => string | undefined
+  resolve: (path: string) => string | undefined
 ): FirmwareManifest => ({
   ...manifest,
   builds: manifest.builds.map((build) => ({
     ...build,
     parts: build.parts.map((part) => {
-      const resolved = resolve(fileName(part.path));
+      const resolved = resolve(part.path);
       if (!resolved) {
         throw new InvalidManifestError(
-          `The firmware archive does not contain "${fileName(part.path)}".`
+          `The firmware archive does not contain "${part.path}".`
         );
       }
       return { ...part, path: resolved };

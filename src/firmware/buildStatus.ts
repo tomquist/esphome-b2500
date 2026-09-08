@@ -113,6 +113,8 @@ export interface PollOptions {
   onFetchError?: (error: unknown, consecutiveFailures: number) => void;
   intervalMs?: number;
   timeoutMs?: number;
+  /** Gives up on a single request that never completes. */
+  requestTimeoutMs?: number;
   fetchStatus?: typeof fetchBuildStatus;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
@@ -134,6 +136,46 @@ export const sleep = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 
+class RequestTimeoutError extends Error {
+  constructor() {
+    super('Timed out while reading the build status.');
+    this.name = 'RequestTimeoutError';
+  }
+}
+
+/**
+ * Runs a single status request under its own timeout. Without it a request
+ * that never settles would keep the poll loop from reaching its deadline.
+ */
+const fetchOnce = async (
+  fetchStatus: typeof fetchBuildStatus,
+  identifier: string,
+  timeoutMs: number,
+  signal?: AbortSignal
+): Promise<BuildStatus | null> => {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const request = fetchStatus(identifier, controller.signal);
+    // Keeps the abort below from surfacing as an unhandled rejection.
+    request.catch(() => {});
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new RequestTimeoutError());
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
+};
+
 /**
  * Polls the status document until the build finished, failed or the timeout
  * elapsed. Transient network errors are ignored, they are indistinguishable
@@ -146,6 +188,7 @@ export const pollBuildStatus = async ({
   onFetchError,
   intervalMs = 5000,
   timeoutMs = 30 * 60 * 1000,
+  requestTimeoutMs = 30000,
   fetchStatus = fetchBuildStatus,
   sleep: wait = sleep,
 }: PollOptions): Promise<BuildStatus> => {
@@ -154,7 +197,12 @@ export const pollBuildStatus = async ({
   for (;;) {
     let status: BuildStatus | null = null;
     try {
-      status = await fetchStatus(identifier, signal);
+      status = await fetchOnce(
+        fetchStatus,
+        identifier,
+        requestTimeoutMs,
+        signal
+      );
       consecutiveFailures = 0;
     } catch (error) {
       if (signal?.aborted) {

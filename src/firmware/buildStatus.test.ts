@@ -111,6 +111,37 @@ describe('pollBuildStatus', () => {
     expect(result.state).toBe('success');
   });
 
+  it('gives up on a request that never completes', async () => {
+    await expect(
+      pollBuildStatus({
+        identifier: 'tiny-happy-cat-1',
+        timeoutMs: 0,
+        requestTimeoutMs: 10,
+        fetchStatus: () => new Promise(() => {}),
+        sleep: noSleep,
+      })
+    ).rejects.toBeInstanceOf(BuildTimeoutError);
+  });
+
+  it('aborts a request that never completes', async () => {
+    const aborted: boolean[] = [];
+
+    await expect(
+      pollBuildStatus({
+        identifier: 'tiny-happy-cat-1',
+        timeoutMs: 0,
+        requestTimeoutMs: 10,
+        fetchStatus: (_identifier, signal) =>
+          new Promise(() => {
+            signal?.addEventListener('abort', () => aborted.push(true));
+          }),
+        sleep: noSleep,
+      })
+    ).rejects.toBeInstanceOf(BuildTimeoutError);
+
+    expect(aborted).toEqual([true]);
+  });
+
   it('gives up after the timeout', async () => {
     await expect(
       pollBuildStatus({

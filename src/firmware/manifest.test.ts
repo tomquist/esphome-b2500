@@ -1,6 +1,6 @@
 import {
   InvalidManifestError,
-  manifestFileNames,
+  manifestPartPaths,
   normalizeManifest,
   withResolvedPaths,
 } from './manifest';
@@ -66,17 +66,17 @@ describe('normalizeManifest', () => {
   });
 });
 
-describe('manifestFileNames', () => {
-  it('returns unique file names without directories', () => {
+describe('manifestPartPaths', () => {
+  it('keeps the paths as written and drops duplicates', () => {
     const manifest = normalizeManifest(
       {
         builds: [
           {
             chipFamily: 'ESP32',
             parts: [
-              { path: 'b2500-esp32/bootloader.bin', offset: 0 },
-              { path: 'b2500-esp32/firmware.bin', offset: 65536 },
-              { path: 'firmware.bin', offset: 65536 },
+              { path: 'esp32/bootloader.bin', offset: 0 },
+              { path: 'esp32/firmware.bin', offset: 65536 },
+              { path: 'esp32/firmware.bin', offset: 131072 },
             ],
           },
         ],
@@ -84,9 +84,9 @@ describe('manifestFileNames', () => {
       metadata
     );
 
-    expect(manifestFileNames(manifest)).toEqual([
-      'bootloader.bin',
-      'firmware.bin',
+    expect(manifestPartPaths(manifest)).toEqual([
+      'esp32/bootloader.bin',
+      'esp32/firmware.bin',
     ]);
   });
 });

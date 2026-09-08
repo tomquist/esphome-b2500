@@ -2,9 +2,12 @@ import type { FileEntry } from '@zip.js/zip.js';
 import {
   FirmwareManifest,
   ManifestMetadata,
+  directoryName,
   fileName,
-  manifestFileNames,
+  manifestPartPaths,
+  normalizePath,
   normalizeManifest,
+  resolvePath,
   withResolvedPaths,
 } from './manifest';
 
@@ -80,6 +83,26 @@ const isWrongPassword = (error: unknown) =>
   /invalid password|encrypted entry/i.test(error.message);
 
 /**
+ * Looks archive entries up by the path a manifest refers to them with. Paths
+ * are resolved against the directory the manifest lives in; a bare file name is
+ * only accepted when exactly one entry carries it, so two firmware files with
+ * the same name in different directories can never resolve to each other.
+ */
+export const createFileIndex = (entryNames: string[]) => {
+  const byPath = new Map<string, string>();
+  const byFileName = new Map<string, string | null>();
+  for (const entryName of entryNames) {
+    byPath.set(normalizePath(entryName), entryName);
+    const name = fileName(entryName);
+    byFileName.set(name, byFileName.has(name) ? null : entryName);
+  }
+  return (path: string, directory = ''): string | undefined =>
+    byPath.get(resolvePath(directory, path)) ??
+    byFileName.get(fileName(path)) ??
+    undefined;
+};
+
+/**
  * Decrypts the password protected firmware archive in the browser and exposes
  * its content as blob URLs that esp-web-tools can flash.
  */
@@ -97,37 +120,50 @@ export const extractFirmwareBundle = async (
   };
 
   try {
-    const entries = await reader.getEntries();
-    const entriesByName = new Map(
-      entries
-        .filter((entry): entry is FileEntry => !entry.directory)
-        .map((entry) => [fileName(entry.filename), entry])
+    const files = (await reader.getEntries()).filter(
+      (entry): entry is FileEntry => !entry.directory
     );
+    const entriesByName = new Map(
+      files.map((entry) => [entry.filename, entry])
+    );
+    const findFile = createFileIndex(files.map((entry) => entry.filename));
 
-    const readEntry = async (name: string): Promise<Uint8Array> => {
-      const entry = entriesByName.get(name);
+    const readEntry = async (entryName: string): Promise<Uint8Array> => {
+      const entry = entriesByName.get(entryName);
       if (!entry) {
-        throw new Error(`The firmware archive does not contain "${name}".`);
+        throw new Error(
+          `The firmware archive does not contain "${entryName}".`
+        );
       }
       return entry.getData<Uint8Array>(new Uint8ArrayWriter());
     };
 
+    const manifestName = findFile('manifest.json');
+    if (!manifestName) {
+      throw new Error('The firmware archive does not contain a manifest.json.');
+    }
     const manifestJson = new TextDecoder().decode(
-      await readEntry('manifest.json')
+      await readEntry(manifestName)
     );
     const manifest = normalizeManifest(JSON.parse(manifestJson), metadata);
 
-    const urlsByName: Record<string, string> = {};
-    for (const name of manifestFileNames(manifest)) {
-      const data = await readEntry(name);
+    // Manifest paths are relative to the manifest itself.
+    const manifestDirectory = directoryName(manifestName);
+    const urlsByPath: Record<string, string> = {};
+    for (const path of manifestPartPaths(manifest)) {
+      const entryName = findFile(path, manifestDirectory);
+      if (!entryName) {
+        continue;
+      }
+      const data = await readEntry(entryName);
       const url = URL.createObjectURL(
         new Blob([data as BlobPart], { type: 'application/octet-stream' })
       );
       objectUrls.push(url);
-      urlsByName[name] = url;
+      urlsByPath[path] = url;
     }
 
-    const resolved = withResolvedPaths(manifest, (name) => urlsByName[name]);
+    const resolved = withResolvedPaths(manifest, (path) => urlsByPath[path]);
     const manifestUrl = URL.createObjectURL(
       new Blob([JSON.stringify(resolved)], { type: 'application/json' })
     );
