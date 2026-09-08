@@ -15,10 +15,12 @@
     "@types/node": "^16.18.98",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@zip.js/zip.js": "^2.12.0",
     "axios": "^1.7.2",
     "buffer": "^6.0.3",
     "crypto": "npm:crypto-browserify",
     "crypto-browserify": "^3.12.0",
+    "esp-web-tools": "^10.4.0",
     "file-saver": "^2.0.5",
     "nunjucks": "^3.2.4",
     "process": "^0.11.10",
@@ -83,5 +85,10 @@
     "raw-loader": "^4.0.2",
     "react-app-rewired": "^2.2.1",
     "ts-node": "^10.9.2"
+  },
+  "overrides": {
+    "esp-web-tools": {
+      "@material/web": "2.4.0"
+    }
   }
 }

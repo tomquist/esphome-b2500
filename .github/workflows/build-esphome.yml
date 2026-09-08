@@ -19,11 +19,22 @@ jobs:
       S3_BUCKET: esphome-b2500-images
       AWS_REGION: eu-west-1
       AUTOMATED_BUILD: 'true'
+      IDENTIFIER: ${{ github.event.client_payload.identifier }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     permissions:
       contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # The identifier ends up in an S3 object key and in shell commands, so it
+      # has to match what the web builder generates.
+      - name: Validate the build identifier
+        run: |
+          if [[ ! "$IDENTIFIER" =~ ^[a-z0-9-]{1,64}$ ]]; then
+            echo "::error::Invalid build identifier"
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,6 +48,18 @@ jobs:
 
       - name: Install dependencies
         run: npm install nunjucks
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # The web builder polls this document to follow the build and to offer
+      # flashing the firmware right after it finished.
+      - name: Publish build status
+        run: ./scripts/publish-build-status.sh building
 
       - name: Decrypt the ZIP password
         id: decrypt_password
@@ -64,6 +87,9 @@ jobs:
         with:
           yaml-file: device.yaml
           version: ${{ github.event.client_payload.esphome_version || '2026.8.1' }}
+          # Required so that the browser can flash the firmware without having
+          # to assemble an esp-web-tools manifest itself.
+          complete-manifest: true
         continue-on-error: true
 
       - name: Debug on failure
@@ -85,20 +111,27 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: esphome-firmware-${{ github.event.client_payload.identifier }}
+          name: esphome-firmware-${{ env.IDENTIFIER }}
           path: firmware.zip
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
 
       - name: Upload firmware to S3
         run: |
-          aws s3 cp firmware.zip s3://$S3_BUCKET/firmware/${{ github.event.client_payload.identifier }}.zip
+          aws s3 cp firmware.zip "s3://$S3_BUCKET/firmware/$IDENTIFIER.zip"
+
+      - name: Publish build result
+        env:
+          FIRMWARE_URL: https://${{ env.S3_BUCKET }}.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/${{ env.IDENTIFIER }}.zip
+          FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
+          ESPHOME_VERSION: ${{ steps.esphome-build.outputs.version }}
+        run: ./scripts/publish-build-status.sh success
 
       - name: Output firmware URL
         run: |
-          echo "::notice::Firmware available at: https://$S3_BUCKET.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/${{ github.event.client_payload.identifier }}.zip"
+          echo "::notice::Firmware available at: https://$S3_BUCKET.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/$IDENTIFIER.zip"
+
+      - name: Publish build failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          ./scripts/publish-build-status.sh error \
+            "The firmware build failed. Please check the build log and open an issue with your configuration."

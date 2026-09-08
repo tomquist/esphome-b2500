@@ -37,16 +37,25 @@ When using these boards, set the following options:
 3. Once you have filled out the form, the configuration will be automatically generated and displayed.
 4. You can download the YAML configuration file by clicking the "Download YAML" button. This configuration can directly be used to build an ESPHome image, e.g. through the Home Assistant ESPHome Addon. Alternatively you can directly build an image for your ESP32 and flash it via the ESPHome web flasher. Read the following section for detailed instructions.
 
-### Build an Image on the Web
+### Build and Flash an Image on the Web
 
 1. Click the "Build Image" button.
-2. Click "Start Build" and follow the instructions
-3. Extract the firmware binary from the downloaded ZIP file.
-4. Connect your ESP32 via USB
-5. Go to the ESPHome Web Installer: [ESPHome Web Installer](https://web.esphome.io/).
-6. Click the "Install" button.
-7. Select "Choose File" and upload the extracted firmware binary.
-8. Follow the on-screen instructions to select the connected ESP32 device and flash the firmware.
+2. Click "Start Build". Your configuration is encrypted and sent to GitHub Actions, which builds the firmware. This usually takes 3 to 10 minutes - keep the dialog open, it follows the build for you.
+3. Once the build finished, the page downloads the firmware, decrypts it in your browser and shows a "Connect & Install" button.
+4. Connect your ESP32 via USB, click "Connect & Install", pick the serial port of your ESP32 and follow the on-screen instructions.
+
+Flashing from the browser uses the [Web Serial API](https://developer.mozilla.org/docs/Web/API/Web_Serial_API), which is available in Chromium based desktop browsers such as Google Chrome, Microsoft Edge and Opera. The firmware never leaves your machine unencrypted: it is decrypted inside your browser.
+
+#### Flashing manually
+
+If you prefer to flash yourself, or your browser does not support Web Serial, expand "Flash manually instead" in the same dialog:
+
+1. Download the firmware ZIP file and extract it using the password shown in the dialog (it is also copied to your clipboard when the build starts).
+2. Connect your ESP32 via USB.
+3. Go to the ESPHome Web Installer: [ESPHome Web Installer](https://web.esphome.io/).
+4. Click the "Install" button.
+5. Select "Choose File" and upload the extracted `*.factory.bin` file.
+6. Follow the on-screen instructions to select the connected ESP32 device and flash the firmware.
 
 ## MQTT Topics
 
