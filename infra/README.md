@@ -18,9 +18,12 @@ The web builder downloads the status document and the firmware archive with
 requires CORS on the bucket - without it the browser blocks the responses and
 the builder falls back to the manual download instructions.
 
-Apply [`s3-cors.json`](./s3-cors.json) either by running the
-[Apply S3 CORS configuration](../.github/workflows/s3-cors.yml) workflow or
-manually:
+[`s3-cors.json`](./s3-cors.json) is the applied configuration. It is applied by
+hand rather than from a workflow: the IAM user the build workflow authenticates
+as can write objects but not change bucket configuration, which is the way
+round it should be.
+
+With credentials that may change bucket configuration:
 
 ```bash
 aws s3api put-bucket-cors \
@@ -28,8 +31,21 @@ aws s3api put-bucket-cors \
   --cors-configuration file://infra/s3-cors.json
 ```
 
+The S3 console works too, under Permissions > Cross-origin resource sharing
+(CORS). It expects the bare array of rules, so paste the value of `CORSRules`
+rather than the whole file.
+
 Verify it with:
 
 ```bash
 aws s3api get-bucket-cors --bucket esphome-b2500-images
+```
+
+Or check what a browser sees, against any firmware object that exists:
+
+```bash
+curl -sS -o /dev/null -D - \
+  -H "Origin: https://tomquist.github.io" \
+  https://esphome-b2500-images.s3.eu-west-1.amazonaws.com/firmware/<identifier>.zip \
+  | grep -i access-control
 ```
