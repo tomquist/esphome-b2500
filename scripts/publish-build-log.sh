@@ -114,7 +114,13 @@ if [[ "$offset" -gt 0 ]] && ! cmp -s -n "$offset" "$PUBLISHED_FILE" "$FULL_FILE"
 fi
 
 # `tail -c +N` counts from one, so the byte after the offset is N = offset + 1.
-tail -c "+$((offset + 1))" "$FULL_FILE" > "$SEGMENT_FILE"
+# Bounded by what is left of the budget rather than by the budget alone: the
+# check above only stops the publish *after* the cap is passed, so without this
+# the first segment could carry a runaway log whole. Cutting mid-line is fine
+# here - the page joins the segments back up, and the published bytes are still
+# a prefix of the log.
+tail -c "+$((offset + 1))" "$FULL_FILE" |
+  head -c "$((MAX_TOTAL_BYTES - offset))" > "$SEGMENT_FILE"
 [[ -s "$SEGMENT_FILE" ]] || report
 
 if ! aws s3 cp "$SEGMENT_FILE" \
@@ -128,5 +134,6 @@ fi
 
 cat "$SEGMENT_FILE" >> "$PUBLISHED_FILE"
 echo "$((count + 1))" > "$COUNT_FILE"
-echo "Published build output segment ${count}, $total bytes so far" >&2
+published=$(stat -c%s "$PUBLISHED_FILE" 2> /dev/null || echo "$total")
+echo "Published build output segment ${count}, $published bytes so far" >&2
 report

@@ -191,7 +191,12 @@ test('stops publishing a build that prints without end', () => {
   space.write('x'.repeat(200));
   assert.equal(publish(space, { LOG_MAX_TOTAL_BYTES: '50' }), '1');
 
-  assert.equal(space.uploaded().length, 1);
+  // The cap bounds the segment as well as the run of them: checking the offset
+  // alone only stops the publish after the budget is gone, so the first one
+  // would otherwise carry the whole runaway log.
+  assert.deepEqual(space.uploaded(), [
+    ['happy-tiny-otter-abc.log.0', 'x'.repeat(50)],
+  ]);
 });
 
 test('publishes nothing while another publisher holds the lock', () => {

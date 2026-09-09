@@ -3,6 +3,7 @@ import path from 'path';
 import {
   BuildStatus,
   BuildTimeoutError,
+  appendLogText,
   buildLogSegmentUrl,
   buildStatusUrl,
   cleanLogText,
@@ -201,6 +202,26 @@ describe('parseBuildStatus', () => {
 
     expect(cleaned.length).toBe(200000);
     expect(cleaned.endsWith('last')).toBe(true);
+  });
+
+  it('keeps the accumulated output bounded, not just each segment', () => {
+    // Capping one segment leaves the sum of them unbounded, and it is the
+    // joined string the log view re-renders every time one arrives.
+    const joined = appendLogText(
+      `START${'x'.repeat(900000)}`,
+      `${'y'.repeat(200000)}end`
+    );
+
+    expect(joined.length).toBe(1000000);
+    // The end is what a running build is saying, and why a stopped one stopped.
+    expect(joined.endsWith('end')).toBe(true);
+    expect(joined.startsWith('START')).toBe(false);
+  });
+
+  it('joins segments unchanged while there is room', () => {
+    expect(appendLogText('Compiling\n', 'Linking\n')).toBe(
+      'Compiling\nLinking\n'
+    );
   });
 
   it('returns null for documents it does not understand', () => {

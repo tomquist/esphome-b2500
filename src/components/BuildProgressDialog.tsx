@@ -32,6 +32,7 @@ import {
   BuildStatus,
   BuildStep,
   BuildTimeoutError,
+  appendLogText,
   buildListUrl,
   fetchLogSegment,
   firmwareDownloadUrl,
@@ -229,8 +230,12 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
               return; // Announced but not readable yet.
             }
             cursor += 1;
-            if (segment.length > 0) {
-              setBuildLog((previous) => (previous ?? '') + segment);
+            // Bound to a const: narrowing `segment` does not reach inside the
+            // updater, and concatenating it while it is still `string | null`
+            // would put the word "null" in the log rather than fail.
+            const text = segment;
+            if (text.length > 0) {
+              setBuildLog((previous) => appendLogText(previous ?? '', text));
             }
           }
         });

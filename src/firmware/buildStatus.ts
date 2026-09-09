@@ -131,6 +131,12 @@ const optionalCount = (value: unknown): number | undefined =>
  */
 const MAX_LOG_SEGMENTS = 500;
 const MAX_SEGMENT_CHARS = 200000;
+/**
+ * And on the segments once joined: capping each one still leaves the sum of
+ * them unbounded, and it is the accumulated string that the log view re-renders
+ * every time a segment arrives.
+ */
+const MAX_LOG_CHARS = 1000000;
 
 /**
  * Segment bodies are whatever the compiler wrote, so they arrive with stray
@@ -155,6 +161,17 @@ export const cleanLogText = (raw: string): string => {
   return text.length > MAX_SEGMENT_CHARS
     ? text.slice(-MAX_SEGMENT_CHARS)
     : text;
+};
+
+/** How many segments the status document says exist, clamped to the cap. */
+/**
+ * Adds a segment to what the page has already read, keeping the end: the tail
+ * is where a build that is still running says what it is doing, and where one
+ * that stopped says why.
+ */
+export const appendLogText = (previous: string, segment: string): string => {
+  const joined = previous + segment;
+  return joined.length > MAX_LOG_CHARS ? joined.slice(-MAX_LOG_CHARS) : joined;
 };
 
 /** How many segments the status document says exist, clamped to the cap. */
