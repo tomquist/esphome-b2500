@@ -9,10 +9,10 @@
 # Counting both gives a progress fraction that does not depend on being able to
 # read the compiler's output.
 #
-# It reads that output too, when the API lets it: fetch-job-log.sh pulls this
-# job's own log back, and the tail of it goes into the same status document, so
-# the page can show the build talking rather than only a bar moving. That part
-# is best effort - a build whose log cannot be read still reports progress.
+# It publishes that output too, when the API lets it: publish-build-log.sh
+# uploads whatever the compiler has said since the last time as its own object,
+# and the status document carries only how many of those exist. That part is
+# best effort - a build whose log cannot be read still reports progress.
 #
 # Runs in the background alongside the build step. It stops when the stop file
 # appears, which it only checks between polls: an upload in flight always
@@ -26,12 +26,12 @@ INTERVAL_SECONDS="${PROGRESS_INTERVAL_SECONDS:-5}"
 STOP_FILE="${PROGRESS_STOP_FILE:-progress-watcher.stop}"
 BUILD_ROOT="${PROGRESS_BUILD_ROOT:-.esphome/build}"
 PUBLISH="${PROGRESS_PUBLISH_COMMAND:-./scripts/publish-build-status.sh}"
-LOG_COMMAND="${PROGRESS_LOG_COMMAND:-./scripts/fetch-job-log.sh}"
+LOG_COMMAND="${PROGRESS_LOG_COMMAND:-./scripts/publish-build-log.sh}"
 # Slower than the poll: reading the log costs an API request against a limit
-# every build in the repository shares, while counting files costs nothing.
-# Zero turns log reporting off.
+# every build in the repository shares, while counting files costs nothing. At
+# ten seconds a busy hour of builds stays well inside it. Zero turns log
+# reporting off.
 LOG_INTERVAL_SECONDS="${PROGRESS_LOG_INTERVAL_SECONDS:-10}"
-LOG_FILE="${PROGRESS_LOG_FILE:-build-log.tail}"
 # The ninja graph is written once and then only grows by the second graph, so
 # re-reading it every poll would spend most of the interval grepping megabytes.
 TOTAL_REFRESH_SECONDS="${PROGRESS_TOTAL_REFRESH_SECONDS:-60}"
@@ -71,47 +71,43 @@ refresh_expected() {
 }
 
 log_read_at=0
+segments=0
 
+# Uploads whatever the build has said since the last segment and reports how
+# many segments now exist. Publishing the log is what advances that count, so
+# the object is always in the bucket before the status document names it.
 refresh_log() {
   [[ "$LOG_INTERVAL_SECONDS" -gt 0 ]] || return
-  local moment
+  local moment published
   moment=$(now)
   if [[ $((moment - log_read_at)) -lt "$LOG_INTERVAL_SECONDS" ]]; then
     return
   fi
   log_read_at=$moment
-  local pending="${LOG_FILE}.pending"
-  if "$LOG_COMMAND" > "$pending" 2>/dev/null && [[ -s "$pending" ]]; then
-    mv -f "$pending" "$LOG_FILE"
-  else
-    rm -f "$pending"
+  published=$("$LOG_COMMAND" 2>/dev/null)
+  if [[ "$published" =~ ^[0-9]+$ ]]; then
+    segments=$published
   fi
 }
 
-log_fingerprint() {
-  [[ -s "$LOG_FILE" ]] || return 0
-  cksum < "$LOG_FILE" 2>/dev/null
-}
-
 last_completed=''
-last_log=''
+last_segments=''
 while [[ ! -e "$STOP_FILE" ]]; do
   completed=$(count_objects)
   refresh_expected
   refresh_log
-  log=$(log_fingerprint)
   # Republish for either half: early on there are no object files yet but the
   # log already has the configure step to show, and late in a link step the
   # count stands still while the output keeps moving.
-  if [[ "$completed" != "$last_completed" || "$log" != "$last_log" ]] &&
-     [[ "$completed" -gt 0 || -s "$LOG_FILE" ]]; then
+  if [[ "$completed" != "$last_completed" || "$segments" != "$last_segments" ]] &&
+     [[ "$completed" -gt 0 || "$segments" -gt 0 ]]; then
     STEP=compiling \
       PROGRESS_DONE="$completed" \
       PROGRESS_TOTAL="$expected" \
-      BUILD_LOG_FILE="$LOG_FILE" \
+      LOG_SEGMENTS="$segments" \
       "$PUBLISH" building "Compiling the firmware" > /dev/null || true
     last_completed="$completed"
-    last_log="$log"
+    last_segments="$segments"
   fi
   # Sleep in short ticks so that stopping does not have to wait out a full
   # interval, and so that it is noticed here rather than during a publish.

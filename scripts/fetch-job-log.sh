@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
-# Prints a cleaned tail of this workflow job's own log.
+# Prints this workflow job's own log, cleaned.
 #
 # The compile runs inside esphome/build-action, so its output belongs to that
-# step rather than to us: there is no file to tail and no pipe to tee. The
-# Actions API does serve a job's log while the job is still running, though, so
-# reading our own log back is the one way to get the compiler's output out of
-# the runner and in front of the person waiting for the build. The watcher
-# publishes what this prints every few seconds, and the failure path publishes
-# a longer tail ending at the error.
+# step: there is no file to tail and no pipe to tee. The Actions API does serve
+# a job's log while the job is still running, so reading our own log back is the
+# one way to get the compiler's output out of the runner and in front of the
+# person waiting for the build. publish-build-log.sh turns what this prints into
+# the segments the web builder downloads.
+#
+# Prints the whole log by default, because the caller publishes it as a growing
+# prefix and needs the same bytes every time. `LOG_TAIL_LINES` and
+# `LOG_MAX_BYTES` are for callers that want an excerpt instead.
 #
 # Everything here is best effort. A build that cannot read its own log still
 # reports progress and still reports failure, only without the output - so no
@@ -27,17 +30,21 @@
 #   GITHUB_RUN_ID       the run whose job log to read (required)
 #   GITHUB_RUN_ATTEMPT  which attempt of that run, defaults to 1
 #   GITHUB_JOB          job id in the workflow file, used to pick the job
-#   LOG_TAIL_LINES      how many lines to print
-#   LOG_MAX_BYTES       hard cap on what is printed, applied after the lines
+#   LOG_START_AT        drop everything up to and including the last line
+#                       matching this regex, and print nothing until some line
+#                       does match
 #   LOG_END_AT_ERROR    stop at the first `##[error]` line, keeping it
+#   LOG_TAIL_LINES      keep only this many lines from the end
+#   LOG_MAX_BYTES       keep only this many bytes from the end
 #   LOG_SOURCE_FILE     read this instead of the API (used by the tests)
 #   LOG_JOB_ID_FILE     caches the resolved job id between calls
 #   LOG_DISABLED_FILE   marks the log as unreadable, so we stop asking
 
 set -uo pipefail
 
-TAIL_LINES="${LOG_TAIL_LINES:-40}"
-MAX_BYTES="${LOG_MAX_BYTES:-8000}"
+source_copy=$(mktemp)
+trap 'rm -f "$source_copy"' EXIT
+
 API_URL="${GITHUB_API_URL:-https://api.github.com}"
 JOB_ID_FILE="${LOG_JOB_ID_FILE:-job-log-id}"
 DISABLED_FILE="${LOG_DISABLED_FILE:-job-log-unavailable}"
@@ -47,20 +54,47 @@ MISSES_FILE="${DISABLED_FILE}.misses"
 MAX_MISSES="${LOG_MAX_MISSES:-5}"
 
 ESC=$(printf '\033')
+BOM=$(printf '\357\273\277')
 
-# Turns a downloaded job log into something worth showing: no timestamps, no
-# terminal escapes, and no runner command markers, which are noise everywhere
-# except on the error that ended the build.
+# Turns a downloaded job log into something worth showing: no byte order mark,
+# no timestamps, no terminal escapes, and no runner command markers, which are
+# noise everywhere except on the error that ended the build.
+#
+# Takes the log as a file rather than on stdin because the first thing it has to
+# know is whether the last line has its newline yet. A line still being written
+# is a line that will read differently next time - and since sed and awk end
+# their output with a newline whether the input had one or not, that can only be
+# told from the bytes as they arrived.
 clean_log() {
+  local source="$1"
+  { if [[ -n "$(tail -c 1 "$source")" ]]; then
+      head -n -1 "$source"
+    else
+      cat "$source"
+    fi; } |
   sed -E \
+    -e "1s/^${BOM}//" \
     -e 's/\r$//' \
     -e 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z //' \
     -e "s/${ESC}\\[[0-9;?]*[a-zA-Z]//g" \
     -e "s/${ESC}[()][A-B0-2]//g" \
     -e "s/${ESC}\\][^${ESC}]*(\\a|${ESC}\\\\)//g" |
+    # Everything before the compile is the runner installing things. Nothing at
+    # all until the marker shows up: the caller publishes this as a growing
+    # prefix of itself, and falling back to the whole log would move where that
+    # prefix starts the moment the marker appeared - which corrupts every
+    # segment published after it. No log is a feature that quietly did not
+    # happen; a shifting one is a log nobody can read.
+    { if [[ -n "${LOG_START_AT:-}" ]]; then
+        awk -v pattern="$LOG_START_AT" '
+          { line[NR] = $0; if ($0 ~ pattern) { start = NR } }
+          END { if (start) for (i = start + 1; i <= NR; i++) print line[i] }'
+      else
+        cat
+      fi; } |
     # The failing step is the last thing the log has to say that anyone cares
     # about; whatever the workflow does afterwards (publishing this log, among
-    # other things) would only push it out of the tail.
+    # other things) would only push it out of view.
     { if [[ -n "${LOG_END_AT_ERROR:-}" ]]; then
         awk '{ print } /^##\[error\]/ { exit }'
       else
@@ -70,13 +104,15 @@ clean_log() {
       -e 's/^##\[error\]/ERROR: /' \
       -e 's/^##\[warning\]/WARNING: /' |
     grep -v '^##\[' |
-    tail -n "$TAIL_LINES" |
-    tail -c "$MAX_BYTES"
+    { if [[ -n "${LOG_TAIL_LINES:-}" ]]; then tail -n "$LOG_TAIL_LINES"; else cat; fi; } |
+    { if [[ -n "${LOG_MAX_BYTES:-}" ]]; then tail -c "$LOG_MAX_BYTES"; else cat; fi; }
 }
 
 if [[ -n "${LOG_SOURCE_FILE:-}" ]]; then
   [[ -r "$LOG_SOURCE_FILE" ]] || exit 1
-  clean_log < "$LOG_SOURCE_FILE"
+  # A process substitution is not seekable, so give `tail -c 1` a real file.
+  cp "$LOG_SOURCE_FILE" "$source_copy" 2> /dev/null || exit 1
+  clean_log "$source_copy"
   exit 0
 fi
 
@@ -87,7 +123,7 @@ if [[ -e "$DISABLED_FILE" ]]; then
   exit 1
 fi
 
-# Prints the response status, writes the body to $2.
+# Prints the response status and any redirect target, writes the body to $2.
 api_get() {
   curl -sS --max-time 60 -o "$2" -w '%{http_code} %{redirect_url}' \
     -H "Authorization: Bearer $GITHUB_TOKEN" \
@@ -114,7 +150,7 @@ missed() {
 }
 
 body=$(mktemp)
-trap 'rm -f "$body"' EXIT
+trap 'rm -f "$body" "$source_copy"' EXIT
 
 job_id=''
 if [[ -s "$JOB_ID_FILE" ]]; then
@@ -160,7 +196,7 @@ esac
 
 [[ -s "$body" ]] || missed
 rm -f "$MISSES_FILE" 2> /dev/null || true
-# A pipeline that stopped at the error, or that filtered everything out,
-# is not a failure to report: the callers judge this by what it printed.
-clean_log < "$body"
+# A pipeline that stopped at the error, or that filtered everything out, is not
+# a failure to report: the callers judge this by what it printed.
+clean_log "$body"
 exit 0

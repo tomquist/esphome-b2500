@@ -33,6 +33,7 @@ import {
   BuildStep,
   BuildTimeoutError,
   buildListUrl,
+  fetchLogSegment,
   firmwareDownloadUrl,
   pollBuildStatus,
 } from '../firmware/buildStatus';
@@ -188,9 +189,8 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [isStatusUnreachable, setIsStatusUnreachable] = useState(false);
-  // Kept out of `status` so it survives the polls that carry no log - the
-  // workflow only republishes the tail when it has changed, and a build that
-  // loses access to its own log mid-compile should keep what it already showed.
+  // Accumulated from the log segments, so it only ever grows. A build that
+  // loses access to its own log mid-compile keeps what it already showed.
   const [buildLog, setBuildLog] = useState<string | null>(null);
 
   useEffect(() => {
@@ -205,6 +205,38 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       setDidBuildFail(false);
       setIsStatusUnreachable(false);
       setBuildLog(null);
+
+      // Segments are downloaded once each, in order, as the status document
+      // announces them. Chained rather than guarded by a flag so that the last
+      // call can be awaited: a failed build's error is usually in the segment
+      // the workflow published just before it said the build had failed.
+      let cursor = 0;
+      let pumping: Promise<void> = Promise.resolve();
+      const pumpLog = (available: number) => {
+        pumping = pumping.then(async () => {
+          while (cursor < available && !controller.signal.aborted) {
+            let segment: string | null = null;
+            try {
+              segment = await fetchLogSegment(
+                identifier,
+                cursor,
+                controller.signal
+              );
+            } catch (caught) {
+              return; // Transient, or aborted. The next status brings us back.
+            }
+            if (segment === null) {
+              return; // Announced but not readable yet.
+            }
+            cursor += 1;
+            if (segment.length > 0) {
+              setBuildLog((previous) => (previous ?? '') + segment);
+            }
+          }
+        });
+        return pumping;
+      };
+
       try {
         const finalStatus = await pollBuildStatus({
           identifier,
@@ -212,8 +244,8 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
           onStatus: (update) => {
             setStatus(update);
             setIsStatusUnreachable(false);
-            if (update.log) {
-              setBuildLog(update.log);
+            if (update.logSegments) {
+              void pumpLog(update.logSegments);
             }
           },
           // A handful of failures in a row usually means the browser blocked
@@ -221,6 +253,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
           onFetchError: (_error, consecutiveFailures) =>
             setIsStatusUnreachable(consecutiveFailures >= 3),
         });
+        // Before anything is decided about the build, so that a failure is
+        // shown with everything the compiler said rather than most of it.
+        await pumpLog(finalStatus.logSegments ?? 0);
         if (finalStatus.state === 'error') {
           setIsRetryable(false);
           setDidBuildFail(true);

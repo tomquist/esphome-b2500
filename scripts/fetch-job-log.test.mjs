@@ -86,6 +86,54 @@ test('ends the failure tail at the error, not at what the workflow did next', ()
   assert.ok(printed.trimEnd().endsWith('exit code 1.'));
 });
 
+test('starts where the compile does', () => {
+  const printed = run(jobLog(compile), {
+    LOG_START_AT: '^##\\[group\\]Run esphome/build-action',
+  });
+
+  assert.ok(
+    printed.startsWith('INFO Compiling app...'),
+    `kept the runner setup that comes before the compile: ${printed}`
+  );
+});
+
+test('prints nothing until the start marker is there', () => {
+  // Falling back to the whole log would move where the published prefix
+  // starts the moment the marker appeared, and every segment after that
+  // would be a slice of a different log.
+  const printed = run(jobLog(compile), { LOG_START_AT: '^nothing matches$' });
+
+  assert.equal(printed, '');
+});
+
+test('holds back a line the runner has not finished writing', () => {
+  // sed and awk end their output with a newline whether the input had one or
+  // not, so a partial line would otherwise look finished - and read
+  // differently on the next fetch, after the rest of it arrived.
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'job-log-'));
+  directories.push(directory);
+  const file = path.join(directory, 'job.log');
+  const stamp = '2026-09-09T10:00:00.1234567Z ';
+  fs.writeFileSync(file, `${stamp}[1/2] done\r\n${stamp}[2/2] half`);
+
+  assert.equal(run(file), '[1/2] done\n');
+
+  fs.appendFileSync(file, '-written\r\n');
+  assert.equal(run(file), '[1/2] done\n[2/2] half-written\n');
+});
+
+test('holds back a line cut inside its timestamp', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'job-log-'));
+  directories.push(directory);
+  const file = path.join(directory, 'job.log');
+  fs.writeFileSync(
+    file,
+    '2026-09-09T10:00:00.1234567Z done\r\n2026-09-09T10:0'
+  );
+
+  assert.equal(run(file), 'done\n');
+});
+
 test('keeps only the end of a long log', () => {
   const source = jobLog(
     Array.from({ length: 500 }, (_, index) => `line ${index}`)

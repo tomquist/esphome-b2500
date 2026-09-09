@@ -1,15 +1,24 @@
 # Firmware bucket configuration
 
 Builds started from the [web builder](https://tomquist.github.io/esphome-b2500/)
-upload two objects to the `esphome-b2500-images` bucket:
+upload three kinds of object to the `esphome-b2500-images` bucket:
 
 | Object                              | Purpose                                                                                                                                |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `firmware/<identifier>.zip.enc`     | The firmware archive, sealed to the requesting page's key (see below).                                                                 |
-| `firmware/<identifier>.status.json` | Build status the web builder polls (`building`, `success`, `error`), including which step is running, how far along the compile is, and the tail of the build output. |
+| `firmware/<identifier>.status.json` | Build status the web builder polls (`building`, `success`, `error`), including which step is running, how far along the compile is, and how many build output segments exist. |
+| `firmware/<identifier>.log.<n>`     | The build output, numbered from zero. Each segment holds only what the compiler printed since the one before it.                       |
 
-Both live under the same `firmware/` prefix so that a single public-read bucket
-policy covers them.
+All of them live under the same `firmware/` prefix so that a single public-read
+bucket policy - and the expiry rule below - covers them.
+
+S3 has no append: an object is replaced whole or not at all. A log published as
+one growing object would therefore have to be re-uploaded, and re-read, every
+few seconds for the length of a build. Publishing it as a run of immutable
+segments instead means every byte is uploaded once and downloaded once. The page
+learns how many exist from `log_segments` in the status document, which is
+written after the segment it counts, so a segment it knows about is always one
+it can fetch. See [`scripts/publish-build-log.sh`](../scripts/publish-build-log.sh).
 
 ## CORS
 

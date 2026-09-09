@@ -18,6 +18,15 @@ export const firmwareDownloadUrl = (identifier: string) =>
 export const buildStatusUrl = (identifier: string) =>
   objectUrl(`firmware/${identifier}.status.json`);
 
+/**
+ * One slice of the build output. Segments are immutable and numbered from
+ * zero; the status document says how many of them exist. S3 cannot append to
+ * an object, so a growing log has to be published as a run of objects like
+ * this - see scripts/publish-build-log.sh.
+ */
+export const buildLogSegmentUrl = (identifier: string, sequence: number) =>
+  objectUrl(`firmware/${identifier}.log.${sequence}`);
+
 export const buildListUrl = 'https://github.com/tomquist/esphome-b2500/actions';
 
 export type BuildState = 'building' | 'success' | 'error';
@@ -41,10 +50,10 @@ export interface BuildStatus {
   /** Compile units finished so far, reported while compiling. */
   progress?: BuildProgress;
   /**
-   * Tail of the build output. Present while the workflow can read its own job
-   * log, and on a failed build it ends at whatever stopped it.
+   * How many build output segments have been published. Absent while the
+   * workflow has not managed to read its own job log.
    */
-  log?: string;
+  logSegments?: number;
   firmwareUrl?: string;
   /** Name of the firmware directory inside the ZIP, e.g. `b2500-esp32`. */
   firmwareName?: string;
@@ -115,30 +124,35 @@ const optionalCount = (value: unknown): number | undefined =>
     : undefined;
 
 /**
- * How much of the build output to keep. The workflow publishes far less than
- * this; the cap is here so a status document that ever said otherwise cannot
- * hand the log view something too big to render.
+ * Caps on what the build output can make the page do. The workflow publishes
+ * far less than either; they are here so a status document that ever said
+ * otherwise cannot send the page fetching forever or hand the log view
+ * something too big to render.
  */
-const MAX_LOG_CHARS = 40000;
+const MAX_LOG_SEGMENTS = 500;
+const MAX_SEGMENT_CHARS = 200000;
 
 /**
- * The log is whatever the compiler wrote, so it arrives with terminal escapes
- * and stray control bytes in it. React renders it as text either way - this is
+ * Segment bodies are whatever the compiler wrote, so they arrive with stray
+ * control bytes in them. React renders the result as text either way - this is
  * so what the user sees is what the build printed, rather than a `\r` eating
  * the line it was on.
  */
-const parseLog = (value: unknown): string | undefined => {
-  const raw = optionalString(value);
-  if (!raw) {
-    return undefined;
-  }
+export const cleanLogText = (raw: string): string => {
   const text = raw
     .replace(/\r\n?/g, '\n')
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
-  const trimmed =
-    text.length > MAX_LOG_CHARS ? text.slice(-MAX_LOG_CHARS) : text;
-  return trimmed.trim().length > 0 ? trimmed : undefined;
+  return text.length > MAX_SEGMENT_CHARS
+    ? text.slice(-MAX_SEGMENT_CHARS)
+    : text;
+};
+
+const parseSegmentCount = (value: unknown): number | undefined => {
+  const count = optionalCount(value);
+  return count !== undefined && Number.isInteger(count) && count > 0
+    ? Math.min(count, MAX_LOG_SEGMENTS)
+    : undefined;
 };
 
 const parseStep = (value: unknown): BuildStep | undefined => {
@@ -180,11 +194,32 @@ export const parseBuildStatus = (raw: unknown): BuildStatus | null => {
     message: optionalString(record.message),
     step: parseStep(record.step),
     progress: parseProgress(record.progress),
-    log: parseLog(record.log),
+    logSegments: parseSegmentCount(record.log_segments),
     firmwareUrl: trustedUrl(record.firmware_url, bucketOrigins()),
     firmwareName: optionalString(record.firmware_name),
     esphomeVersion: optionalString(record.esphome_version),
   };
+};
+
+/**
+ * Reads one segment of the build output. Resolves with `null` when it is not
+ * published yet, which is how a page that read a segment count from a status
+ * document written moments ago tells "not there" from "not any more".
+ */
+export const fetchLogSegment = async (
+  identifier: string,
+  sequence: number,
+  signal?: AbortSignal
+): Promise<string | null> => {
+  // No `no-store` here, unlike the status document: a segment never changes
+  // once published, so a reload may reuse whatever the browser kept.
+  const response = await fetch(buildLogSegmentUrl(identifier, sequence), {
+    signal,
+  });
+  if (!response.ok) {
+    return null;
+  }
+  return cleanLogText(await response.text());
 };
 
 export class BuildTimeoutError extends Error {
