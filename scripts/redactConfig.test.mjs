@@ -35,6 +35,8 @@ test('keeps the allow-listed template selectors', () => {
     template_version: 'v2',
     log_level: 'DEBUG',
     flash_size: '4MB',
+    board: 'esp32-s3-devkitc-1',
+    variant: 'esp32s3',
     idf_platform_version: '55.3.37',
     powermeter: { tx_pin: 'GPIO6', rx_pin: 'GPIO7' },
   });
@@ -42,6 +44,8 @@ test('keeps the allow-listed template selectors', () => {
     template_version: 'v2',
     log_level: 'DEBUG',
     flash_size: '4MB',
+    board: 'esp32-s3-devkitc-1',
+    variant: 'esp32s3',
     idf_platform_version: '55.3.37',
     powermeter: { tx_pin: 'GPIO6', rx_pin: 'GPIO7' },
   });
@@ -62,13 +66,10 @@ test('redacts inside arrays and keeps the storage version', () => {
   });
 });
 
-test('redacts fields validateConfig does not constrain', () => {
-  // board and variant are free-form requester text; a public log is not the
-  // place for them verbatim.
-  const redacted = redactConfig({ board: 'esp32dev', variant: 'anything' });
-  assert.deepEqual(redacted, {
-    board: '<string:8-15>',
-    variant: '<string:8-15>',
+test('redacts a field validateConfig does not constrain', () => {
+  // Nothing pins the device name down, and it is the user's own wording.
+  assert.deepEqual(redactConfig({ friendly_name: 'Toms Balkon' }), {
+    friendly_name: '<string:8-15>',
   });
 });
 
@@ -95,11 +96,13 @@ test('every kept field is one validateConfig constrains', () => {
   const constrained = new Set(
     [
       ...source.matchAll(
-        /require(?:Pattern|Integer)\(\s*[^,]+,\s*[`'"]([^`'"]+)/g
+        /require(?:Pattern|Integer|OneOf)\(\s*[^,]+,\s*[`'"]([^`'"]+)/g
       ),
     ]
       .map((match) => match[1].split(/[.[]/).pop())
-      .concat('log_level', 'template_version')
+      // render.js switches on this one rather than validating it, so only the
+      // three literals it knows can reach the template.
+      .concat('template_version')
   );
 
   for (const kept of KEEP) {

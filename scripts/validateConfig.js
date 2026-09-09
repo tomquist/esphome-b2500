@@ -54,6 +54,19 @@ const RESERVED_KEYS = ['git_sha', 'automated_build', 'ref'];
 // what esp32_ble_tracker allows. Kept in step by src/utils/index.test.ts.
 const MAX_STORAGES = 9;
 
+// Mirrors validPlatformVariants and validEspTemperatureVariants in src/types.ts;
+// index.test.ts holds the three in step.
+const PLATFORM_VARIANTS = new Set([
+  'auto',
+  'esp32',
+  'esp32s2',
+  'esp32s3',
+  'esp32c3',
+  'esp32h2',
+]);
+
+const ESP_TEMPERATURE_VARIANTS = new Set(['internal', 'ntc']);
+
 const LOG_LEVELS = new Set([
   'NONE',
   'ERROR',
@@ -128,6 +141,17 @@ const requirePattern = (value, path, pattern, description) => {
   }
 };
 
+const requireOneOf = (value, path, allowed) => {
+  if (isBlank(value)) {
+    return;
+  }
+  if (!allowed.has(String(value))) {
+    throw new InvalidConfigError(
+      `${path} must be one of ${[...allowed].join(', ')}`
+    );
+  }
+};
+
 /**
  * Throws {@link InvalidConfigError} if the config could break out of the YAML
  * the templates generate. Returns nothing; the caller renders `config` as-is.
@@ -167,9 +191,27 @@ const validateConfig = (config) => {
     'a version number such as 55.3.37'
   );
 
-  if (!isBlank(config.log_level) && !LOG_LEVELS.has(String(config.log_level))) {
-    throw new InvalidConfigError(
-      `log_level must be one of ${[...LOG_LEVELS].join(', ')}`
+  requireOneOf(config.log_level, 'log_level', LOG_LEVELS);
+
+  // Not because they are dangerous - every string in the config is already free
+  // of control characters, and both of these are yaml_string-escaped where they
+  // land - but because a build failure is diagnosed from the redacted config,
+  // and only a field with a known shape can be printed there. See KEEP in
+  // redactConfig.js.
+  requirePattern(
+    config.board,
+    'board',
+    /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/,
+    'a PlatformIO board ID such as esp32dev'
+  );
+  requireOneOf(config.variant, 'variant', PLATFORM_VARIANTS);
+
+  const espTemperature = config.esp_temperature;
+  if (espTemperature && typeof espTemperature === 'object') {
+    requireOneOf(
+      espTemperature.variant,
+      'esp_temperature.variant',
+      ESP_TEMPERATURE_VARIANTS
     );
   }
 

@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import { FormValues } from '../types';
 import {
+  FormValues,
+  validEspTemperatureVariants,
+  validPlatformVariants,
+} from '../types';
+import {
+  BOARD,
   defaultFormValues,
   generateRandomIdentifier,
   getMaxBleDevices,
@@ -185,5 +190,60 @@ describe('normalizeImportedConfig', () => {
     const normalized = normalizeImportedConfig(withMac('AA-BB-CC-DD-EE-FF'))
       .storages[0].mac_address;
     expect(normalized).toMatch(new RegExp(declared!.groups!.pattern));
+  });
+});
+
+describe('BOARD', () => {
+  // The build prints the board verbatim in the redacted failure log, so it has
+  // to be a token the build recognises. A client that accepts more than the
+  // build does turns a typo into a five-minute build and an opaque failure.
+  it('is the pattern the build enforces', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'scripts', 'validateConfig.js'),
+      'utf-8'
+    );
+    const declared = source.match(
+      /'board',\s*(?:\/\/[^\n]*\n\s*)*\/(?<pattern>\^[^/]+\$)\//
+    );
+    expect(declared).not.toBeNull();
+    const build = new RegExp(declared!.groups!.pattern);
+
+    for (const value of [
+      'esp32dev',
+      'esp32-s3-devkitc-1',
+      'az-delivery-devkit-v4',
+      'um_tinys3',
+      'esp32 dev',
+      '../../etc/passwd',
+      '-leading-dash',
+      '',
+    ]) {
+      expect(BOARD.test(value)).toBe(build.test(value));
+    }
+  });
+});
+
+describe('the variant allow-lists', () => {
+  const source = () =>
+    fs.readFileSync(
+      path.join(__dirname, '..', '..', 'scripts', 'validateConfig.js'),
+      'utf-8'
+    );
+
+  const declaredSet = (name: string) => {
+    const block = source().match(
+      new RegExp(`const ${name} = new Set\\(\\[?(?<body>[^)]*)\\]?\\)`)
+    );
+    expect(block).not.toBeNull();
+    return [...block!.groups!.body.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  };
+
+  it('match the values the form offers', () => {
+    expect(declaredSet('PLATFORM_VARIANTS').sort()).toEqual(
+      [...validPlatformVariants].sort()
+    );
+    expect(declaredSet('ESP_TEMPERATURE_VARIANTS').sort()).toEqual(
+      [...validEspTemperatureVariants].sort()
+    );
   });
 });

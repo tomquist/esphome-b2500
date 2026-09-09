@@ -12,6 +12,8 @@ const baseConfig = () => ({
   poll_interval_seconds: 5,
   log_level: 'INFO',
   flash_size: '4MB',
+  board: 'esp32dev',
+  variant: 'auto',
   mqtt: { enabled: true, topic: 'b2500', broker: 'mqtt.local', port: 1883 },
   wifi: { ssid: 'net', password: 'secret' },
   fallback_hotspot: { ssid: 'Fallback' },
@@ -53,6 +55,31 @@ test('accepts a config that omits optional scalar fields', () => {
   delete config.powermeter;
   delete config.storages[0].mac_address;
   config.web_server.port = '';
+  assert.doesNotThrow(() => validateConfig(config));
+});
+
+test('accepts the boards and variants the form offers', () => {
+  const config = baseConfig();
+  for (const board of [
+    'esp32dev',
+    'esp32-s3-devkitc-1',
+    'az-delivery-devkit-v4',
+  ]) {
+    config.board = board;
+    assert.doesNotThrow(() => validateConfig(config));
+  }
+  for (const variant of [
+    'auto',
+    'esp32',
+    'esp32s2',
+    'esp32s3',
+    'esp32c3',
+    'esp32h2',
+  ]) {
+    config.variant = variant;
+    assert.doesNotThrow(() => validateConfig(config));
+  }
+  config.esp_temperature = { variant: 'ntc' };
   assert.doesNotThrow(() => validateConfig(config));
 });
 
@@ -105,6 +132,21 @@ const badShapes = {
   },
   'log_level outside the allow-list': (c) => {
     c.log_level = 'TRACE';
+  },
+  // Not dangerous - control characters are already gone and both are escaped
+  // where they land - but they are printed verbatim in the failure log, so
+  // they have to be tokens we recognise. See KEEP in redactConfig.js.
+  'a board with a space': (c) => {
+    c.board = 'esp32 dev';
+  },
+  'a board with a slash': (c) => {
+    c.board = '../../etc/passwd';
+  },
+  'a variant outside the allow-list': (c) => {
+    c.variant = 'esp32c6';
+  },
+  'an esp_temperature variant outside the allow-list': (c) => {
+    c.esp_temperature = { variant: 'thermocouple' };
   },
   'port out of range': (c) => {
     c.mqtt.port = 99999;

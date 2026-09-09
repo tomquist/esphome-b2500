@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { FormValues } from '../types';
+import { FormValues, validPlatformVariants } from '../types';
 import { templates } from '../templates';
 
 export const defaultFormValues: FormValues = {
@@ -161,6 +161,14 @@ export const getMaxBleDevices = (): number => 9;
 export const MAC_ADDRESS = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
 
 /**
+ * A PlatformIO board ID. Mirrors `board` in scripts/validateConfig.js, which
+ * constrains it so the redacted failure log can print it verbatim - it is one
+ * of the first things you want when someone reports a build that did not
+ * compile. Kept in step by index.test.ts.
+ */
+export const BOARD = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/**
  * Normalises a config that came from storage rather than from the form.
  *
  * The MAC field formats typed input to colons, but a JSON file and a restored
@@ -187,6 +195,12 @@ export const validateConfig = (config: FormValues) => {
   const errors = [];
   if (!isPlatformVersionValid(config.idf_platform_version)) {
     errors.push('ESP-IDF platform version is invalid');
+  }
+  if (!BOARD.test(config.board)) {
+    errors.push('Board is invalid');
+  }
+  if (!validPlatformVariants.includes(config.variant)) {
+    errors.push('Variant is invalid');
   }
   if (config.storages.length === 0) {
     errors.push('At least one storage is required');

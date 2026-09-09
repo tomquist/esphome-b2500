@@ -16,17 +16,22 @@
  * length is a real hint about a password.
  */
 
-// A subset of the fields `validateConfig` constrains to a fixed shape, plus the
-// template selector `render.js` switches on. Only a subset: a MAC address is
-// equally well constrained and is deliberately not here, because it identifies
-// a device. `board` and `variant` used to be here and are not constrained at
-// all, so they were free-form requester text going verbatim into a public log.
-// Nothing may enter this set that validateConfig does not pin down - the test
-// enforces that direction.
+// What survives verbatim: fields that describe the build rather than the person
+// asking for it, and that are the first things you want when diagnosing a
+// failure - which board, which variant, which flash size, which template.
+//
+// Two conditions, both required. A field must carry nothing about the user or
+// their network, which is why a MAC address is absent though it is as tightly
+// constrained as anything here. And it must be pinned to a known shape by
+// validateConfig, so what reaches a public log is a token from a set we chose
+// rather than whatever the requester sent. The test enforces the second
+// condition; the first is a judgement made per field, here.
 const KEEP = new Set([
   'template_version',
   'log_level',
   'flash_size',
+  'board',
+  'variant',
   'idf_platform_version',
   'tx_pin',
   'rx_pin',

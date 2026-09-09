@@ -28,6 +28,7 @@ import { StorageForm } from './StorageForm';
 import { InfoOutlined } from '@mui/icons-material';
 import { templates } from '../templates';
 import { getMaxBleDevices } from '../utils';
+import { BOARD } from '../utils';
 
 interface ConfigFormProps {
   formValues: FormValues;
@@ -241,7 +242,7 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
         fullWidth
         margin="normal"
         required
-        error={formValues.board.trim() === ''}
+        error={!BOARD.test(formValues.board)}
         helperText={
           <span>
             The PlatformIO board ID. Choose the appropriate board from this{' '}
