@@ -9,10 +9,13 @@
 # Counting both gives a progress fraction that does not depend on being able to
 # read the compiler's output.
 #
-# It publishes that output too, when the API lets it: publish-build-log.sh
-# uploads whatever the compiler has said since the last time as its own object,
-# and the status document carries only how many of those exist. That part is
-# best effort - a build whose log cannot be read still reports progress.
+# The same listing names what the compiler is on right now: the object written
+# most recently is the unit it just finished.
+#
+# The compiler's own output goes alongside it. The build step tees it to a file
+# and publish-build-log.sh uploads whatever is new as its own object, so the
+# status document carries only how many of those exist. That part is best
+# effort - a build whose output cannot be read still reports progress.
 #
 # Runs in the background alongside the build step. It stops when the stop file
 # appears, which it only checks between polls: an upload in flight always
@@ -27,18 +30,30 @@ STOP_FILE="${PROGRESS_STOP_FILE:-progress-watcher.stop}"
 BUILD_ROOT="${PROGRESS_BUILD_ROOT:-.esphome/build}"
 PUBLISH="${PROGRESS_PUBLISH_COMMAND:-./scripts/publish-build-status.sh}"
 LOG_COMMAND="${PROGRESS_LOG_COMMAND:-./scripts/publish-build-log.sh}"
-# Slower than the poll: reading the log costs an API request against a limit
-# every build in the repository shares, while counting files costs nothing. At
-# ten seconds a busy hour of builds stays well inside it. Zero turns log
-# reporting off.
+# Slower than the poll: publishing a segment is an upload, and the compiler
+# does not say enough in five seconds to be worth one. Zero turns it off.
 LOG_INTERVAL_SECONDS="${PROGRESS_LOG_INTERVAL_SECONDS:-10}"
 # The ninja graph is written once and then only grows by the second graph, so
 # re-reading it every poll would spend most of the interval grepping megabytes.
 TOTAL_REFRESH_SECONDS="${PROGRESS_TOTAL_REFRESH_SECONDS:-60}"
 
-count_objects() {
-  find "$BUILD_ROOT" -type f \( -name '*.obj' -o -name '*.o' \) 2>/dev/null |
-    wc -l
+# How many objects exist and which was written last, from one traversal: the
+# count alone already costs a walk of the build tree, so following the compiler
+# comes free. Printed as one `count\tname` line so both survive a subshell.
+scan_objects() {
+  find "$BUILD_ROOT" -type f \( -name '*.obj' -o -name '*.o' \) \
+    -printf '%T@\t%f\n' 2>/dev/null |
+    awk -F'\t' '
+      # Ties are ordinary: ninja compiles in parallel and mtimes are only so
+      # fine, so several units can land in the same tick. Broken on the name
+      # rather than left to the order the tree happens to be walked in, which
+      # would let the reported unit flicker between two files that finished
+      # together.
+      {
+        count++
+        if ($1 > newest || ($1 == newest && $2 > name)) { newest = $1; name = $2 }
+      }
+      END { printf "%d\t%s\n", count + 0, name }'
 }
 
 # Every object file the generated ninja graphs plan to build. Bootloader and
@@ -73,9 +88,9 @@ refresh_expected() {
 log_read_at=0
 segments=0
 
-# Uploads whatever the build has said since the last segment and reports how
-# many segments now exist. Publishing the log is what advances that count, so
-# the object is always in the bucket before the status document names it.
+# Uploads whatever the compiler has said since the last segment and reports how
+# many now exist. Publishing is what advances that count, so the object is
+# always in the bucket before the status document names it.
 refresh_log() {
   [[ "$LOG_INTERVAL_SECONDS" -gt 0 ]] || return
   local moment published
@@ -84,29 +99,43 @@ refresh_log() {
     return
   fi
   log_read_at=$moment
-  published=$("$LOG_COMMAND" 2>/dev/null)
+  published=$("$LOG_COMMAND" 2>&1)
   if [[ "$published" =~ ^[0-9]+$ ]]; then
     segments=$published
+  else
+    # Not discarded: without it a build that published nothing says nothing
+    # about why, which is exactly the hole the last attempt at this fell into.
+    echo "publishing the build output: $published" >&2
   fi
 }
 
 last_completed=''
+last_current=''
 last_segments=''
 while [[ ! -e "$STOP_FILE" ]]; do
-  completed=$(count_objects)
+  scan=$(scan_objects)
+  completed=${scan%%$'\t'*}
+  current=${scan#*$'\t'}
+  # `sha256.c.obj` is the object; `sha256.c` is what was compiled to make it.
+  current=${current%.obj}
+  current=${current%.o}
   refresh_expected
   refresh_log
-  # Republish for either half: early on there are no object files yet but the
-  # log already has the configure step to show, and late in a link step the
-  # count stands still while the output keeps moving.
-  if [[ "$completed" != "$last_completed" || "$segments" != "$last_segments" ]] &&
+  # Any of the three: the name moves through files the count cannot
+  # distinguish, and early on the compiler is talking before the first object
+  # exists at all.
+  if [[ "$completed" != "$last_completed" ||
+        "$current" != "$last_current" ||
+        "$segments" != "$last_segments" ]] &&
      [[ "$completed" -gt 0 || "$segments" -gt 0 ]]; then
     STEP=compiling \
       PROGRESS_DONE="$completed" \
       PROGRESS_TOTAL="$expected" \
+      PROGRESS_CURRENT="$current" \
       LOG_SEGMENTS="$segments" \
       "$PUBLISH" building "Compiling the firmware" > /dev/null || true
     last_completed="$completed"
+    last_current="$current"
     last_segments="$segments"
   fi
   # Sleep in short ticks so that stopping does not have to wait out a full

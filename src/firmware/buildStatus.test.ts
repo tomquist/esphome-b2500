@@ -179,6 +179,23 @@ describe('parseBuildStatus', () => {
     ).toBeUndefined();
   });
 
+  it('reads the unit the compiler is on', () => {
+    const read = (current: unknown) =>
+      parseBuildStatus({
+        status: 'building',
+        progress: { completed: 12, total: 20, current },
+      })?.progress?.current;
+
+    expect(read('sha256.c')).toBe('sha256.c');
+    expect(read('  sha256.c  ')).toBe('sha256.c');
+    expect(read('')).toBeUndefined();
+    expect(read(42)).toBeUndefined();
+    // A name long enough to push the rest of the line off the page.
+    expect(read('x'.repeat(81))).toBeUndefined();
+    // Control characters would break the line it is rendered on.
+    expect(read('sha\u0000256.c\n')).toBe('sha256.c');
+  });
+
   it('will not be sent fetching segments without end', () => {
     expect(
       parseBuildStatus({ status: 'building', log_segments: 1e9 })?.logSegments

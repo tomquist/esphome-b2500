@@ -2,7 +2,7 @@
 #
 # Publishes the build output as append-only segments next to the status
 # document, and prints how many exist.
-#
+
 # S3 has no append: an object is replaced whole or not at all. Re-uploading one
 # growing object would mean sending the entire log every few seconds, and the
 # page re-reading it. So the log is published as a run of immutable segments -
@@ -40,7 +40,7 @@
 # Environment:
 #   IDENTIFIER            build identifier from the repository dispatch
 #   S3_BUCKET             target bucket
-#   LOG_FETCH_COMMAND     what prints the cleaned log, default fetch-job-log.sh
+#   LOG_FETCH_COMMAND     what prints the cleaned log, default read-build-log.sh
 #   LOG_STATE_PREFIX      where the published bytes and count are kept
 #   LOG_MAX_TOTAL_BYTES   stop publishing once this much has been published
 #   LOG_LOCK_WAIT_SECONDS how long to wait for another publisher to finish
@@ -48,7 +48,7 @@
 
 set -uo pipefail
 
-FETCH="${LOG_FETCH_COMMAND:-./scripts/fetch-job-log.sh}"
+FETCH="${LOG_FETCH_COMMAND:-./scripts/read-build-log.sh}"
 STATE_PREFIX="${LOG_STATE_PREFIX:-build-log}"
 # A build that somehow prints without end must not publish without end either.
 MAX_TOTAL_BYTES="${LOG_MAX_TOTAL_BYTES:-4000000}"

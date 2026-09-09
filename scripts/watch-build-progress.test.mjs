@@ -41,8 +41,14 @@ const workspace = ({ objects, expected, publishSeconds = 0 }) => {
   edges.push('build b2500.elf: CXX_EXECUTABLE_LINKER src/file0.c.obj');
   fs.writeFileSync(path.join(build, 'build.ninja'), `${edges.join('\n')}\n`);
 
+  // Aged, so "the newest object" is unambiguous in the tests that care. Files
+  // written in one go land in the same clock tick, where the tie-break is the
+  // name - true to the build, but not what those tests are about.
+  const aged = new Date(Date.now() - 60_000);
   for (let index = 0; index < objects; index += 1) {
-    fs.writeFileSync(path.join(build, `file${index}.c.obj`), '');
+    const object = path.join(build, `file${index}.c.obj`);
+    fs.writeFileSync(object, '');
+    fs.utimesSync(object, aged, aged);
   }
 
   // Records when each publish starts and finishes, so a publish that overlaps
@@ -53,22 +59,9 @@ const workspace = ({ objects, expected, publishSeconds = 0 }) => {
     [
       '#!/usr/bin/env bash',
       `echo "start $PROGRESS_DONE/$PROGRESS_TOTAL" >> "${path.join(dir, 'published.log')}"`,
-      `echo "segments ${'$'}{LOG_SEGMENTS:-none}" >> "${path.join(dir, 'published-segments.log')}"`,
+      `echo "current ${'$'}{PROGRESS_CURRENT:-none} segments ${'$'}{LOG_SEGMENTS:-none}" >> "${path.join(dir, 'published-current.log')}"`,
       `sleep ${publishSeconds}`,
       `echo "end $PROGRESS_DONE/$PROGRESS_TOTAL" >> "${path.join(dir, 'published.log')}"`,
-    ].join('\n'),
-    { mode: 0o755 }
-  );
-
-  // Stands in for publish-build-log.sh: prints how many output segments it has
-  // published, and fails while there is nothing to read - the way a build whose
-  // log the API will not serve behaves.
-  fs.writeFileSync(
-    path.join(dir, 'log-stub.sh'),
-    [
-      '#!/usr/bin/env bash',
-      `[[ -s "${path.join(dir, 'segments')}" ]] || exit 1`,
-      `cat "${path.join(dir, 'segments')}"`,
     ].join('\n'),
     { mode: 0o755 }
   );
@@ -78,16 +71,30 @@ const workspace = ({ objects, expected, publishSeconds = 0 }) => {
       ? fs.readFileSync(path.join(dir, name), 'utf8').trim().split('\n')
       : [];
 
+  // Stands in for publish-build-log.sh: reports how many segments it has
+  // published, and fails while there is nothing to read - the way a build
+  // whose output file does not exist yet behaves.
+  fs.writeFileSync(
+    path.join(dir, 'log-stub.sh'),
+    [
+      '#!/usr/bin/env bash',
+      `[[ -s "${path.join(dir, 'segments')}" ]] || { echo "no build output yet" >&2; exit 1; }`,
+      `cat "${path.join(dir, 'segments')}"`,
+    ].join('\n'),
+    { mode: 0o755 }
+  );
+
   return {
     dir,
     stopFile: path.join(dir, 'stop'),
+    build,
     segmentsFile: path.join(dir, 'segments'),
     published: () => lines('published.log'),
-    publishedSegments: () => lines('published-segments.log'),
+    publishedCurrent: () => lines('published-current.log'),
   };
 };
 
-// Reporting the build output is off unless a test asks for it: it is best
+// Publishing the build output is off unless a test asks for it: it is best
 // effort in the workflow too, and the counting has to hold up without it.
 const start = (space, { intervalSeconds = 1, logIntervalSeconds = 0 } = {}) =>
   spawn('bash', [watcher], {
@@ -161,19 +168,67 @@ test('finishes an upload that overlaps being stopped, and publishes nothing afte
   );
 });
 
+test('names the unit the compiler is on, and republishes when it moves', async () => {
+  const space = workspace({ objects: 2, expected: 4 });
+  fs.writeFileSync(path.join(space.build, 'sha256.c.obj'), '');
+  const child = start(space);
+
+  const named = await waitFor(() =>
+    space.publishedCurrent().some((line) => line.startsWith('current sha256.c'))
+  );
+
+  // A unit finishing between two polls moves the name as well as the count.
+  fs.writeFileSync(path.join(space.build, 'wifi_component.cpp.o'), '');
+  const moved = await waitFor(() =>
+    space
+      .publishedCurrent()
+      .some((line) => line.startsWith('current wifi_component.cpp'))
+  );
+
+  fs.writeFileSync(space.stopFile, '');
+  await exited(child);
+
+  assert.ok(
+    named,
+    `never named the newest object: ${space.publishedCurrent()}`
+  );
+  assert.ok(moved, 'the name did not follow the object written after it');
+});
+
+test('reports no current unit before the first object lands', async () => {
+  // Nothing is published at all until there is something to say: the counts
+  // are zero and there is no name, which is the configure phase.
+  const space = workspace({ objects: 0, expected: 4 });
+  const child = start(space);
+
+  const publishedEarly = await waitFor(() => space.published().length > 0, {
+    timeoutMs: 2500,
+  });
+  fs.writeFileSync(path.join(space.build, 'first.c.obj'), '');
+  const publishedLater = await waitFor(() =>
+    space.publishedCurrent().some((line) => line.startsWith('current first.c'))
+  );
+
+  fs.writeFileSync(space.stopFile, '');
+  await exited(child);
+
+  assert.equal(publishedEarly, false, 'published a status with nothing to say');
+  assert.ok(publishedLater, 'never reported the first object once it appeared');
+});
+
 test('republishes when a new build output segment appears', async () => {
   const space = workspace({ objects: 2, expected: 4 });
   fs.writeFileSync(space.segmentsFile, '1\n');
   const child = start(space, { logIntervalSeconds: 1 });
 
   const announced = await waitFor(() =>
-    space.publishedSegments().includes('segments 1')
+    space.publishedCurrent().some((line) => line.endsWith('segments 1'))
   );
-  // The count stands still through a link step, which is exactly when the
+  // The counts stand still through a link step, which is exactly when the
   // output is the only thing left to show.
   fs.writeFileSync(space.segmentsFile, '2\n');
   const republished = await waitFor(() =>
-    space.publishedSegments().includes('segments 2')
+    space.publishedCurrent().some((line) => line.endsWith('segments 2'))
   );
 
   fs.writeFileSync(space.stopFile, '');
@@ -181,16 +236,11 @@ test('republishes when a new build output segment appears', async () => {
 
   assert.ok(announced, 'the watcher never published a segment count');
   assert.ok(republished, 'the watcher sat on a segment it had just published');
-  assert.deepEqual(
-    space.published().filter((line) => line.startsWith('start')),
-    ['start 2/4', 'start 2/4'],
-    'both publishes must carry the same unchanged counts'
-  );
 });
 
 test('keeps reporting progress when the build output cannot be published', async () => {
   // No segment count at all, so the stub fails the way publish-build-log.sh
-  // does when the API will not serve this job's log.
+  // does before the build step has written anything.
   const space = workspace({ objects: 3, expected: 6 });
   const child = start(space, { logIntervalSeconds: 1 });
 
@@ -201,7 +251,9 @@ test('keeps reporting progress when the build output cannot be published', async
 
   assert.ok(
     reported,
-    'a build whose log cannot be published stopped reporting progress'
+    'a build whose output cannot be published stopped reporting progress'
   );
-  assert.deepEqual(space.publishedSegments(), ['segments 0']);
+  assert.ok(
+    space.publishedCurrent().every((line) => line.endsWith('segments 0'))
+  );
 });

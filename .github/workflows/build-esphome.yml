@@ -35,18 +35,19 @@ jobs:
       # context and a pick of ESPHome's validation behaviour.
       ESPHOME_VERSION: '2026.8.1'
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      # Everything before the compile is the runner installing Python, Node and
-      # the AWS action - not what someone waiting on their firmware wants to
-      # read, so the published output starts where the build does.
-      LOG_START_AT: '##[group]Run esphome/build-action'
     permissions:
       contents: read
-      # So the build can read its own log back and forward the compiler's
-      # output to the page waiting for it. See scripts/fetch-job-log.sh.
-      actions: read
     steps:
+      # No credentials left behind in .git/config: the build step mounts this
+      # whole workspace into the container that compiles the requester's
+      # configuration, and nothing in this job does an authenticated git
+      # operation afterwards. The token is only `contents: read`, but on a
+      # build driven by a public dispatch payload it does not need to be
+      # inside the container at all.
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -115,27 +116,59 @@ jobs:
       - name: Report compile progress
         env:
           STEP: compiling
-          # Inherited by the watcher, which reads this job's log back through
-          # the API. Scoped to the steps that need it rather than set on the
-          # job, so the third-party build action never sees it.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./scripts/publish-build-status.sh building "Compiling the firmware" || true
-          rm -f progress-watcher.stop job-log-unavailable job-log-unavailable.misses \
-            build-log.published build-log.count
+          rm -f progress-watcher.stop build-log.published build-log.count
           nohup ./scripts/watch-build-progress.sh > progress-watcher.log 2>&1 &
           echo "PROGRESS_WATCHER_PID=$!" >> "$GITHUB_ENV"
 
+      # esphome/build-action is a composite action, so the compile happens in a
+      # `run:` step of its own that we cannot tee - and the job log its output
+      # lands in is not served by the API until the job has ended, which is
+      # after every step that could publish it. So its own entrypoint is run
+      # here instead, at the same pinned commit and with the same arguments,
+      # and the compiler's stdout is copied to a file the watcher publishes
+      # from. When bumping the pin, re-read the action's `Run container` step
+      # and this against each other.
+      - name: Check out the ESPHome build action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: esphome/build-action
+          ref: ae5408cdbc4f70692bf8e345c4982bca05a93667 # v8.1.0
+          path: .build-action
+          persist-credentials: false
+
       - name: Build firmware
         id: esphome-build
-        uses: esphome/build-action@ae5408cdbc4f70692bf8e345c4982bca05a93667 # v8.1.0
-        with:
-          yaml-file: device.yaml
-          version: ${{ env.ESPHOME_VERSION }}
-          # Required so that the browser can flash the firmware without having
-          # to assemble an esp-web-tools manifest itself.
-          complete-manifest: true
         continue-on-error: true
+        env:
+          # action.yml is where this is defined; entrypoint.py re-checks the
+          # running ESPHome against it, and skips the check when it is absent.
+          MINIMUM_ESPHOME_VERSION: '2026.7.0'
+        run: |
+          chmod +x .build-action/entrypoint.py
+          docker pull "ghcr.io/esphome/esphome:${ESPHOME_VERSION}"
+          # Without this the failing compile would be masked by tee's success.
+          set -o pipefail
+          # --complete-manifest so the browser can flash the firmware without
+          # assembling an esp-web-tools manifest itself. PYTHONUNBUFFERED
+          # because stdout is a pipe here rather than the runner's tty, and
+          # block-buffered output would arrive in lumps instead of live.
+          docker run --rm \
+            --workdir /github/workspace \
+            -v "$(pwd)":/github/workspace -v "$HOME:$HOME" \
+            -v "$(pwd)/.build-action/entrypoint.py:/entrypoint.py:ro" \
+            --entrypoint /entrypoint.py \
+            --user "$(id -u):$(id -g)" \
+            -e HOME \
+            -e CCACHE_DIR \
+            -e MINIMUM_ESPHOME_VERSION \
+            -e PLATFORMIO_GLOBALLIB_DIR= \
+            -e PYTHONUNBUFFERED=1 \
+            "ghcr.io/esphome/esphome:${ESPHOME_VERSION}" \
+              device.yaml \
+              --outputs-file "$GITHUB_OUTPUT" \
+              --complete-manifest 2>&1 | tee build.log
 
       # Before any of the paths below publish a status of their own, so that a
       # late progress update cannot overwrite the build result. The watcher only
@@ -159,30 +192,17 @@ jobs:
             echo "::endgroup::"
           fi
 
-      # The watcher stopped between polls, so the last seconds of the compile -
-      # on a failed build, the error itself - are not published yet. Runs after
-      # the watcher has exited so there is only ever one writer, and before any
-      # terminal status so the page is never told about a segment that is not
+      # The watcher stops between polls, so the last seconds of the compile -
+      # on a failed build, the error itself - are not published yet. After the
+      # watcher has exited, so there is only ever one publisher, and before any
+      # terminal status, so the page is never told about a segment that is not
       # in the bucket yet.
       - name: Publish the rest of the build output
         if: always()
         continue-on-error: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LOG_END_AT_ERROR: 'true'
-          # Not the file the watcher may have written off: whatever stopped it
-          # reporting during the compile is worth one more try at the end.
-          LOG_DISABLED_FILE: job-log-final-unavailable
-        run: |
-          segments="$(./scripts/publish-build-log.sh)"
-          # The start marker is a runner convention rather than something we
-          # control, and while the build runs a stream that never started is
-          # better than one that shifts under the page. Here it is over, so
-          # nothing can shift: publish the whole log rather than none of it.
-          if [[ "$segments" == "0" ]]; then
-            segments="$(LOG_START_AT='' ./scripts/publish-build-log.sh)"
-          fi
-          echo "LOG_SEGMENTS=$segments" >> "$GITHUB_ENV"
+        run: echo "LOG_SEGMENTS=$(./scripts/publish-build-log.sh)" >> "$GITHUB_ENV"
 
       # Logs on a public repository are world readable, and the config holds
       # the requester's SSID, MQTT broker and username. The redacted form keeps
@@ -238,7 +258,7 @@ jobs:
         env:
           FIRMWARE_URL: https://${{ env.S3_BUCKET }}.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/${{ env.IDENTIFIER }}.zip.enc
           FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
-          ESPHOME_VERSION: ${{ steps.esphome-build.outputs.version }}
+          ESPHOME_VERSION: ${{ steps.esphome-build.outputs.esphome-version }}
         run: ./scripts/publish-build-status.sh success
 
       - name: Output firmware URL
@@ -248,14 +268,6 @@ jobs:
       - name: Publish build failure
         if: failure()
         continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LOG_END_AT_ERROR: 'true'
-          LOG_DISABLED_FILE: job-log-failure-unavailable
         run: |
-          # A failure after the compile - packaging, or the upload - has said
-          # something since the flush above, and this is the last chance to
-          # publish it.
-          export LOG_SEGMENTS="$(./scripts/publish-build-log.sh)"
           ./scripts/publish-build-status.sh error \
             "The firmware build failed. Please check the build log and open an issue with your configuration."

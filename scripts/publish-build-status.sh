@@ -13,6 +13,7 @@
 #   STEP             what the build is doing: preparing, compiling, packaging
 #   PROGRESS_DONE    compile units finished so far (with PROGRESS_TOTAL)
 #   PROGRESS_TOTAL   compile units the build expects in total
+#   PROGRESS_CURRENT what the compiler is on right now
 #   LOG_SEGMENTS     how many build output segments exist (publish-build-log.sh)
 #   FIRMWARE_URL     download URL of the firmware ZIP (success only)
 #   FIRMWARE_NAME    name of the firmware directory inside the ZIP
@@ -44,6 +45,7 @@ jq -n \
   --arg firmware_url "${FIRMWARE_URL:-}" \
   --arg firmware_name "${FIRMWARE_NAME:-}" \
   --arg esphome_version "${ESPHOME_VERSION:-}" \
+  --arg current "${PROGRESS_CURRENT:-}" \
   --argjson done "${PROGRESS_DONE:-0}" \
   --argjson total "${PROGRESS_TOTAL:-0}" \
   --argjson segments "$SEGMENTS" \
@@ -55,7 +57,8 @@ jq -n \
        | with_entries(select(.value != "")))
     + (if $done > 0 or $total > 0
        then {progress: ({completed: $done}
-                        + (if $total > 0 then {total: $total} else {} end))}
+                        + (if $total > 0 then {total: $total} else {} end)
+                        + (if $current != "" then {current: $current} else {} end))}
        else {} end)
     + (if $segments > 0 then {log_segments: $segments} else {} end)' \
   > build-status.json

@@ -89,9 +89,13 @@ const compiledFiles = (status: BuildStatus | null): string | null => {
   if (!progress) {
     return null;
   }
-  return progress.total
+  const counted = progress.total
     ? `${progress.completed} of ${progress.total} files`
     : `${progress.completed} files`;
+  // The file names move even where the counts cannot: through a run of units
+  // that finish between two polls, and through the ones the total does not
+  // know about. It is the part of this line that shows the build is alive.
+  return progress.current ? `${counted} · ${progress.current}` : counted;
 };
 
 /**
