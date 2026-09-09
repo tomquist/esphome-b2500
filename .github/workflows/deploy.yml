@@ -11,6 +11,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The whole job is seconds of work. Without this a hung step burns six hours
+    # of Actions minutes before GitHub gives up - which is what happened when
+    # `node --test` stopped after printing its TAP header and left two orphaned
+    # children behind.
+    timeout-minutes: 15
     permissions:
       contents: read
     env:
@@ -38,10 +43,16 @@ jobs:
     - name: Typecheck
       run: npm run typecheck
 
-    - name: Run tests
-      run: |
-        npm test -- --watchAll=false
-        node --test scripts/*.test.mjs
+    - name: Run frontend tests
+      run: npm test -- --watchAll=false
+
+    # Serially, and as its own step. Run in parallel these hung on the CI runner
+    # after printing the TAP header, with no test ever reporting and two node
+    # children orphaned - not reproducible here on either Node 18 or 22, at any
+    # concurrency. Serial execution removes the variable; the split means a
+    # recurrence names which half is at fault rather than pointing at both.
+    - name: Run script tests
+      run: node --test --test-concurrency=1 scripts/*.test.mjs
 
     - name: Build the app
       run: npm run build
