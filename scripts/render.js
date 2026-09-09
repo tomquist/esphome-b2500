@@ -19,7 +19,34 @@ const buildRenderContext = (config, env) => ({
   automated_build: env.AUTOMATED_BUILD === 'true',
 });
 
-module.exports = { buildRenderContext };
+const MAX_SECRETS = 64;
+
+/**
+ * Registers the values the browser marked as secrets so they are redacted from
+ * the log.
+ *
+ * The list comes from the payload like everything else, and unlike `config` it
+ * does not go through validateConfig: a string here would iterate its
+ * characters and mask single letters across the whole log, an enormous array
+ * would drown it, and a newline would end the `::add-mask::` command and let
+ * the rest of the line run as a workflow command of its own - `::stop-commands::`
+ * there would silence every mask that follows.
+ *
+ * Short values are masked too. Masking a two-character password makes the log
+ * noisy, but not masking it publishes the password.
+ */
+const maskSecrets = (secrets, log = console.log) => {
+  if (secrets != null && !Array.isArray(secrets)) {
+    throw new Error('secrets must be an array');
+  }
+  for (const secret of (secrets || []).slice(0, MAX_SECRETS)) {
+    if (typeof secret === 'string' && secret.trim() !== '') {
+      log(`::add-mask::${secret.replace(/[\r\n]/g, '')}`);
+    }
+  }
+};
+
+module.exports = { buildRenderContext, MAX_SECRETS, maskSecrets };
 
 const main = () => {
   // The config is addressed to the repo's static key, so this step needs the
@@ -39,22 +66,7 @@ const main = () => {
   // dispatch proxy, so it is fully attacker controlled.
   validateConfig(config);
 
-  // Mask all secrets. The list comes from the payload like everything else, and
-  // unlike `config` it does not go through validateConfig: a string here would
-  // iterate its characters and mask single letters across the whole log, an
-  // enormous array would drown it, and a newline would end the ::add-mask::
-  // command and let the rest of the line run as a workflow command of its own
-  // (::stop-commands:: would silence every mask that follows).
-  if (secrets != null && !Array.isArray(secrets)) {
-    throw new Error('secrets must be an array');
-  }
-  for (const secret of (secrets || []).slice(0, 64)) {
-    // Too short to be worth masking, and masking it would redact ordinary words
-    // out of the log.
-    if (typeof secret === 'string' && secret.trim().length >= 4) {
-      console.log(`::add-mask::${secret.replace(/[\r\n]/g, '')}`);
-    }
-  }
+  maskSecrets(secrets);
 
   // Write the config to a file for debugging
   fs.writeFileSync('config.json', JSON.stringify(config, null, 2));

@@ -329,6 +329,15 @@ ${build ? `- Build: [${build}]\n` : ''}
   return `https://github.com/tomquist/esphome-b2500/issues/new?body=${encodeURIComponent(body)}`;
 };
 
+/**
+ * Mirrors `idf_platform_version` in scripts/validateConfig.js. Kept in step by
+ * utils/index.test.ts, which reads that file: a form that accepts more than the
+ * build does turns into a five-minute build and an opaque failure.
+ */
+export const isPlatformVersionValid = (value: string | undefined) =>
+  !value ||
+  /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(-[0-9A-Za-z]{1,16})?$/.test(value);
+
 export const generateRandomIdentifier = () => {
   const adjectives = [
     'tiny',

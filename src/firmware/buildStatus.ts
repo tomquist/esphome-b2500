@@ -80,8 +80,9 @@ const trustedUrl = (
   }
   try {
     const url = new URL(raw);
+    // The parsed form, so what is returned is what was actually checked.
     return url.protocol === 'https:' && allowedOrigins.includes(url.origin)
-      ? raw
+      ? url.href
       : undefined;
   } catch (error) {
     return undefined;

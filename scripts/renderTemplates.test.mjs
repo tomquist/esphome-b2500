@@ -1,5 +1,5 @@
-// Template rendering, for the two properties the YAML depends on that nothing
-// else covers: that requester strings are escaped where they land in a quoted
+// render.js: the template properties the YAML depends on, and the secret
+// masking, none of which anything else covers. Specifically: that requester strings are escaped where they land in a quoted
 // scalar, and that the `!secret` fallback for a missing MAC emits a real YAML
 // tag rather than a quoted literal.
 //
@@ -17,7 +17,7 @@ const require = createRequire(import.meta.url);
 const nunjucks = require('nunjucks');
 // The real one, not a copy: a render.js that spread the config last would be
 // the git_sha vulnerability again, and a private copy here would stay green.
-const { buildRenderContext } = require('./render.js');
+const { buildRenderContext, MAX_SECRETS, maskSecrets } = require('./render.js');
 
 // The URL itself, not its pathname: readFileSync takes a file: URL, and
 // .pathname would yield /C:/... on Windows. Matches the sibling tests.
@@ -85,3 +85,52 @@ for (const version of ['v2', 'v2-minimal']) {
     assert.doesNotMatch(yaml, /attacker-branch/);
   });
 }
+
+// maskSecrets guards a public log against the requester's own payload, and
+// until now it ran only inside render.js's main() where nothing could reach it.
+const masked = (secrets) => {
+  const lines = [];
+  maskSecrets(secrets, (line) => lines.push(line));
+  return lines;
+};
+
+test('masks every secret it is given, however short', () => {
+  // The old code masked anything non-empty; a length floor here would publish
+  // short passwords.
+  assert.deepEqual(masked(['ab', 'a longer one']), [
+    '::add-mask::ab',
+    '::add-mask::a longer one',
+  ]);
+});
+
+test('skips blank and non-string entries', () => {
+  assert.deepEqual(masked(['', '   ', 42, null, undefined, {}]), []);
+});
+
+test('tolerates a missing list', () => {
+  assert.deepEqual(masked(undefined), []);
+  assert.deepEqual(masked(null), []);
+});
+
+test('rejects a list that is not one', () => {
+  // A string would iterate its characters and mask single letters everywhere.
+  assert.throws(() => masked('abcd'), /secrets must be an array/);
+});
+
+test('caps how many it registers', () => {
+  const many = Array.from(
+    { length: MAX_SECRETS + 10 },
+    (_, i) => `secret-${i}`
+  );
+  assert.equal(masked(many).length, MAX_SECRETS);
+});
+
+test('cannot be made to emit a second workflow command', () => {
+  // A newline would end the ::add-mask:: and run the rest as its own command;
+  // ::stop-commands:: would then silence every mask after it.
+  const lines = masked(['aaa\n::stop-commands::x\nbbb']);
+
+  assert.equal(lines.length, 1);
+  assert.doesNotMatch(lines[0], /\n/);
+  assert.equal(lines[0], '::add-mask::aaa::stop-commands::xbbb');
+});

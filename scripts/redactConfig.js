@@ -16,10 +16,13 @@
  * length is a real hint about a password.
  */
 
-// Only fields `validateConfig` constrains to a fixed shape, plus the template
-// selector `render.js` switches on. `board` and `variant` used to be here, but
-// nothing constrains them, so they were free-form requester text going verbatim
-// into a public log. The two sets should stay the same set.
+// A subset of the fields `validateConfig` constrains to a fixed shape, plus the
+// template selector `render.js` switches on. Only a subset: a MAC address is
+// equally well constrained and is deliberately not here, because it identifies
+// a device. `board` and `variant` used to be here and are not constrained at
+// all, so they were free-form requester text going verbatim into a public log.
+// Nothing may enter this set that validateConfig does not pin down - the test
+// enforces that direction.
 const KEEP = new Set([
   'template_version',
   'log_level',
@@ -59,7 +62,7 @@ const redact = (value, key) => {
 /** Returns a copy of `config` safe to print to a public log. */
 const redactConfig = (config) => redact(config, undefined);
 
-module.exports = { redactConfig };
+module.exports = { KEEP, redactConfig };
 
 if (require.main === module) {
   const fs = require('fs');

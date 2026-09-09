@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { generateRandomIdentifier } from './index';
+import { generateRandomIdentifier, isPlatformVersionValid } from './index';
 
 // Read out of the workflow rather than copied: the identifier is used unquoted
 // in an S3 object key, and a copy here would stay green while the workflow
@@ -44,5 +44,40 @@ describe('generateRandomIdentifier', () => {
       suffixes.add(suffix as string);
     }
     expect(suffixes.size).toBe(500);
+  });
+});
+
+describe('isPlatformVersionValid', () => {
+  // Read out of validateConfig rather than restated: a form that accepts more
+  // than the build does means a five-minute build and an opaque failure.
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'scripts', 'validateConfig.js'),
+    'utf-8'
+  );
+  const declared = source.match(
+    /idf_platform_version',\s*\/(?<pattern>\^[^/]+\$)\//
+  );
+
+  it('mirrors the pattern the build enforces', () => {
+    expect(declared).not.toBeNull();
+    const build = new RegExp(declared!.groups!.pattern);
+
+    for (const value of [
+      '55.3.37',
+      '55.3.37-1',
+      '6.0.0-rc1',
+      'https://attacker.example/platform.zip',
+      'https://github.com/a/b.git#main',
+      '/github/workspace/evil',
+      'recommended',
+      '55.3',
+    ]) {
+      expect(isPlatformVersionValid(value)).toBe(build.test(value));
+    }
+  });
+
+  it('accepts an empty value, which the build treats as absent', () => {
+    expect(isPlatformVersionValid('')).toBe(true);
+    expect(isPlatformVersionValid(undefined)).toBe(true);
   });
 });

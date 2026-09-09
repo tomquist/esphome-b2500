@@ -13,7 +13,8 @@
  *   config    browser ephemeral private <-> repo static public
  *             The runner has to read the config to render the YAML, so this one
  *             is addressed to the repo's long-lived key. `BUILD_PRIVATE_KEY` is
- *             the only secret in the build, and only the render step needs it.
+ *             the only secret this scheme needs (the job also carries the AWS
+ *             credentials), and only the render step reads it.
  *
  *   firmware  runner ephemeral private <-> browser ephemeral public
  *             Nothing but the browser can read this, and the step that writes

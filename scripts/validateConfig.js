@@ -42,10 +42,15 @@ class InvalidConfigError extends Error {
 const CONTROL_CHARS = /[\x00-\x08\x0a-\x1f\x7f]/;
 
 // Names the templates expect to come from the build, not from the requester.
-// `render.js` overrides them in the render context, so this is the second of
-// two layers: `git_sha` reaches the `ref` that ESPHome fetches the b2500
-// component from, which is a fetcher rather than a plain YAML scalar.
+// `git_sha` reaches the `ref` that ESPHome fetches the b2500 component from,
+// which is a fetcher rather than a plain YAML scalar, so it gets a second
+// layer: render.js overrides it in the context. `ref` itself is overridden by
+// the templates' own `{% set ref = ... %}` rather than by render.js, and is
+// listed here so a template that stopped doing that would not silently expose
+// it.
 const RESERVED_KEYS = ['git_sha', 'automated_build', 'ref'];
+
+const MAX_STORAGES = 8;
 
 const LOG_LEVELS = new Set([
   'NONE',
@@ -218,6 +223,13 @@ const validateConfig = (config) => {
     if (!Array.isArray(config.storages)) {
       throw new InvalidConfigError('storages must be an array');
     }
+    // Each storage expands to roughly a hundred YAML entities, and the build is
+    // unauthenticated. The UI offers far fewer than this.
+    if (config.storages.length > MAX_STORAGES) {
+      throw new InvalidConfigError(
+        `storages must hold at most ${MAX_STORAGES} entries`
+      );
+    }
     config.storages.forEach((storage, index) => {
       if (storage && typeof storage === 'object') {
         requireInteger(storage.version, `storages[${index}].version`, {
@@ -227,7 +239,10 @@ const validateConfig = (config) => {
         requirePattern(
           storage.mac_address,
           `storages[${index}].mac_address`,
-          /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/,
+          // Both separators, because the form accepts both (StorageForm.tsx
+          // and utils/validateForm). A stricter rule here would only turn a
+          // valid-looking entry into a failed build five minutes later.
+          /^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/,
           'a MAC address such as 00:11:22:33:44:55'
         );
       }

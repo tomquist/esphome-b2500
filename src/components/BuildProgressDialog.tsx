@@ -132,6 +132,10 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   const [status, setStatus] = useState<BuildStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRetryable, setIsRetryable] = useState(false);
+  // Whether the build itself failed, as opposed to this page failing to turn a
+  // finished build into something flashable. Not the same as `!isRetryable`:
+  // an archive this page cannot decrypt is a successful build we cannot use.
+  const [didBuildFail, setDidBuildFail] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [bundle, setBundle] = useState<FirmwareBundle | null>(null);
   const [archive, setArchive] = useState<Blob | null>(null);
@@ -148,6 +152,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       setError(null);
       setProgress(null);
       setArchive(null);
+      setDidBuildFail(false);
       setIsStatusUnreachable(false);
       try {
         const finalStatus = await pollBuildStatus({
@@ -164,6 +169,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         });
         if (finalStatus.state === 'error') {
           setIsRetryable(false);
+          setDidBuildFail(true);
           setError(
             finalStatus.message ??
               'The firmware build failed. Please check the build log for details.'
@@ -317,7 +323,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         {phase === 'error' ? (
           <Alert severity="error" sx={{ mt: 1 }}>
             <AlertTitle>
-              {isRetryable ? 'Could not prepare the firmware' : 'Build failed'}
+              {didBuildFail ? 'Build failed' : 'Could not prepare the firmware'}
             </AlertTitle>
             {error}
             <Box sx={{ mt: 1 }}>

@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { redactConfig } = require('./redactConfig.js');
+const { KEEP, redactConfig } = require('./redactConfig.js');
 
 test('redacts free-form strings down to a length bucket', () => {
   const redacted = redactConfig({
@@ -79,4 +80,32 @@ test('leaves no original string anywhere in the output', () => {
   const printed = JSON.stringify(redactConfig(config));
   assert.ok(!printed.includes('SuperSecretSSID'));
   assert.ok(!printed.includes('AlsoSecret'));
+});
+
+// The comment on KEEP asks future editors to keep it a subset of the fields
+// validateConfig pins down. Nothing enforced that, so a field added here
+// without a matching rule there would go verbatim into a public log.
+test('every kept field is one validateConfig constrains', () => {
+  const source = fs.readFileSync(
+    new URL('./validateConfig.js', import.meta.url),
+    'utf-8'
+  );
+  // `requirePattern(config.x, 'x', ...)` / `requireInteger(value, 'a.b', ...)`
+  // and the log_level allow-list, reduced to their leaf field names.
+  const constrained = new Set(
+    [
+      ...source.matchAll(
+        /require(?:Pattern|Integer)\(\s*[^,]+,\s*[`'"]([^`'"]+)/g
+      ),
+    ]
+      .map((match) => match[1].split(/[.[]/).pop())
+      .concat('log_level', 'template_version')
+  );
+
+  for (const kept of KEEP) {
+    assert.ok(
+      constrained.has(kept),
+      `${kept} is kept in the log but validateConfig does not constrain it`
+    );
+  }
 });

@@ -108,9 +108,8 @@ export const deriveSharedKey = async (
   ]);
 };
 
-/** Reads the `ephemeral public key || iv || tag || ciphertext` framing. */
-export const importRemotePublicKey = (raw: Uint8Array): Promise<CryptoKey> =>
-  importPublicKey(raw);
+/** Imports a peer's uncompressed P-256 point, e.g. from an archive header. */
+export const importRemotePublicKey = importPublicKey;
 
 export const generateBuildKeyPair = async (): Promise<BuildKeyPair> => {
   // Not extractable: only the public half ever leaves, and WebCrypto exports
