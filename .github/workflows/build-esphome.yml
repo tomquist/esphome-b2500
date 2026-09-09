@@ -38,7 +38,7 @@ jobs:
       # Everything before the compile is the runner installing Python, Node and
       # the AWS action - not what someone waiting on their firmware wants to
       # read, so the published output starts where the build does.
-      LOG_START_AT: '^##\[group\]Run esphome/build-action'
+      LOG_START_AT: '##[group]Run esphome/build-action'
     permissions:
       contents: read
       # So the build can read its own log back and forward the compiler's

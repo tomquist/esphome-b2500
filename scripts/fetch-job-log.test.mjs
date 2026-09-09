@@ -88,7 +88,7 @@ test('ends the failure tail at the error, not at what the workflow did next', ()
 
 test('starts where the compile does', () => {
   const printed = run(jobLog(compile), {
-    LOG_START_AT: '^##\\[group\\]Run esphome/build-action',
+    LOG_START_AT: '##[group]Run esphome/build-action',
   });
 
   assert.ok(
@@ -101,9 +101,21 @@ test('prints nothing until the start marker is there', () => {
   // Falling back to the whole log would move where the published prefix
   // starts the moment the marker appeared, and every segment after that
   // would be a slice of a different log.
-  const printed = run(jobLog(compile), { LOG_START_AT: '^nothing matches$' });
+  const printed = run(jobLog(compile), { LOG_START_AT: 'nothing matches' });
 
   assert.equal(printed, '');
+});
+
+test('matches the start marker literally, not as a pattern', () => {
+  // `awk -v` eats escape sequences, and gawk and mawk disagree about which
+  // survive: a regex written to find `[group]` reaches gawk as a character
+  // class that cannot match it. The runner has gawk, so this passing under
+  // whichever awk is to hand is the point.
+  assert.equal(
+    run(jobLog(compile), { LOG_START_AT: '##[group]Run esphome/build-.ction' }),
+    '',
+    'the marker was matched as a pattern rather than compared as text'
+  );
 });
 
 test('holds back a line the runner has not finished writing', () => {

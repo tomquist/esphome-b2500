@@ -30,9 +30,9 @@
 #   GITHUB_RUN_ID       the run whose job log to read (required)
 #   GITHUB_RUN_ATTEMPT  which attempt of that run, defaults to 1
 #   GITHUB_JOB          job id in the workflow file, used to pick the job
-#   LOG_START_AT        drop everything up to and including the last line
-#                       matching this regex, and print nothing until some line
-#                       does match
+#   LOG_START_AT        drop everything up to and including the last line that
+#                       starts with this text, and print nothing until some
+#                       line does. A literal prefix, not a pattern - see below
 #   LOG_END_AT_ERROR    stop at the first `##[error]` line, keeping it
 #   LOG_TAIL_LINES      keep only this many lines from the end
 #   LOG_MAX_BYTES       keep only this many bytes from the end
@@ -85,9 +85,17 @@ clean_log() {
     # prefix starts the moment the marker appeared - which corrupts every
     # segment published after it. No log is a feature that quietly did not
     # happen; a shifting one is a log nobody can read.
+    #
+    # Compared as a literal prefix rather than matched as a regex. `awk -v`
+    # processes escape sequences in the value it assigns, and the two awks in
+    # play disagree about what survives: gawk turns `\[group\]` into `[group]`,
+    # which is then a character class that cannot match the `[group]` it was
+    # written to find, while mawk leaves the backslashes alone and matches.
+    # The marker is a fixed string, so comparing it as one is both what we mean
+    # and the same thing everywhere.
     { if [[ -n "${LOG_START_AT:-}" ]]; then
-        awk -v pattern="$LOG_START_AT" '
-          { line[NR] = $0; if ($0 ~ pattern) { start = NR } }
+        awk -v prefix="$LOG_START_AT" '
+          { line[NR] = $0; if (substr($0, 1, length(prefix)) == prefix) { start = NR } }
           END { if (start) for (i = start + 1; i <= NR; i++) print line[i] }'
       else
         cat
