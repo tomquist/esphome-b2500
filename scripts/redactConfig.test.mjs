@@ -66,6 +66,26 @@ test('redacts inside arrays and keeps the storage version', () => {
   });
 });
 
+test('redacts a keepable name that appears at a path nothing validates', () => {
+  // validateConfig constrains the fields it knows and rejects control
+  // characters everywhere, but it does not reject unknown keys - so matching a
+  // leaf name alone published these verbatim.
+  assert.deepEqual(
+    redactConfig({
+      board: 'esp32dev',
+      metadata: { version: 'arbitrary requester text' },
+      anything: { board: 'also arbitrary', tx_pin: 'and this' },
+      powermeter: { tx_pin: 'GPIO6' },
+    }),
+    {
+      board: 'esp32dev',
+      metadata: { version: '<string:16-31>' },
+      anything: { board: '<string:8-15>', tx_pin: '<string:8-15>' },
+      powermeter: { tx_pin: 'GPIO6' },
+    }
+  );
+});
+
 test('redacts a field validateConfig does not constrain', () => {
   // Nothing pins the device name down, and it is the user's own wording.
   assert.deepEqual(redactConfig({ friendly_name: 'Toms Balkon' }), {
@@ -99,7 +119,9 @@ test('every kept field is one validateConfig constrains', () => {
         /require(?:Pattern|Integer|OneOf)\(\s*[^,]+,\s*[`'"]([^`'"]+)/g
       ),
     ]
-      .map((match) => match[1].split(/[.[]/).pop())
+      // Full paths, matching KEEP. `storages[${index}].version` in the source
+      // is the same field as `storages[].version` here.
+      .map((match) => match[1].replace(/\[\$\{[^}]*\}\]/g, '[]'))
       // render.js switches on this one rather than validating it, so only the
       // three literals it knows can reach the template.
       .concat('template_version')

@@ -90,6 +90,39 @@ test('openConfig rejects a payload sealed to a different repo key', () => {
   );
 });
 
+test("a config cannot be re-addressed to someone else's public key", () => {
+  // The dispatch endpoint is unauthenticated and the requester's public key is
+  // public - it is echoed in the build log. What stops a third party sealing
+  // firmware to a victim's key is that openConfig derives from the payload's
+  // own public_key: producing a config that authenticates under
+  // ECDH(repo_private, victim_public) needs the victim's private half.
+  const repo = keyPair();
+  const victim = keyPair();
+  const attacker = keyPair();
+
+  const payload = sealConfig(
+    Buffer.from('{}'),
+    attacker.privateKey,
+    repo.publicKey,
+    'esphome-b2500 config v1'
+  );
+  const asVictim = parsePublicKey(
+    rawFromPublicKey(victim.publicKey).toString('base64')
+  );
+  const asAttacker = parsePublicKey(
+    rawFromPublicKey(attacker.publicKey).toString('base64')
+  );
+
+  // Claiming the victim's key fails in render, before anything is packaged.
+  assert.throws(() => openConfig(payload, pem(repo.privateKey), asVictim));
+  // The same payload under its own key works, so the throw above is the
+  // binding and not a broken fixture.
+  assert.equal(
+    openConfig(payload, pem(repo.privateKey), asAttacker).toString(),
+    '{}'
+  );
+});
+
 test('the two directions derive different keys', () => {
   const repo = keyPair();
   const client = keyPair();
