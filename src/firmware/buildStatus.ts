@@ -137,10 +137,19 @@ const MAX_SEGMENT_CHARS = 200000;
  * control bytes in them. React renders the result as text either way - this is
  * so what the user sees is what the build printed, rather than a `\r` eating
  * the line it was on.
+ *
+ * The workflow strips terminal escapes before publishing, so the CSI pass here
+ * is the second of two. It earns its place by being the last one: dropping the
+ * escape byte alone would leave `[1:2m` sitting in the page as text, and this
+ * is the only point that sees what a segment actually contains.
  */
 export const cleanLogText = (raw: string): string => {
   const text = raw
     .replace(/\r\n?/g, '\n')
+    // Parameter bytes, then intermediates, then the final byte: the whole CSI
+    // form rather than the colour codes alone.
+    // eslint-disable-next-line no-control-regex
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
   return text.length > MAX_SEGMENT_CHARS
@@ -148,6 +157,7 @@ export const cleanLogText = (raw: string): string => {
     : text;
 };
 
+/** How many segments the status document says exist, clamped to the cap. */
 const parseSegmentCount = (value: unknown): number | undefined => {
   const count = optionalCount(value);
   return count !== undefined && Number.isInteger(count) && count > 0

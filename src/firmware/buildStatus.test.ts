@@ -186,12 +186,14 @@ describe('parseBuildStatus', () => {
 
   it('keeps the build output printable', () => {
     // What a compiler writes: CRLF from the runner, a progress line rewritten
-    // with a carriage return, and colour codes the workflow did not strip.
+    // with a carriage return, and colour codes the workflow did not strip -
+    // including the sub-parameter form docker's buildx uses. Dropping the
+    // escape byte alone would leave `[1:2m` in the page as text.
     expect(
       cleanLogText(
-        'Compiling\r\n\u001b[31mERROR\u001b[0m failed\r  retrying\u0000\n'
+        'Compiling\r\n\u001b[31mERROR\u001b[0m \u001b[1:2mfailed\u001b[0m\r  retrying\u0000\n'
       )
-    ).toBe('Compiling\n[31mERROR[0m failed\n  retrying\n');
+    ).toBe('Compiling\nERROR failed\n  retrying\n');
   });
 
   it('keeps only the end of a segment too long to render', () => {

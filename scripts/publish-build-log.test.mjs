@@ -7,7 +7,7 @@
 //   node --test scripts/publish-build-log.test.mjs
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -192,6 +192,34 @@ test('stops publishing a build that prints without end', () => {
   assert.equal(publish(space, { LOG_MAX_TOTAL_BYTES: '50' }), '1');
 
   assert.equal(space.uploaded().length, 1);
+});
+
+test('publishes nothing while another publisher holds the lock', () => {
+  // The workflow's final flush can start while a publisher the watcher left
+  // behind is still uploading. Both would write the same segment key, and
+  // whichever finished last would decide what it holds.
+  const space = workspace();
+  space.write('Compiling app\n');
+
+  const holder = spawn(
+    'flock',
+    [path.join(space.dir, 'state.lock'), 'sleep', '5'],
+    { stdio: 'ignore' }
+  );
+  try {
+    // Give flock a moment to actually take it before racing it.
+    execFileSync('bash', ['-c', 'sleep 0.5']);
+    assert.equal(publish(space, { LOG_LOCK_WAIT_SECONDS: '1' }), '0');
+    assert.equal(space.uploaded().length, 0);
+  } finally {
+    holder.kill();
+  }
+
+  // Once it is free the same bytes go out, exactly once.
+  assert.equal(publish(space), '1');
+  assert.deepEqual(space.uploaded(), [
+    ['happy-tiny-otter-abc.log.0', 'Compiling app\n'],
+  ]);
 });
 
 test('publishes nothing without a usable identifier or bucket', () => {

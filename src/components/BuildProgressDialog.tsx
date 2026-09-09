@@ -101,7 +101,7 @@ const compiledFiles = (status: BuildStatus | null): string | null => {
  * every few seconds for the length of the compile.
  */
 const BuildLog: React.FC<{ log: string }> = ({ log }) => {
-  const box = useRef<HTMLElement | null>(null);
+  const box = useRef<HTMLPreElement>(null);
   const isPinned = useRef(true);
 
   useEffect(() => {

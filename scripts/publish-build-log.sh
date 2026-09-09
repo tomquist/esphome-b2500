@@ -27,6 +27,14 @@
 #     and compared, not just counted, and a read that fails the comparison is
 #     skipped. The page keeps a short log rather than a corrupt one.
 #
+# Two of these must never run at once. The workflow waits for the watcher to
+# exit before the final flush, but that wait has a deadline and the kill that
+# follows it reaches only the watcher, not a publisher it left mid-upload. Two
+# publishers sharing this state would both write the same segment key, and the
+# one that finished second would decide what it holds - dropping whatever the
+# other had put there. So the whole read-and-publish is taken under a lock, and
+# a publisher that cannot get it publishes nothing rather than racing.
+#
 # Usage: publish-build-log.sh
 #
 # Environment:
@@ -35,6 +43,7 @@
 #   LOG_FETCH_COMMAND     what prints the cleaned log, default fetch-job-log.sh
 #   LOG_STATE_PREFIX      where the published bytes and count are kept
 #   LOG_MAX_TOTAL_BYTES   stop publishing once this much has been published
+#   LOG_LOCK_WAIT_SECONDS how long to wait for another publisher to finish
 #   plus everything fetch-job-log.sh reads
 
 set -uo pipefail
@@ -48,17 +57,36 @@ COUNT_FILE="${STATE_PREFIX}.count"
 PUBLISHED_FILE="${STATE_PREFIX}.published"
 FULL_FILE="${STATE_PREFIX}.full"
 SEGMENT_FILE="${STATE_PREFIX}.segment"
+LOCK_FILE="${STATE_PREFIX}.lock"
+LOCK_WAIT_SECONDS="${LOG_LOCK_WAIT_SECONDS:-60}"
 
-count=$(cat "$COUNT_FILE" 2> /dev/null || echo 0)
-[[ "$count" =~ ^[0-9]+$ ]] || count=0
-offset=$(stat -c%s "$PUBLISHED_FILE" 2> /dev/null || echo 0)
+read_count() {
+  local value
+  value=$(cat "$COUNT_FILE" 2> /dev/null || echo 0)
+  [[ "$value" =~ ^[0-9]+$ ]] && echo "$value" || echo 0
+}
 
 # Whatever happens below, the caller needs the number of segments that exist,
-# so that a failure to publish a new one still names the ones that do.
+# so that a failure to publish a new one still names the ones that do. Read
+# back rather than remembered: another publisher may have moved it on.
 report() {
-  echo "$count"
+  read_count
   exit 0
 }
+
+# Held for the life of the script, released when it exits and the descriptor
+# closes. Where there is no flock to be had, carry on without one: this is best
+# effort, and the alternative is publishing nothing at all.
+if command -v flock > /dev/null 2>&1; then
+  exec {lock_fd}> "$LOCK_FILE" 2> /dev/null || lock_fd=''
+  if [[ -n "${lock_fd:-}" ]] && ! flock -w "$LOCK_WAIT_SECONDS" "$lock_fd"; then
+    echo "Another build output publisher is still running, skipping" >&2
+    report
+  fi
+fi
+
+count=$(read_count)
+offset=$(stat -c%s "$PUBLISHED_FILE" 2> /dev/null || echo 0)
 
 if [[ ! "${IDENTIFIER:-}" =~ ^[a-z0-9-]{1,64}$ || -z "${S3_BUCKET:-}" ]]; then
   echo "No usable build identifier or bucket, skipping log upload" >&2
@@ -98,8 +126,7 @@ if ! aws s3 cp "$SEGMENT_FILE" \
   report
 fi
 
-count=$((count + 1))
 cat "$SEGMENT_FILE" >> "$PUBLISHED_FILE"
-echo "$count" > "$COUNT_FILE"
-echo "Published build output segment $((count - 1)), $total bytes so far" >&2
+echo "$((count + 1))" > "$COUNT_FILE"
+echo "Published build output segment ${count}, $total bytes so far" >&2
 report

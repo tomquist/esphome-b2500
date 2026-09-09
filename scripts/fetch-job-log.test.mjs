@@ -118,6 +118,20 @@ test('matches the start marker literally, not as a pattern', () => {
   );
 });
 
+test('strips the whole CSI form, not just colour codes', () => {
+  // Docker's buildx output inside the compile writes sub-parameter forms like
+  // `ESC[1:2m`, which a digits-and-semicolons pattern walks past - and what it
+  // leaves behind is rendered as text on the page.
+  const escape = String.fromCharCode(27);
+  const printed = run(
+    jobLog([
+      `${escape}[31mred${escape}[0m ${escape}[1:2mfancy${escape}[0m ${escape}[38;2;1;2;3mtruecolor${escape}[0m`,
+    ])
+  );
+
+  assert.equal(printed, 'red fancy truecolor\n');
+});
+
 test('holds back a line the runner has not finished writing', () => {
   // sed and awk end their output with a newline whether the input had one or
   // not, so a partial line would otherwise look finished - and read

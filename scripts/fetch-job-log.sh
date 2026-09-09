@@ -60,6 +60,12 @@ BOM=$(printf '\357\273\277')
 # no timestamps, no terminal escapes, and no runner command markers, which are
 # noise everywhere except on the error that ended the build.
 #
+# The escape pattern is the whole CSI form - parameter bytes 0x30-0x3F, then
+# intermediates 0x20-0x2F, then a final byte 0x40-0x7E - rather than the colour
+# codes alone. Docker's buildx output inside the compile step writes forms like
+# `ESC[1:2m` that a digits-and-semicolons pattern walks straight past, and what
+# it leaves behind is rendered as text on the page.
+#
 # Takes the log as a file rather than on stdin because the first thing it has to
 # know is whether the last line has its newline yet. A line still being written
 # is a line that will read differently next time - and since sed and awk end
@@ -76,7 +82,7 @@ clean_log() {
     -e "1s/^${BOM}//" \
     -e 's/\r$//' \
     -e 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z //' \
-    -e "s/${ESC}\\[[0-9;?]*[a-zA-Z]//g" \
+    -e "s,${ESC}\\[[0-?]*[ -/]*[@-~],,g" \
     -e "s/${ESC}[()][A-B0-2]//g" \
     -e "s/${ESC}\\][^${ESC}]*(\\a|${ESC}\\\\)//g" |
     # Everything before the compile is the runner installing things. Nothing at
