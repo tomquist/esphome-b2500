@@ -15,11 +15,17 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const nunjucks = require('nunjucks');
+// The real one, not a copy: a render.js that spread the config last would be
+// the git_sha vulnerability again, and a private copy here would stay green.
+const { buildRenderContext } = require('./render.js');
+
+const templatePath = (name) =>
+  new URL(`../src/${name}`, import.meta.url).pathname;
 
 const TEMPLATES = {
-  v1: './src/template.jinja2',
-  v2: './src/template_v2.jinja2',
-  'v2-minimal': './src/template_v2_minimal.jinja2',
+  v1: templatePath('template.jinja2'),
+  v2: templatePath('template_v2.jinja2'),
+  'v2-minimal': templatePath('template_v2_minimal.jinja2'),
 };
 
 const baseConfig = () => ({
@@ -30,16 +36,14 @@ const baseConfig = () => ({
   storages: [{ name: 'Battery', version: 2, mac_address: '00:11:22:33:44:55' }],
 });
 
-// The same context render.js builds: trusted values last, because a context
-// value shadows a nunjucks global.
 const render = (version, config) =>
-  nunjucks
-    .configure({ autoescape: false })
-    .renderString(fs.readFileSync(TEMPLATES[version], 'utf-8'), {
-      ...config,
-      git_sha: 'trusted-sha',
-      automated_build: true,
-    });
+  nunjucks.configure({ autoescape: false }).renderString(
+    fs.readFileSync(TEMPLATES[version], 'utf-8'),
+    buildRenderContext(config, {
+      GITHUB_SHA: 'trusted-sha',
+      AUTOMATED_BUILD: 'true',
+    })
+  );
 
 for (const version of Object.keys(TEMPLATES)) {
   test(`${version}: a MAC is emitted as a quoted scalar`, () => {
@@ -67,13 +71,16 @@ for (const version of Object.keys(TEMPLATES)) {
   });
 }
 
-test('the trusted git ref wins over one supplied in the config', () => {
-  // render.js spreads the config first, so this is the layer that holds even if
-  // validateConfig's reserved-key check were removed.
-  const config = baseConfig();
-  config.git_sha = 'attacker-branch';
-  const yaml = render('v2', config);
+// v1 has no external_components block, so no ref to poison.
+for (const version of ['v2', 'v2-minimal']) {
+  test(`${version}: the trusted git ref wins over one from the config`, () => {
+    // Through render.js's own context builder, so this pins the layer that
+    // holds even if validateConfig's reserved-key check were removed.
+    const config = baseConfig();
+    config.git_sha = 'attacker-branch';
+    const yaml = render(version, config);
 
-  assert.match(yaml, /^ {6}ref: "trusted-sha"$/m);
-  assert.doesNotMatch(yaml, /attacker-branch/);
-});
+    assert.match(yaml, /^ {6}ref: "trusted-sha"$/m);
+    assert.doesNotMatch(yaml, /attacker-branch/);
+  });
+}

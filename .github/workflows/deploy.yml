@@ -32,6 +32,12 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    # react-scripts type-checks only what the webpack graph reaches, and jest
+    # strips types with babel rather than checking them, so without this a test
+    # file can carry a type error indefinitely.
+    - name: Typecheck
+      run: npm run typecheck
+
     - name: Run tests
       run: |
         npm test -- --watchAll=false

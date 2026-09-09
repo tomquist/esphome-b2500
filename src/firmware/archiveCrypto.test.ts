@@ -21,12 +21,17 @@ process.env.REACT_APP_BUILD_PUBLIC_KEY = rawFromPublicKey(
   repo.publicKey
 ).toString('base64');
 
-const { encryptConfig, generateBuildKeyPair } = require('../crypto');
-const {
-  decryptFirmwareArchive,
-  UndecryptableArchiveError,
-} = require('./archiveCrypto');
-const { extractFirmwareBundle } = require('./firmwareBundle');
+// `require` rather than `import` because the environment assignment above has
+// to run before src/crypto reads it at module load, and imports hoist. The
+// casts put the types back: this is the file that exists to catch the two
+// halves drifting apart, so it is the last place that should be typed `any`.
+// scripts/buildCrypto.js is plain JS with no JSDoc, so it stays name-level.
+const { encryptConfig, generateBuildKeyPair } =
+  require('../crypto') as typeof import('../crypto');
+const { decryptFirmwareArchive, UndecryptableArchiveError } =
+  require('./archiveCrypto') as typeof import('./archiveCrypto');
+const { extractFirmwareBundle } =
+  require('./firmwareBundle') as typeof import('./firmwareBundle');
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 const repoPrivateKeyPem = repo.privateKey.export({
@@ -34,9 +39,8 @@ const repoPrivateKeyPem = repo.privateKey.export({
   format: 'pem',
 });
 
-const clientPublicKeyOf = (publicKey: string) => parsePublicKey(publicKey);
 const clientPublicKey = (keyPair: { publicKey: string }) =>
-  clientPublicKeyOf(keyPair.publicKey);
+  parsePublicKey(keyPair.publicKey);
 
 describe('the config the browser sends', () => {
   it('is readable by the build and nothing else', async () => {
@@ -85,8 +89,6 @@ describe('the config the browser sends', () => {
 
 describe('the firmware the build publishes', () => {
   const archive = Buffer.from('a plain ZIP would go here');
-  // Set by the two binding cases before they call sealWithInfo.
-  let pendingPublicKey = '';
 
   it('is readable by the browser that asked for the build', async () => {
     const keyPair = await generateBuildKeyPair();
@@ -147,14 +149,17 @@ describe('the firmware the build publishes', () => {
   // header fixed, which is the only way to show the binding is load bearing:
   // the first would decrypt if `info` were the bare label, the second proves
   // the construction is otherwise sound.
-  const sealWithInfo = (info: (senderKey: Buffer) => Buffer) => {
+  const sealWithInfo = (
+    clientPublicKeyBase64: string,
+    info: (senderKey: Buffer) => Buffer
+  ) => {
     const ephemeral = nodeCrypto.generateKeyPairSync('ec', {
       namedCurve: 'prime256v1',
     });
     const senderKey = rawFromPublicKey(ephemeral.publicKey);
     const shared = nodeCrypto.diffieHellman({
       privateKey: ephemeral.privateKey,
-      publicKey: clientPublicKeyOf(pendingPublicKey),
+      publicKey: parsePublicKey(clientPublicKeyBase64),
     });
     const key = Buffer.from(
       nodeCrypto.hkdfSync(
@@ -173,8 +178,9 @@ describe('the firmware the build publishes', () => {
 
   it('is refused when the key was derived without binding the header', async () => {
     const keyPair = await generateBuildKeyPair();
-    pendingPublicKey = keyPair.publicKey;
-    const sealed = sealWithInfo(() => Buffer.from(FIRMWARE_INFO));
+    const sealed = sealWithInfo(keyPair.publicKey, () =>
+      Buffer.from(FIRMWARE_INFO)
+    );
 
     await expect(
       decryptFirmwareArchive(new Blob([sealed]), keyPair.privateKey)
@@ -183,8 +189,7 @@ describe('the firmware the build publishes', () => {
 
   it('opens when the same construction binds the header', async () => {
     const keyPair = await generateBuildKeyPair();
-    pendingPublicKey = keyPair.publicKey;
-    const sealed = sealWithInfo(firmwareInfo);
+    const sealed = sealWithInfo(keyPair.publicKey, firmwareInfo);
 
     const plain = await decryptFirmwareArchive(
       new Blob([sealed]),

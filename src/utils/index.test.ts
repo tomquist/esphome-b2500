@@ -9,7 +9,7 @@ const workflow = fs.readFileSync(
   path.join(__dirname, '..', '..', '.github', 'workflows', 'build-esphome.yml'),
   'utf-8'
 );
-const declared = workflow.match(/"\$IDENTIFIER" =~ \^(?<pattern>\S+) \]\]/);
+const declared = workflow.match(/"\$IDENTIFIER" =~ \^(?<pattern>\S+)\s*\]\]/);
 if (!declared) {
   throw new Error('no IDENTIFIER check found in the build workflow');
 }
