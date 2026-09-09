@@ -46,32 +46,50 @@ const workspace = ({ objects, expected, publishSeconds = 0 }) => {
   }
 
   // Records when each publish starts and finishes, so a publish that overlaps
-  // the stop can be told apart from one that started after it.
+  // the stop can be told apart from one that started after it, and what build
+  // output each one carried.
   fs.writeFileSync(
     path.join(dir, 'publish-stub.sh'),
     [
       '#!/usr/bin/env bash',
       `echo "start $PROGRESS_DONE/$PROGRESS_TOTAL" >> "${path.join(dir, 'published.log')}"`,
+      `echo "segments ${'$'}{LOG_SEGMENTS:-none}" >> "${path.join(dir, 'published-segments.log')}"`,
       `sleep ${publishSeconds}`,
       `echo "end $PROGRESS_DONE/$PROGRESS_TOTAL" >> "${path.join(dir, 'published.log')}"`,
     ].join('\n'),
     { mode: 0o755 }
   );
 
+  // Stands in for publish-build-log.sh: prints how many output segments it has
+  // published, and fails while there is nothing to read - the way a build whose
+  // log the API will not serve behaves.
+  fs.writeFileSync(
+    path.join(dir, 'log-stub.sh'),
+    [
+      '#!/usr/bin/env bash',
+      `[[ -s "${path.join(dir, 'segments')}" ]] || exit 1`,
+      `cat "${path.join(dir, 'segments')}"`,
+    ].join('\n'),
+    { mode: 0o755 }
+  );
+
+  const lines = (name) =>
+    fs.existsSync(path.join(dir, name))
+      ? fs.readFileSync(path.join(dir, name), 'utf8').trim().split('\n')
+      : [];
+
   return {
     dir,
     stopFile: path.join(dir, 'stop'),
-    published: () =>
-      fs.existsSync(path.join(dir, 'published.log'))
-        ? fs
-            .readFileSync(path.join(dir, 'published.log'), 'utf8')
-            .trim()
-            .split('\n')
-        : [],
+    segmentsFile: path.join(dir, 'segments'),
+    published: () => lines('published.log'),
+    publishedSegments: () => lines('published-segments.log'),
   };
 };
 
-const start = (space, { intervalSeconds = 1 } = {}) =>
+// Reporting the build output is off unless a test asks for it: it is best
+// effort in the workflow too, and the counting has to hold up without it.
+const start = (space, { intervalSeconds = 1, logIntervalSeconds = 0 } = {}) =>
   spawn('bash', [watcher], {
     cwd: space.dir,
     env: {
@@ -79,6 +97,8 @@ const start = (space, { intervalSeconds = 1 } = {}) =>
       PROGRESS_INTERVAL_SECONDS: String(intervalSeconds),
       PROGRESS_STOP_FILE: space.stopFile,
       PROGRESS_PUBLISH_COMMAND: path.join(space.dir, 'publish-stub.sh'),
+      PROGRESS_LOG_COMMAND: path.join(space.dir, 'log-stub.sh'),
+      PROGRESS_LOG_INTERVAL_SECONDS: String(logIntervalSeconds),
     },
     stdio: 'ignore',
   });
@@ -139,4 +159,49 @@ test('finishes an upload that overlaps being stopped, and publishes nothing afte
     ['start 2/4', 'end 2/4'],
     'the in-flight upload must finish, and nothing may be published after the stop'
   );
+});
+
+test('republishes when a new build output segment appears', async () => {
+  const space = workspace({ objects: 2, expected: 4 });
+  fs.writeFileSync(space.segmentsFile, '1\n');
+  const child = start(space, { logIntervalSeconds: 1 });
+
+  const announced = await waitFor(() =>
+    space.publishedSegments().includes('segments 1')
+  );
+  // The count stands still through a link step, which is exactly when the
+  // output is the only thing left to show.
+  fs.writeFileSync(space.segmentsFile, '2\n');
+  const republished = await waitFor(() =>
+    space.publishedSegments().includes('segments 2')
+  );
+
+  fs.writeFileSync(space.stopFile, '');
+  await exited(child);
+
+  assert.ok(announced, 'the watcher never published a segment count');
+  assert.ok(republished, 'the watcher sat on a segment it had just published');
+  assert.deepEqual(
+    space.published().filter((line) => line.startsWith('start')),
+    ['start 2/4', 'start 2/4'],
+    'both publishes must carry the same unchanged counts'
+  );
+});
+
+test('keeps reporting progress when the build output cannot be published', async () => {
+  // No segment count at all, so the stub fails the way publish-build-log.sh
+  // does when the API will not serve this job's log.
+  const space = workspace({ objects: 3, expected: 6 });
+  const child = start(space, { logIntervalSeconds: 1 });
+
+  const reported = await waitFor(() => space.published().includes('end 3/6'));
+
+  fs.writeFileSync(space.stopFile, '');
+  await exited(child);
+
+  assert.ok(
+    reported,
+    'a build whose log cannot be published stopped reporting progress'
+  );
+  assert.deepEqual(space.publishedSegments(), ['segments 0']);
 });

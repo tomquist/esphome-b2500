@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Accordion,
   AccordionDetails,
@@ -32,7 +32,9 @@ import {
   BuildStatus,
   BuildStep,
   BuildTimeoutError,
+  appendLogText,
   buildListUrl,
+  fetchLogSegment,
   firmwareDownloadUrl,
   pollBuildStatus,
 } from '../firmware/buildStatus';
@@ -92,6 +94,52 @@ const compiledFiles = (status: BuildStatus | null): string | null => {
     : `${progress.completed} files`;
 };
 
+/**
+ * The tail of the build output, pinned to its last line.
+ *
+ * Anchored only while it is already at the bottom, so a user who scrolled up to
+ * read an error is not yanked back down by the next update - which arrives
+ * every few seconds for the length of the compile.
+ */
+const BuildLog: React.FC<{ log: string }> = ({ log }) => {
+  const box = useRef<HTMLPreElement>(null);
+  const isPinned = useRef(true);
+
+  useEffect(() => {
+    const node = box.current;
+    if (node && isPinned.current) {
+      node.scrollTop = node.scrollHeight;
+    }
+  }, [log]);
+
+  return (
+    <Box
+      component="pre"
+      ref={box}
+      onScroll={(event: React.UIEvent<HTMLElement>) => {
+        const node = event.currentTarget;
+        isPinned.current =
+          node.scrollHeight - node.scrollTop - node.clientHeight < 24;
+      }}
+      sx={{
+        m: 0,
+        p: 1,
+        maxHeight: 220,
+        overflow: 'auto',
+        bgcolor: 'action.hover',
+        borderRadius: 1,
+        fontFamily: 'monospace',
+        fontSize: '0.72rem',
+        lineHeight: 1.5,
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+      }}
+    >
+      {log}
+    </Box>
+  );
+};
+
 const formatDuration = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
   const remainder = Math.floor(seconds % 60);
@@ -142,6 +190,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [isStatusUnreachable, setIsStatusUnreachable] = useState(false);
+  // Accumulated from the log segments, so it only ever grows. A build that
+  // loses access to its own log mid-compile keeps what it already showed.
+  const [buildLog, setBuildLog] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -154,6 +205,43 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       setArchive(null);
       setDidBuildFail(false);
       setIsStatusUnreachable(false);
+      setBuildLog(null);
+
+      // Segments are downloaded once each, in order, as the status document
+      // announces them. Chained rather than guarded by a flag so that the last
+      // call can be awaited: a failed build's error is usually in the segment
+      // the workflow published just before it said the build had failed.
+      let cursor = 0;
+      let pumping: Promise<void> = Promise.resolve();
+      const pumpLog = (available: number) => {
+        pumping = pumping.then(async () => {
+          while (cursor < available && !controller.signal.aborted) {
+            let segment: string | null = null;
+            try {
+              segment = await fetchLogSegment(
+                identifier,
+                cursor,
+                controller.signal
+              );
+            } catch (caught) {
+              return; // Transient, or aborted. The next status brings us back.
+            }
+            if (segment === null) {
+              return; // Announced but not readable yet.
+            }
+            cursor += 1;
+            // Bound to a const: narrowing `segment` does not reach inside the
+            // updater, and concatenating it while it is still `string | null`
+            // would put the word "null" in the log rather than fail.
+            const text = segment;
+            if (text.length > 0) {
+              setBuildLog((previous) => appendLogText(previous ?? '', text));
+            }
+          }
+        });
+        return pumping;
+      };
+
       try {
         const finalStatus = await pollBuildStatus({
           identifier,
@@ -161,12 +249,18 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
           onStatus: (update) => {
             setStatus(update);
             setIsStatusUnreachable(false);
+            if (update.logSegments) {
+              void pumpLog(update.logSegments);
+            }
           },
           // A handful of failures in a row usually means the browser blocked
           // the request, e.g. because the bucket is missing a CORS rule.
           onFetchError: (_error, consecutiveFailures) =>
             setIsStatusUnreachable(consecutiveFailures >= 3),
         });
+        // Before anything is decided about the build, so that a failure is
+        // shown with everything the compiler said rather than most of it.
+        await pumpLog(finalStatus.logSegments ?? 0);
         if (finalStatus.state === 'error') {
           setIsRetryable(false);
           setDidBuildFail(true);
@@ -326,6 +420,14 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
               {didBuildFail ? 'Build failed' : 'Could not prepare the firmware'}
             </AlertTitle>
             {error}
+            {buildLog && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Build output
+                </Typography>
+                <BuildLog log={buildLog} />
+              </Box>
+            )}
             <Box sx={{ mt: 1 }}>
               <Link href={runLink} target="_blank" rel="noopener">
                 View build log
@@ -373,6 +475,16 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
                     View build log
                   </Link>
                 </Typography>
+                {buildLog && (
+                  <Accordion sx={{ mt: 1 }} disableGutters defaultExpanded>
+                    <AccordionSummary expandIcon={<ExpandMore />}>
+                      <Typography variant="body2">Build output</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ p: 1, pt: 0 }}>
+                      <BuildLog log={buildLog} />
+                    </AccordionDetails>
+                  </Accordion>
+                )}
               </StepContent>
             </Step>
             <Step>

@@ -18,6 +18,15 @@ export const firmwareDownloadUrl = (identifier: string) =>
 export const buildStatusUrl = (identifier: string) =>
   objectUrl(`firmware/${identifier}.status.json`);
 
+/**
+ * One slice of the build output. Segments are immutable and numbered from
+ * zero; the status document says how many of them exist. S3 cannot append to
+ * an object, so a growing log has to be published as a run of objects like
+ * this - see scripts/publish-build-log.sh.
+ */
+export const buildLogSegmentUrl = (identifier: string, sequence: number) =>
+  objectUrl(`firmware/${identifier}.log.${sequence}`);
+
 export const buildListUrl = 'https://github.com/tomquist/esphome-b2500/actions';
 
 export type BuildState = 'building' | 'success' | 'error';
@@ -40,6 +49,11 @@ export interface BuildStatus {
   step?: BuildStep;
   /** Compile units finished so far, reported while compiling. */
   progress?: BuildProgress;
+  /**
+   * How many build output segments have been published. Absent while the
+   * workflow has not managed to read its own job log.
+   */
+  logSegments?: number;
   firmwareUrl?: string;
   /** Name of the firmware directory inside the ZIP, e.g. `b2500-esp32`. */
   firmwareName?: string;
@@ -109,6 +123,65 @@ const optionalCount = (value: unknown): number | undefined =>
     ? value
     : undefined;
 
+/**
+ * Caps on what the build output can make the page do. The workflow publishes
+ * far less than either; they are here so a status document that ever said
+ * otherwise cannot send the page fetching forever or hand the log view
+ * something too big to render.
+ */
+const MAX_LOG_SEGMENTS = 500;
+const MAX_SEGMENT_CHARS = 200000;
+/**
+ * And on the segments once joined: capping each one still leaves the sum of
+ * them unbounded, and it is the accumulated string that the log view re-renders
+ * every time a segment arrives.
+ */
+const MAX_LOG_CHARS = 1000000;
+
+/**
+ * Segment bodies are whatever the compiler wrote, so they arrive with stray
+ * control bytes in them. React renders the result as text either way - this is
+ * so what the user sees is what the build printed, rather than a `\r` eating
+ * the line it was on.
+ *
+ * The workflow strips terminal escapes before publishing, so the CSI pass here
+ * is the second of two. It earns its place by being the last one: dropping the
+ * escape byte alone would leave `[1:2m` sitting in the page as text, and this
+ * is the only point that sees what a segment actually contains.
+ */
+export const cleanLogText = (raw: string): string => {
+  const text = raw
+    .replace(/\r\n?/g, '\n')
+    // Parameter bytes, then intermediates, then the final byte: the whole CSI
+    // form rather than the colour codes alone.
+    // eslint-disable-next-line no-control-regex
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
+  return text.length > MAX_SEGMENT_CHARS
+    ? text.slice(-MAX_SEGMENT_CHARS)
+    : text;
+};
+
+/** How many segments the status document says exist, clamped to the cap. */
+/**
+ * Adds a segment to what the page has already read, keeping the end: the tail
+ * is where a build that is still running says what it is doing, and where one
+ * that stopped says why.
+ */
+export const appendLogText = (previous: string, segment: string): string => {
+  const joined = previous + segment;
+  return joined.length > MAX_LOG_CHARS ? joined.slice(-MAX_LOG_CHARS) : joined;
+};
+
+/** How many segments the status document says exist, clamped to the cap. */
+const parseSegmentCount = (value: unknown): number | undefined => {
+  const count = optionalCount(value);
+  return count !== undefined && Number.isInteger(count) && count > 0
+    ? Math.min(count, MAX_LOG_SEGMENTS)
+    : undefined;
+};
+
 const parseStep = (value: unknown): BuildStep | undefined => {
   const step = optionalString(value)?.toLowerCase();
   return STEPS.find((known) => known === step);
@@ -148,10 +221,32 @@ export const parseBuildStatus = (raw: unknown): BuildStatus | null => {
     message: optionalString(record.message),
     step: parseStep(record.step),
     progress: parseProgress(record.progress),
+    logSegments: parseSegmentCount(record.log_segments),
     firmwareUrl: trustedUrl(record.firmware_url, bucketOrigins()),
     firmwareName: optionalString(record.firmware_name),
     esphomeVersion: optionalString(record.esphome_version),
   };
+};
+
+/**
+ * Reads one segment of the build output. Resolves with `null` when it is not
+ * published yet, which is how a page that read a segment count from a status
+ * document written moments ago tells "not there" from "not any more".
+ */
+export const fetchLogSegment = async (
+  identifier: string,
+  sequence: number,
+  signal?: AbortSignal
+): Promise<string | null> => {
+  // No `no-store` here, unlike the status document: a segment never changes
+  // once published, so a reload may reuse whatever the browser kept.
+  const response = await fetch(buildLogSegmentUrl(identifier, sequence), {
+    signal,
+  });
+  if (!response.ok) {
+    return null;
+  }
+  return cleanLogText(await response.text());
 };
 
 export class BuildTimeoutError extends Error {
@@ -269,7 +364,7 @@ export const pollBuildStatus = async ({
   signal,
   onStatus,
   onFetchError,
-  intervalMs = 5000,
+  intervalMs = 3000,
   timeoutMs = 30 * 60 * 1000,
   requestTimeoutMs = 30000,
   fetchStatus = fetchBuildStatus,

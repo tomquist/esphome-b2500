@@ -13,6 +13,7 @@
 #   STEP             what the build is doing: preparing, compiling, packaging
 #   PROGRESS_DONE    compile units finished so far (with PROGRESS_TOTAL)
 #   PROGRESS_TOTAL   compile units the build expects in total
+#   LOG_SEGMENTS     how many build output segments exist (publish-build-log.sh)
 #   FIRMWARE_URL     download URL of the firmware ZIP (success only)
 #   FIRMWARE_NAME    name of the firmware directory inside the ZIP
 #   ESPHOME_VERSION  ESPHome version the firmware was built with
@@ -21,6 +22,13 @@ set -euo pipefail
 
 STATUS="${1:?usage: publish-build-status.sh <status> [message]}"
 MESSAGE="${2:-}"
+
+# The build output itself is published as its own objects; this document only
+# says how many of them there are. It is fetched every few seconds for the
+# length of a build, so it stays small and stops growing with the compiler's
+# appetite for talking.
+SEGMENTS="${LOG_SEGMENTS:-0}"
+[[ "$SEGMENTS" =~ ^[0-9]+$ ]] || SEGMENTS=0
 
 if [[ ! "${IDENTIFIER:-}" =~ ^[a-z0-9-]{1,64}$ ]]; then
   echo "No usable build identifier, skipping status upload"
@@ -38,6 +46,7 @@ jq -n \
   --arg esphome_version "${ESPHOME_VERSION:-}" \
   --argjson done "${PROGRESS_DONE:-0}" \
   --argjson total "${PROGRESS_TOTAL:-0}" \
+  --argjson segments "$SEGMENTS" \
   --arg updated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   '{status: $status, identifier: $identifier, updated_at: $updated_at}
     + ({run_url: $run_url, message: $message, step: $step,
@@ -47,7 +56,8 @@ jq -n \
     + (if $done > 0 or $total > 0
        then {progress: ({completed: $done}
                         + (if $total > 0 then {total: $total} else {} end))}
-       else {} end)' \
+       else {} end)
+    + (if $segments > 0 then {log_segments: $segments} else {} end)' \
   > build-status.json
 
 cat build-status.json

@@ -35,8 +35,15 @@ jobs:
       # context and a pick of ESPHome's validation behaviour.
       ESPHOME_VERSION: '2026.8.1'
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # Everything before the compile is the runner installing Python, Node and
+      # the AWS action - not what someone waiting on their firmware wants to
+      # read, so the published output starts where the build does.
+      LOG_START_AT: '##[group]Run esphome/build-action'
     permissions:
       contents: read
+      # So the build can read its own log back and forward the compiler's
+      # output to the page waiting for it. See scripts/fetch-job-log.sh.
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -108,9 +115,14 @@ jobs:
       - name: Report compile progress
         env:
           STEP: compiling
+          # Inherited by the watcher, which reads this job's log back through
+          # the API. Scoped to the steps that need it rather than set on the
+          # job, so the third-party build action never sees it.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./scripts/publish-build-status.sh building "Compiling the firmware" || true
-          rm -f progress-watcher.stop
+          rm -f progress-watcher.stop job-log-unavailable job-log-unavailable.misses \
+            build-log.published build-log.count
           nohup ./scripts/watch-build-progress.sh > progress-watcher.log 2>&1 &
           echo "PROGRESS_WATCHER_PID=$!" >> "$GITHUB_ENV"
 
@@ -146,6 +158,31 @@ jobs:
             cat progress-watcher.log
             echo "::endgroup::"
           fi
+
+      # The watcher stopped between polls, so the last seconds of the compile -
+      # on a failed build, the error itself - are not published yet. Runs after
+      # the watcher has exited so there is only ever one writer, and before any
+      # terminal status so the page is never told about a segment that is not
+      # in the bucket yet.
+      - name: Publish the rest of the build output
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOG_END_AT_ERROR: 'true'
+          # Not the file the watcher may have written off: whatever stopped it
+          # reporting during the compile is worth one more try at the end.
+          LOG_DISABLED_FILE: job-log-final-unavailable
+        run: |
+          segments="$(./scripts/publish-build-log.sh)"
+          # The start marker is a runner convention rather than something we
+          # control, and while the build runs a stream that never started is
+          # better than one that shifts under the page. Here it is over, so
+          # nothing can shift: publish the whole log rather than none of it.
+          if [[ "$segments" == "0" ]]; then
+            segments="$(LOG_START_AT='' ./scripts/publish-build-log.sh)"
+          fi
+          echo "LOG_SEGMENTS=$segments" >> "$GITHUB_ENV"
 
       # Logs on a public repository are world readable, and the config holds
       # the requester's SSID, MQTT broker and username. The redacted form keeps
@@ -211,6 +248,14 @@ jobs:
       - name: Publish build failure
         if: failure()
         continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOG_END_AT_ERROR: 'true'
+          LOG_DISABLED_FILE: job-log-failure-unavailable
         run: |
+          # A failure after the compile - packaging, or the upload - has said
+          # something since the flush above, and this is the last chance to
+          # publish it.
+          export LOG_SEGMENTS="$(./scripts/publish-build-log.sh)"
           ./scripts/publish-build-status.sh error \
             "The firmware build failed. Please check the build log and open an issue with your configuration."

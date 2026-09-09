@@ -3,7 +3,11 @@ import path from 'path';
 import {
   BuildStatus,
   BuildTimeoutError,
+  appendLogText,
+  buildLogSegmentUrl,
   buildStatusUrl,
+  cleanLogText,
+  fetchLogSegment,
   firmwareDownloadUrl,
   parseBuildStatus,
   pollBuildStatus,
@@ -33,6 +37,21 @@ describe('the object layout', () => {
     expect(firmwareDownloadUrl('a-build')).toMatch(
       new RegExp(
         `/firmware/a-build${escapeForRegExp(uploaded!.groups!.suffix)}$`
+      )
+    );
+  });
+
+  it('matches the key the build output segments are published to', () => {
+    // The sequence number is interpolated by the shell, so the key is matched
+    // as a literal part and the counter that follows it.
+    const published = repoFile('scripts', 'publish-build-log.sh').match(
+      /s3:\/\/\$\{S3_BUCKET\}\/firmware\/\$\{IDENTIFIER\}(?<suffix>[^"$]*)\$\{\w+\}"/
+    );
+
+    expect(published).not.toBeNull();
+    expect(buildLogSegmentUrl('a-build', 7)).toMatch(
+      new RegExp(
+        `/firmware/a-build${escapeForRegExp(published!.groups!.suffix)}7$`
       )
     );
   });
@@ -140,6 +159,69 @@ describe('parseBuildStatus', () => {
     });
 
     expect(status?.progress).toEqual({ completed: 1600, total: undefined });
+  });
+
+  it('reads how many build output segments exist', () => {
+    expect(
+      parseBuildStatus({ status: 'building', log_segments: 12 })?.logSegments
+    ).toBe(12);
+    expect(
+      parseBuildStatus({ status: 'building' })?.logSegments
+    ).toBeUndefined();
+    expect(
+      parseBuildStatus({ status: 'building', log_segments: 0 })?.logSegments
+    ).toBeUndefined();
+    expect(
+      parseBuildStatus({ status: 'building', log_segments: 1.5 })?.logSegments
+    ).toBeUndefined();
+    expect(
+      parseBuildStatus({ status: 'building', log_segments: '12' })?.logSegments
+    ).toBeUndefined();
+  });
+
+  it('will not be sent fetching segments without end', () => {
+    expect(
+      parseBuildStatus({ status: 'building', log_segments: 1e9 })?.logSegments
+    ).toBe(500);
+  });
+
+  it('keeps the build output printable', () => {
+    // What a compiler writes: CRLF from the runner, a progress line rewritten
+    // with a carriage return, and colour codes the workflow did not strip -
+    // including the sub-parameter form docker's buildx uses. Dropping the
+    // escape byte alone would leave `[1:2m` in the page as text.
+    expect(
+      cleanLogText(
+        'Compiling\r\n\u001b[31mERROR\u001b[0m \u001b[1:2mfailed\u001b[0m\r  retrying\u0000\n'
+      )
+    ).toBe('Compiling\nERROR failed\n  retrying\n');
+  });
+
+  it('keeps only the end of a segment too long to render', () => {
+    const cleaned = cleanLogText(`${'x'.repeat(250000)}last`);
+
+    expect(cleaned.length).toBe(200000);
+    expect(cleaned.endsWith('last')).toBe(true);
+  });
+
+  it('keeps the accumulated output bounded, not just each segment', () => {
+    // Capping one segment leaves the sum of them unbounded, and it is the
+    // joined string the log view re-renders every time one arrives.
+    const joined = appendLogText(
+      `START${'x'.repeat(900000)}`,
+      `${'y'.repeat(200000)}end`
+    );
+
+    expect(joined.length).toBe(1000000);
+    // The end is what a running build is saying, and why a stopped one stopped.
+    expect(joined.endsWith('end')).toBe(true);
+    expect(joined.startsWith('START')).toBe(false);
+  });
+
+  it('joins segments unchanged while there is room', () => {
+    expect(appendLogText('Compiling\n', 'Linking\n')).toBe(
+      'Compiling\nLinking\n'
+    );
   });
 
   it('returns null for documents it does not understand', () => {
@@ -260,5 +342,43 @@ describe('pollBuildStatus', () => {
         sleep: noSleep,
       })
     ).rejects.toBeInstanceOf(BuildTimeoutError);
+  });
+});
+
+describe('fetchLogSegment', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  const respond = (response: Partial<Response>) => {
+    const spy = jest.fn().mockResolvedValue(response as Response);
+    global.fetch = spy as unknown as typeof fetch;
+    return spy;
+  };
+
+  it('reads a segment and cleans what the compiler wrote', async () => {
+    const fetchSpy = respond({
+      ok: true,
+      text: async () => 'Compiling\r\napp\u0000\n',
+    });
+
+    await expect(fetchLogSegment('a-build', 3)).resolves.toBe(
+      'Compiling\napp\n'
+    );
+    expect(fetchSpy.mock.calls[0][0]).toBe(buildLogSegmentUrl('a-build', 3));
+  });
+
+  it('returns null for a segment that is not published yet', async () => {
+    respond({ ok: false, status: 404 });
+
+    await expect(fetchLogSegment('a-build', 3)).resolves.toBeNull();
+  });
+
+  it('returns an empty string for a segment with nothing in it', async () => {
+    respond({ ok: true, text: async () => '' });
+
+    await expect(fetchLogSegment('a-build', 0)).resolves.toBe('');
   });
 });
