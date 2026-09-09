@@ -11,35 +11,59 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The whole job is seconds of work. Without this a hung step burns six hours
+    # of Actions minutes before GitHub gives up - which is what happened when
+    # `node --test` stopped after printing its TAP header and left two orphaned
+    # children behind.
+    timeout-minutes: 15
+    permissions:
+      contents: read
     env:
       REACT_APP_S3_BUCKET: esphome-b2500-images
       REACT_APP_AWS_REGION: eu-west-1
+      # The public half of the build key pair. A repository variable rather
+      # than a constant in the source, so rotating the pair (see
+      # scripts/generateBuildKeypair.js) needs no code change.
+      REACT_APP_BUILD_PUBLIC_KEY: ${{ vars.BUILD_PUBLIC_KEY }}
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
         node-version: '18'
 
     - name: Install dependencies
       run: npm ci
 
-    - name: Run tests
-      run: |
-        npm test -- --watchAll=false
-        node --test scripts/watch-build-progress.test.mjs scripts/validateConfig.test.mjs
+    # react-scripts type-checks only what the webpack graph reaches, and jest
+    # strips types with babel rather than checking them, so without this a test
+    # file can carry a type error indefinitely.
+    - name: Typecheck
+      run: npm run typecheck
+
+    - name: Run frontend tests
+      run: npm test -- --watchAll=false
+
+    # Serially, and as its own step. Run in parallel these hung on the CI runner
+    # after printing the TAP header, with no test ever reporting and two node
+    # children orphaned - not reproducible here on either Node 18 or 22, at any
+    # concurrency. Serial execution removes the variable; the split means a
+    # recurrence names which half is at fault rather than pointing at both.
+    - name: Run script tests
+      run: node --test --test-concurrency=1 scripts/*.test.mjs
 
     - name: Build the app
       run: npm run build
       env:
         REACT_APP_S3_BUCKET: ${{ env.REACT_APP_S3_BUCKET }}
         REACT_APP_AWS_REGION: ${{ env.REACT_APP_AWS_REGION }}
+        REACT_APP_BUILD_PUBLIC_KEY: ${{ env.REACT_APP_BUILD_PUBLIC_KEY }}
 
     - name: Upload artifact
       if: github.event_name == 'push'
-      uses: actions/upload-pages-artifact@v3
+      uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
       with:
         path: ./build
 
@@ -56,4 +80,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

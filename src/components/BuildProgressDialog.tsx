@@ -19,9 +19,15 @@ import {
   Stepper,
   Typography,
 } from '@mui/material';
-import { ContentCopy, ExpandMore } from '@mui/icons-material';
+import { Download, ExpandMore } from '@mui/icons-material';
+import FileSaver from 'file-saver';
 import { FormValues } from '../types';
 import { newIssueLink } from '../utils';
+import { BuildKeyPair } from '../crypto';
+import {
+  UndecryptableArchiveError,
+  decryptFirmwareArchive,
+} from '../firmware/archiveCrypto';
 import {
   BuildStatus,
   BuildStep,
@@ -43,7 +49,7 @@ type Phase = 'building' | 'preparing' | 'ready' | 'error';
 
 interface BuildProgressDialogProps {
   identifier: string;
-  password: string;
+  keyPair: BuildKeyPair;
   deviceName: string;
   config: FormValues;
   onClose: () => void;
@@ -96,15 +102,17 @@ const errorMessage = (error: unknown): string => {
   if (error instanceof BuildTimeoutError) {
     return (
       'The build did not finish in time. It might still be running - check the ' +
-      'build log and use the manual instructions below once it succeeded.'
+      'build log, then use "Try again" to pick the firmware up. Do not reload ' +
+      'this page: the key that decrypts it only exists here.'
     );
   }
   if (error instanceof TypeError) {
     // fetch() rejects with a TypeError when the request never made it through,
-    // e.g. when it was blocked by CORS or the network.
+    // e.g. when it was blocked by CORS or the network. The published object is
+    // encrypted, so there is no useful manual route to fall back to here.
     return (
-      'The firmware could not be downloaded in this browser. Please use the ' +
-      'manual instructions below.'
+      'The firmware could not be downloaded in this browser. Check your ' +
+      'network connection and try again.'
     );
   }
   if (error instanceof Error) {
@@ -115,7 +123,7 @@ const errorMessage = (error: unknown): string => {
 
 const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   identifier,
-  password,
+  keyPair,
   deviceName,
   config,
   onClose,
@@ -124,8 +132,13 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   const [status, setStatus] = useState<BuildStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRetryable, setIsRetryable] = useState(false);
+  // Whether the build itself failed, as opposed to this page failing to turn a
+  // finished build into something flashable. Not the same as `!isRetryable`:
+  // an archive this page cannot decrypt is a successful build we cannot use.
+  const [didBuildFail, setDidBuildFail] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [bundle, setBundle] = useState<FirmwareBundle | null>(null);
+  const [archive, setArchive] = useState<Blob | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [isStatusUnreachable, setIsStatusUnreachable] = useState(false);
@@ -138,6 +151,8 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       setPhase('building');
       setError(null);
       setProgress(null);
+      setArchive(null);
+      setDidBuildFail(false);
       setIsStatusUnreachable(false);
       try {
         const finalStatus = await pollBuildStatus({
@@ -154,6 +169,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         });
         if (finalStatus.state === 'error') {
           setIsRetryable(false);
+          setDidBuildFail(true);
           setError(
             finalStatus.message ??
               'The firmware build failed. Please check the build log for details.'
@@ -163,11 +179,17 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         }
 
         setPhase('preparing');
-        const archive = await downloadFirmwareArchive(
+        const encrypted = await downloadFirmwareArchive(
           finalStatus.firmwareUrl ?? firmwareDownloadUrl(identifier),
           { signal: controller.signal, onProgress: setProgress }
         );
-        const extracted = await extractFirmwareBundle(archive, password, {
+        const archive = await decryptFirmwareArchive(
+          encrypted,
+          keyPair.privateKey
+        );
+        // Kept so the manual route can hand over a ZIP that opens anywhere.
+        setArchive(archive);
+        const extracted = await extractFirmwareBundle(archive, {
           name: deviceName,
           version: finalStatus.esphomeVersion ?? 'ESPHome',
         });
@@ -182,7 +204,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         if (controller.signal.aborted) {
           return;
         }
-        setIsRetryable(true);
+        // Retrying re-downloads the same object and derives the same key, so an
+        // archive that does not belong to this build never will.
+        setIsRetryable(!(caught instanceof UndecryptableArchiveError));
         setError(errorMessage(caught));
         setPhase('error');
       }
@@ -194,8 +218,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       controller.abort();
       created?.release();
       setBundle(null);
+      setArchive(null);
     };
-  }, [identifier, password, deviceName, attempt]);
+  }, [identifier, keyPair, deviceName, attempt]);
 
   useEffect(() => {
     if (phase !== 'building') {
@@ -215,26 +240,24 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       return;
     }
     const confirmed = window.confirm(
-      'The build is still running. If you close this dialog you have to ' +
-        'download and flash the firmware manually. Close anyway?'
+      'The build is still running. The key that decrypts your firmware only ' +
+        'exists in this dialog, so closing it means starting the build again. ' +
+        'Close anyway?'
     );
     if (confirmed) {
       onClose();
     }
   }, [phase, onClose]);
 
-  const handlePasswordCopy = () => {
-    // Optional: navigator.clipboard is undefined in insecure contexts.
-    navigator.clipboard?.writeText(password).catch(() => {
-      // Clipboard access can be denied, the password is visible anyway.
-    });
+  const handleArchiveDownload = () => {
+    if (archive) {
+      FileSaver.saveAs(archive, `${identifier}.zip`);
+    }
   };
 
   const runLink = status?.runUrl ?? buildListUrl;
   const buildPercent = percentComplete(status);
   const buildFiles = compiledFiles(status);
-  const downloadUrl = status?.firmwareUrl ?? firmwareDownloadUrl(identifier);
-  const isBuilt = phase === 'ready' || (phase === 'error' && isRetryable);
   const activeStep = phase === 'building' ? 0 : phase === 'preparing' ? 1 : 2;
 
   const manualInstructions = (
@@ -248,28 +271,27 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         <Typography variant="body2" component="div">
           <ol style={{ paddingLeft: '1.2em', margin: 0 }}>
             <li>
-              {isBuilt ? (
+              {archive ? (
                 <>
-                  Download the firmware:{' '}
-                  <Link href={downloadUrl}>{identifier}.zip</Link>
+                  Save the firmware to your computer and unzip it:
+                  <Box sx={{ my: 1 }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<Download />}
+                      onClick={handleArchiveDownload}
+                    >
+                      Download {identifier}.zip
+                    </Button>
+                  </Box>
                 </>
               ) : (
                 <>
-                  Wait for the build to finish, then download the firmware from{' '}
-                  <Link href={downloadUrl}>{identifier}.zip</Link>
+                  Wait for the build to finish - this page decrypts the firmware
+                  and offers it here as a ZIP you can save and unzip with any
+                  tool.
                 </>
               )}
-            </li>
-            <li>
-              Unzip it using this password:{' '}
-              <Box
-                component="strong"
-                onClick={handlePasswordCopy}
-                sx={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
-                title="Copy to clipboard"
-              >
-                {password} <ContentCopy fontSize="inherit" />
-              </Box>
             </li>
             <li>Connect your ESP32 to your computer.</li>
             <li>
@@ -301,7 +323,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
         {phase === 'error' ? (
           <Alert severity="error" sx={{ mt: 1 }}>
             <AlertTitle>
-              {isRetryable ? 'Could not prepare the firmware' : 'Build failed'}
+              {didBuildFail ? 'Build failed' : 'Could not prepare the firmware'}
             </AlertTitle>
             {error}
             <Box sx={{ mt: 1 }}>
@@ -338,7 +360,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
                   <Alert severity="warning" sx={{ my: 1 }}>
                     We cannot read the build status from this browser. Your
                     build is most likely still running - follow it in the build
-                    log and use the manual instructions below once it finished.
+                    log and leave this page open. The key that decrypts your
+                    firmware only exists here, so reloading means starting the
+                    build again.
                   </Alert>
                 )}
                 <Typography variant="caption" color="text.secondary">

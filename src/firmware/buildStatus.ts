@@ -1,7 +1,7 @@
 /**
- * The build workflow publishes a small JSON status document next to the
- * firmware ZIP. The web UI polls it to follow the build without requiring the
- * user to watch the GitHub Actions run.
+ * The build workflow publishes a small JSON status document next to the sealed
+ * firmware archive. The web UI polls it to follow the build without requiring
+ * the user to watch the GitHub Actions run.
  */
 
 const S3_BUCKET = process.env.REACT_APP_S3_BUCKET;
@@ -10,8 +10,10 @@ const AWS_REGION = process.env.REACT_APP_AWS_REGION;
 const objectUrl = (key: string) =>
   `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
 
+// `.zip.enc` rather than `.zip`: the object is a ZIP sealed to the key pair the
+// page generated for this build, not a ZIP any unzip tool can open.
 export const firmwareDownloadUrl = (identifier: string) =>
-  objectUrl(`firmware/${identifier}.zip`);
+  objectUrl(`firmware/${identifier}.zip.enc`);
 
 export const buildStatusUrl = (identifier: string) =>
   objectUrl(`firmware/${identifier}.status.json`);
@@ -61,6 +63,47 @@ const STEPS: BuildStep[] = ['preparing', 'compiling', 'packaging'];
 const optionalString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;
 
+/**
+ * The status document is fetched over the network, and the URLs in it end up in
+ * `href` attributes and in `fetch()`. Accept only absolute https URLs on the
+ * origins we publish to, so a document that ever came from somewhere else - or
+ * was written by a build step with a rewritten environment - cannot turn a link
+ * into `javascript:` or point the download at another host.
+ */
+const trustedUrl = (
+  value: unknown,
+  allowedOrigins: readonly string[]
+): string | undefined => {
+  const raw = optionalString(value);
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    const url = new URL(raw);
+    // The parsed form, so what is returned is what was actually checked.
+    return url.protocol === 'https:' && allowedOrigins.includes(url.origin)
+      ? url.href
+      : undefined;
+  } catch (error) {
+    return undefined;
+  }
+};
+
+const originOf = (url: string): string | undefined => {
+  try {
+    return new URL(url).origin;
+  } catch (error) {
+    return undefined;
+  }
+};
+
+const bucketOrigins = (): readonly string[] => {
+  const origin = originOf(objectUrl(''));
+  return origin ? [origin] : [];
+};
+
+const GITHUB_ORIGINS = ['https://github.com'] as const;
+
 const optionalCount = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0
     ? value
@@ -101,11 +144,11 @@ export const parseBuildStatus = (raw: unknown): BuildStatus | null => {
   }
   return {
     state,
-    runUrl: optionalString(record.run_url),
+    runUrl: trustedUrl(record.run_url, GITHUB_ORIGINS),
     message: optionalString(record.message),
     step: parseStep(record.step),
     progress: parseProgress(record.progress),
-    firmwareUrl: optionalString(record.firmware_url),
+    firmwareUrl: trustedUrl(record.firmware_url, bucketOrigins()),
     firmwareName: optionalString(record.firmware_name),
     esphomeVersion: optionalString(record.esphome_version),
   };

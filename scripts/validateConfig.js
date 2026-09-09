@@ -20,6 +20,12 @@
  *   2. The fields that are rendered as bare scalars are additionally held to a
  *      strict shape, which also rejects same-line YAML tricks (`!include`,
  *      `&anchor`, `*alias`, ...) that do not need a newline.
+ *
+ * Escaping is not the whole story, though. A value can be perfectly quoted and
+ * still be dangerous because of what ESPHome does with it: `platform_version`
+ * is handed to PlatformIO as its `platform` spec, and PlatformIO accepts a URL
+ * or a git repository there and runs the Python inside the package it fetches.
+ * Fields like that need an allow-list of their own, whatever the escaping.
  */
 
 class InvalidConfigError extends Error {
@@ -34,6 +40,32 @@ class InvalidConfigError extends Error {
 // a YAML-structure injection needs to open a new key.
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\x00-\x08\x0a-\x1f\x7f]/;
+
+// Names the templates expect to come from the build, not from the requester.
+// `git_sha` reaches the `ref` that ESPHome fetches the b2500 component from,
+// which is a fetcher rather than a plain YAML scalar, so it gets a second
+// layer: render.js overrides it in the context. `ref` itself is overridden by
+// the templates' own `{% set ref = ... %}` rather than by render.js, and is
+// listed here so a template that stopped doing that would not silently expose
+// it.
+const RESERVED_KEYS = ['git_sha', 'automated_build', 'ref'];
+
+// Matches getMaxBleDevices() in src/utils/index.ts, which is 9 because that is
+// what esp32_ble_tracker allows. Kept in step by src/utils/index.test.ts.
+const MAX_STORAGES = 9;
+
+// Mirrors validPlatformVariants and validEspTemperatureVariants in src/types.ts;
+// index.test.ts holds the three in step.
+const PLATFORM_VARIANTS = new Set([
+  'auto',
+  'esp32',
+  'esp32s2',
+  'esp32s3',
+  'esp32c3',
+  'esp32h2',
+]);
+
+const ESP_TEMPERATURE_VARIANTS = new Set(['internal', 'ntc']);
 
 const LOG_LEVELS = new Set([
   'NONE',
@@ -55,7 +87,9 @@ const rejectControlChars = (value, path) => {
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((item, index) => rejectControlChars(item, `${path}[${index}]`));
+    value.forEach((item, index) =>
+      rejectControlChars(item, `${path}[${index}]`)
+    );
     return;
   }
   if (value && typeof value === 'object') {
@@ -107,6 +141,17 @@ const requirePattern = (value, path, pattern, description) => {
   }
 };
 
+const requireOneOf = (value, path, allowed) => {
+  if (isBlank(value)) {
+    return;
+  }
+  if (!allowed.has(String(value))) {
+    throw new InvalidConfigError(
+      `${path} must be one of ${[...allowed].join(', ')}`
+    );
+  }
+};
+
 /**
  * Throws {@link InvalidConfigError} if the config could break out of the YAML
  * the templates generate. Returns nothing; the caller renders `config` as-is.
@@ -118,6 +163,14 @@ const validateConfig = (config) => {
 
   rejectControlChars(config, 'config');
 
+  for (const key of RESERVED_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(config, key)) {
+      throw new InvalidConfigError(
+        `${key} is set by the build, not the config`
+      );
+    }
+  }
+
   // Bare-scalar fields: hold them to a strict shape so nothing but the expected
   // token can reach the YAML unquoted.
   requirePattern(
@@ -127,9 +180,38 @@ const validateConfig = (config) => {
     'a flash size such as 4MB'
   );
 
-  if (!isBlank(config.log_level) && !LOG_LEVELS.has(String(config.log_level))) {
-    throw new InvalidConfigError(
-      `log_level must be one of ${[...LOG_LEVELS].join(', ')}`
+  // Reaches ESPHome as `platform_version`, which it forwards to PlatformIO as
+  // the `platform` spec. PlatformIO resolves a URL, a git repository or a local
+  // path there and executes the platform package's build scripts, so anything
+  // but a plain version number is remote code execution on the build runner.
+  requirePattern(
+    config.idf_platform_version,
+    'idf_platform_version',
+    /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(-[0-9A-Za-z]{1,16})?$/,
+    'a version number such as 55.3.37'
+  );
+
+  requireOneOf(config.log_level, 'log_level', LOG_LEVELS);
+
+  // Not because they are dangerous - every string in the config is already free
+  // of control characters, and both of these are yaml_string-escaped where they
+  // land - but because a build failure is diagnosed from the redacted config,
+  // and only a field with a known shape can be printed there. See KEEP in
+  // redactConfig.js.
+  requirePattern(
+    config.board,
+    'board',
+    /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/,
+    'a PlatformIO board ID such as esp32dev'
+  );
+  requireOneOf(config.variant, 'variant', PLATFORM_VARIANTS);
+
+  const espTemperature = config.esp_temperature;
+  if (espTemperature && typeof espTemperature === 'object') {
+    requireOneOf(
+      espTemperature.variant,
+      'esp_temperature.variant',
+      ESP_TEMPERATURE_VARIANTS
     );
   }
 
@@ -185,12 +267,33 @@ const validateConfig = (config) => {
     if (!Array.isArray(config.storages)) {
       throw new InvalidConfigError('storages must be an array');
     }
+    // Each storage expands to roughly a hundred YAML entities, and the build is
+    // unauthenticated, so the list needs an upper bound - but the bound is the
+    // one the UI offers, not a smaller number, or a supported configuration
+    // stops building.
+    if (config.storages.length > MAX_STORAGES) {
+      throw new InvalidConfigError(
+        `storages must hold at most ${MAX_STORAGES} entries`
+      );
+    }
     config.storages.forEach((storage, index) => {
       if (storage && typeof storage === 'object') {
         requireInteger(storage.version, `storages[${index}].version`, {
           min: 0,
           max: 99,
         });
+        requirePattern(
+          storage.mac_address,
+          `storages[${index}].mac_address`,
+          // Colons only: ESPHome's cv.mac_address splits on ":" and requires
+          // six parts, so a dash-separated address is invalid there too.
+          // The web builder holds the same rule (MAC_ADDRESS in src/utils)
+          // and rewrites dashes on both of its deserialisation boundaries, so
+          // reaching this means a hand-made payload - and failing here gives a
+          // better message than failing in ESPHome.
+          /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/,
+          'a MAC address such as 00:11:22:33:44:55'
+        );
       }
     });
   }

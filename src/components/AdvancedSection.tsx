@@ -27,6 +27,7 @@ import {
   validLogLevels,
 } from '../types';
 import { templates } from '../templates';
+import { isPlatformVersionValid } from '../utils';
 
 interface AdvancedSectionProps {
   formValues: FormValues;
@@ -147,11 +148,14 @@ const AdvancedSection: React.FC<AdvancedSectionProps> = ({
           onChange={handleInputChange}
           fullWidth
           margin="normal"
+          error={!isPlatformVersionValid(formValues.idf_platform_version)}
           helperText={
             <>
-              The ESP-IDF platform version to use. If left empty, the default
-              version will be used.{' '}
-              <b>Only change this if you know what you are doing!</b>
+              The ESP-IDF platform version to use, as a plain version number
+              such as <code>55.3.37</code>. If left empty, the default version
+              will be used. A URL or a repository is not accepted: the build
+              hands this to PlatformIO, which would fetch and run whatever it
+              points at. <b>Only change this if you know what you are doing!</b>
             </>
           }
         />

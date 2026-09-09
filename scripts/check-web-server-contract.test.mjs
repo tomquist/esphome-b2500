@@ -8,11 +8,13 @@
 //   node --test scripts/check-web-server-contract.test.mjs
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { test } from "node:test";
 import {
   emittedKeys,
   idBuilder,
   maskCommentsAndLiterals,
+  pinnedRef,
 } from "./check-web-server-contract.mjs";
 
 // A miniature stand-in for web_server.cpp: `extra` is dropped into the function
@@ -92,4 +94,20 @@ test("masking preserves offsets so slices still line up", () => {
 
 test("collects every emitted event key, and nothing else", () => {
   assert.deepEqual(emittedKeys(source()), ["device", "id", "value"]);
+});
+
+// pinnedRef reads the version out of the build workflow, so a change to how the
+// workflow spells it breaks this check silently - the nightly job passes --ref
+// explicitly and stays green while the pinned job dies. That already happened
+// once, when the version stopped being a `client_payload || default` expression
+// and became a literal.
+test("reads the version the build workflow actually pins", () => {
+  const workflow = fs.readFileSync(
+    new URL("../.github/workflows/build-esphome.yml", import.meta.url),
+    "utf8",
+  );
+  const declared = workflow.match(/^\s*ESPHOME_VERSION:\s*'(?<version>[^']+)'/m);
+  assert.ok(declared, "the build workflow no longer pins a literal version");
+  assert.equal(pinnedRef(), declared.groups.version);
+  assert.match(pinnedRef(), /^\d{4}\.\d{1,2}\.\d{1,2}$/);
 });

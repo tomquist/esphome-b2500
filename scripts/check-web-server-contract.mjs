@@ -41,10 +41,12 @@ function bail(message) {
 }
 
 // The ESPHome version firmware is actually built with, so the check follows the
-// pinned version without a second place to update.
+// pinned version without a second place to update. Matches the job-level
+// literal; the step-level ESPHome version is an expression with no quotes, so
+// it cannot be picked up by accident.
 function pinnedRef() {
   const wf = fs.readFileSync(BUILD_WORKFLOW, "utf8");
-  const m = wf.match(/client_payload\.esphome_version\s*\|\|\s*'([^']+)'/);
+  const m = wf.match(/^\s*ESPHOME_VERSION:\s*'([^']+)'/m);
   if (!m) throw new Error(`could not read the pinned ESPHome version from ${BUILD_WORKFLOW}`);
   return m[1];
 }
@@ -132,7 +134,7 @@ function idBuilder(source) {
     .trim();
 }
 
-export { emittedKeys, idBuilder, maskCommentsAndLiterals, SOURCE };
+export { emittedKeys, idBuilder, maskCommentsAndLiterals, pinnedRef, SOURCE };
 
 // Importable for tests (scripts/check-web-server-contract.test.mjs); everything
 // below runs only when the script is the program being executed.

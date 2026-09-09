@@ -1,9 +1,55 @@
+import fs from 'fs';
+import path from 'path';
 import {
   BuildStatus,
   BuildTimeoutError,
+  buildStatusUrl,
+  firmwareDownloadUrl,
   parseBuildStatus,
   pollBuildStatus,
 } from './buildStatus';
+
+// Both object keys are spelled in one shell file and here. A drift means the
+// page 404s on a build that actually succeeded - for the status document, that
+// it cannot poll at all - so read the producers' copies rather than restating
+// them.
+const repoFile = (...parts: string[]) =>
+  fs.readFileSync(path.join(__dirname, '..', '..', ...parts), 'utf-8');
+
+const escapeForRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+describe('the object layout', () => {
+  it('matches the key the build workflow uploads the firmware to', () => {
+    const uploaded = repoFile(
+      '.github',
+      'workflows',
+      'build-esphome.yml'
+    ).match(
+      /aws s3 cp \S+ "s3:\/\/\$S3_BUCKET\/firmware\/\$IDENTIFIER(?<suffix>\S*)"/
+    );
+
+    expect(uploaded).not.toBeNull();
+    expect(firmwareDownloadUrl('a-build')).toMatch(
+      new RegExp(
+        `/firmware/a-build${escapeForRegExp(uploaded!.groups!.suffix)}$`
+      )
+    );
+  });
+
+  it('matches the key the status document is published to', () => {
+    const published = repoFile('scripts', 'publish-build-status.sh').match(
+      /s3:\/\/\$\{S3_BUCKET\}\/firmware\/\$\{IDENTIFIER\}(?<suffix>\S*)"/
+    );
+
+    expect(published).not.toBeNull();
+    expect(buildStatusUrl('a-build')).toMatch(
+      new RegExp(
+        `/firmware/a-build${escapeForRegExp(published!.groups!.suffix)}$`
+      )
+    );
+  });
+});
 
 describe('parseBuildStatus', () => {
   it('maps the workflow status to a build state', () => {
@@ -15,10 +61,11 @@ describe('parseBuildStatus', () => {
   });
 
   it('reads the optional fields', () => {
+    const firmwareUrl = firmwareDownloadUrl('happy-tiny-otter-abc');
     const status = parseBuildStatus({
       status: 'SUCCESS',
       run_url: 'https://github.com/run/1',
-      firmware_url: 'https://example.com/firmware.zip',
+      firmware_url: firmwareUrl,
       firmware_name: 'b2500-esp32',
       esphome_version: '2026.8.1',
     });
@@ -29,10 +76,37 @@ describe('parseBuildStatus', () => {
       message: undefined,
       step: undefined,
       progress: undefined,
-      firmwareUrl: 'https://example.com/firmware.zip',
+      firmwareUrl,
       firmwareName: 'b2500-esp32',
       esphomeVersion: '2026.8.1',
     });
+  });
+
+  it('drops URLs that are not https on an expected origin', () => {
+    const status = parseBuildStatus({
+      status: 'success',
+      // eslint-disable-next-line no-script-url
+      run_url: 'javascript:alert(1)',
+      firmware_url: 'https://evil.example/firmware.zip',
+    });
+
+    expect(status?.runUrl).toBeUndefined();
+    expect(status?.firmwareUrl).toBeUndefined();
+  });
+
+  it('drops a run URL on a look-alike host', () => {
+    expect(
+      parseBuildStatus({
+        status: 'success',
+        run_url: 'https://github.com.evil.example/run/1',
+      })?.runUrl
+    ).toBeUndefined();
+    expect(
+      parseBuildStatus({
+        status: 'success',
+        run_url: 'http://github.com/run/1',
+      })?.runUrl
+    ).toBeUndefined();
   });
 
   it('reads the build step and its compile progress', () => {

@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { FormValues } from '../types';
+import { FormValues, validPlatformVariants } from '../types';
 import { templates } from '../templates';
 
 export const defaultFormValues: FormValues = {
@@ -153,9 +153,55 @@ export const redactSecrets = (config: FormValues) => {
 // project use ESP-IDF by default, we allow up to 9 B2500 devices.
 export const getMaxBleDevices = (): number => 9;
 
+/**
+ * Colons only, matching scripts/validateConfig.js and ESPHome's
+ * `cv.mac_address`, which splits on ":" and requires six parts. Kept in step by
+ * index.test.ts, which reads the build's pattern out of validateConfig.js.
+ */
+export const MAC_ADDRESS = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+
+/**
+ * A PlatformIO board ID. Mirrors `board` in scripts/validateConfig.js, which
+ * constrains it so the redacted failure log can print it verbatim - it is one
+ * of the first things you want when someone reports a build that did not
+ * compile. Kept in step by index.test.ts.
+ */
+export const BOARD = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/**
+ * Normalises a config that came from storage rather than from the form.
+ *
+ * The MAC field formats typed input to colons, but a JSON file and a restored
+ * localStorage blob can hold anything - including a dash-separated address that
+ * an older build of this page accepted. Rewriting beats rejecting: it repairs
+ * the stored value instead of leaving the user to retype it.
+ *
+ * Shapes are handled explicitly rather than left to the caller's try/catch, so
+ * a malformed stored config degrades to "no storages" instead of throwing
+ * further up.
+ */
+export const normalizeImportedConfig = (config: FormValues): FormValues => ({
+  ...config,
+  storages: (Array.isArray(config.storages) ? config.storages : [])
+    .filter((storage) => storage && typeof storage === 'object')
+    .map((storage) => ({
+      ...storage,
+      mac_address: String(storage.mac_address ?? '').replace(/-/g, ':'),
+    })),
+});
+
 export const validateConfig = (config: FormValues) => {
   const template = templates[config.template_version];
   const errors = [];
+  if (!isPlatformVersionValid(config.idf_platform_version)) {
+    errors.push('ESP-IDF platform version is invalid');
+  }
+  if (!BOARD.test(config.board)) {
+    errors.push('Board is invalid');
+  }
+  if (!validPlatformVariants.includes(config.variant)) {
+    errors.push('Variant is invalid');
+  }
   if (config.storages.length === 0) {
     errors.push('At least one storage is required');
   }
@@ -172,9 +218,7 @@ export const validateConfig = (config: FormValues) => {
     if (storage.mac_address.trim() === '') {
       errors.push('Storage MAC address is required');
     }
-    if (
-      !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(storage.mac_address)
-    ) {
+    if (!MAC_ADDRESS.test(storage.mac_address)) {
       errors.push('Storage MAC address is invalid');
     }
     if (
@@ -329,9 +373,14 @@ ${build ? `- Build: [${build}]\n` : ''}
   return `https://github.com/tomquist/esphome-b2500/issues/new?body=${encodeURIComponent(body)}`;
 };
 
-export const generatePassword = () => {
-  return crypto.randomBytes(16).toString('base64').slice(0, 16);
-};
+/**
+ * Mirrors `idf_platform_version` in scripts/validateConfig.js. Kept in step by
+ * utils/index.test.ts, which reads that file: a form that accepts more than the
+ * build does turns into a five-minute build and an opaque failure.
+ */
+export const isPlatformVersionValid = (value: string | undefined) =>
+  !value ||
+  /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(-[0-9A-Za-z]{1,16})?$/.test(value);
 
 export const generateRandomIdentifier = () => {
   const adjectives = [
@@ -399,12 +448,22 @@ export const generateRandomIdentifier = () => {
     'toucan',
   ];
 
-  const randomAdjective1 =
-    adjectives[Math.floor(Math.random() * adjectives.length)];
-  const randomAdjective2 =
-    adjectives[Math.floor(Math.random() * adjectives.length)];
-  const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
-  const randomNumber = Math.floor(Math.random() * 1000); // Adding a random number between 0 and 999
+  // Not a secret - it shows up in the workflow's run-name and in the run log,
+  // and the firmware object it names is sealed to the requesting page's key
+  // anyway. The entropy is so that two builds never land on the same object and
+  // so the bucket is not walkable; Math.random() is too weak for either. The
+  // words are there to make a build recognisable in the Actions list.
+  // toString() rather than a Buffer read method: the bundle resolves `crypto`
+  // to crypto-browserify, whose Buffer is the `buffer` polyfill.
+  const pick = <T>(items: T[]): T =>
+    items[parseInt(crypto.randomBytes(4).toString('hex'), 16) % items.length];
 
-  return `${randomAdjective1}-${randomAdjective2}-${randomAnimal}-${randomNumber}`;
+  const randomAdjective1 = pick(adjectives);
+  const randomAdjective2 = pick(adjectives);
+  const randomAnimal = pick(animals);
+  // 96 bits, lowercase hex so the result still matches the ^[a-z0-9-]{1,64}$
+  // the build workflow enforces.
+  const randomSuffix = crypto.randomBytes(12).toString('hex');
+
+  return `${randomAdjective1}-${randomAdjective2}-${randomAnimal}-${randomSuffix}`;
 };

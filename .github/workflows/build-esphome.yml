@@ -9,59 +9,81 @@ on:
     types:
       - build_esphome
 
+# The dispatch endpoint is public, so the same identifier can be submitted more
+# than once. Serialising per identifier keeps two runs from interleaving their
+# writes to the same firmware and status objects.
+concurrency:
+  group: build-esphome-${{ github.event.client_payload.identifier }}
+  cancel-in-progress: false
+
 jobs:
   build_esphome:
     runs-on: ubuntu-latest
     env:
-      ENCRYPTED_ZIP_PASSWORD: ${{ github.event.client_payload.password }}
       ENCRYPTED_CONFIG: ${{ github.event.client_payload.config }}
-      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+      # The browser's ephemeral public key. Public material, so unlike the
+      # password it replaces there is nothing here to protect.
+      CLIENT_PUBLIC_KEY: ${{ github.event.client_payload.public_key }}
       S3_BUCKET: esphome-b2500-images
       AWS_REGION: eu-west-1
       AUTOMATED_BUILD: 'true'
       IDENTIFIER: ${{ github.event.client_payload.identifier }}
-      ESPHOME_VERSION: ${{ github.event.client_payload.esphome_version || '2026.8.1' }}
+      # Pinned rather than read from the dispatch payload. The build action
+      # splices this straight into a docker tag and a shell command, and which
+      # config keys ESPHome honours (platform_version, among others) differs
+      # per version, so letting a requester choose it hands them both a shell
+      # context and a pick of ESPHome's validation behaviour.
+      ESPHOME_VERSION: '2026.8.1'
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # The identifier ends up in an S3 object key and in shell commands, so it
-      # has to match what the web builder generates.
-      - name: Validate the build identifier
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '18'
+
+      # From the lockfile, so nunjucks is the reviewed version rather than
+      # whatever the registry resolves today, and without lifecycle scripts:
+      # this job holds the AWS credentials and the build private key.
+      - name: Install dependencies
+        run: npm ci --omit=dev --ignore-scripts
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # After the AWS credentials, so that a payload rejected here still reaches
+      # the requesting page: "Publish build failure" needs the credentials, and
+      # without it the page polls until it times out instead of being told what
+      # went wrong. publish-build-status.sh re-checks the identifier itself and
+      # skips the upload when it is the malformed part, which is the one case
+      # there is nowhere to publish to.
+      - name: Validate the dispatch payload
         run: |
           if [[ ! "$IDENTIFIER" =~ ^[a-z0-9-]{1,64}$ ]]; then
             echo "::error::Invalid build identifier"
             exit 1
           fi
-          # esphome_version also comes from the dispatch payload and is passed
-          # to the build action, so constrain it to a plain version or "latest".
-          if [[ ! "$ESPHOME_VERSION" =~ ^(latest|[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2})$ ]]; then
-            echo "::error::Invalid ESPHome version"
+          # 65 bytes of uncompressed point: 87 base64 characters and one "=".
+          # Checked properly where it is parsed (scripts/buildCrypto.js, which
+          # also rejects a point that is not on the curve); this is so a
+          # malformed payload fails before a five-minute compile.
+          if [[ ! "$CLIENT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/]{87}=$ ]]; then
+            echo "::error::Invalid build public key"
             exit 1
           fi
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: npm install nunjucks
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v5
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
 
       # The web builder polls this document to follow the build and to offer
       # flashing the firmware right after it finished.
@@ -70,29 +92,13 @@ jobs:
           STEP: preparing
         run: ./scripts/publish-build-status.sh building "Preparing the build" || true
 
-      - name: Decrypt the ZIP password
-        id: decrypt_password
-        run: |
-          # PRIVATE_KEY and ENCRYPTED_ZIP_PASSWORD are read from the environment
-          # (set at job level) as plain shell variables rather than expanded by
-          # GitHub into the script text. The encrypted password comes straight
-          # from the repository dispatch payload and is fully attacker
-          # controlled, so it must never be spliced into the script where a
-          # command substitution or backticks would run.
-          printf '%s\n' "$PRIVATE_KEY" > private_key.pem
-          printf '%s' "$ENCRYPTED_ZIP_PASSWORD" > encrypted_password.txt
-          DECRYPTED_PASSWORD=$(openssl rsautl -decrypt -inkey private_key.pem -in <(base64 -d encrypted_password.txt) -oaep)
-          echo "::add-mask::$DECRYPTED_PASSWORD"
-          echo "PASSWORD=$DECRYPTED_PASSWORD" >> "$GITHUB_ENV"
-
-      - name: Install yq
-        run: |
-          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-          chmod +x /usr/local/bin/yq
-        shell: bash
-      
+      # The only step that needs the repo's private key: it derives the config
+      # key from it and the requester's public key, in node rather than in the
+      # shell, so no secret is ever written to GITHUB_ENV.
       - name: Render ESPHome configuration
         id: generate_config
+        env:
+          BUILD_PRIVATE_KEY: ${{ secrets.BUILD_PRIVATE_KEY }}
         run: |
           node scripts/render.js
 
@@ -110,7 +116,7 @@ jobs:
 
       - name: Build firmware
         id: esphome-build
-        uses: esphome/build-action@v7.1.0
+        uses: esphome/build-action@f93bda46d83c761cd25bbfdf350cfe508a0a39d5 # v7.1.0
         with:
           yaml-file: device.yaml
           version: ${{ env.ESPHOME_VERSION }}
@@ -141,12 +147,15 @@ jobs:
             echo "::endgroup::"
           fi
 
+      # Logs on a public repository are world readable, and the config holds
+      # the requester's SSID, MQTT broker and username. The redacted form keeps
+      # the shape and the feature flags, which is what a failed build needs.
       - name: Debug on failure
         if: steps.esphome-build.outcome == 'failure'
         run: |
           echo "Build failed"
-          echo "::group::Original Config File"
-          cat config.json
+          echo "::group::Config (redacted)"
+          node scripts/redactConfig.js config.json
           echo "::endgroup::"
 
       - name: Exit on build failure  
@@ -158,7 +167,11 @@ jobs:
           STEP: packaging
         run: ./scripts/publish-build-status.sh building "Packaging the firmware" || true
 
-      - name: Zip the firmware with a password
+      # A plain ZIP, encrypted as a whole below. `zip -P` uses PKWARE's stream
+      # cipher, which a dozen bytes of known plaintext break - and a firmware
+      # archive is nearly all bytes an attacker can reproduce by running a build
+      # of their own at the pinned ESPHome version.
+      - name: Package and encrypt the firmware
         env:
           FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
         run: |
@@ -166,28 +179,34 @@ jobs:
             echo "::error::Unexpected firmware name"
             exit 1
           fi
-          zip -P "$PASSWORD" firmware.zip "$FIRMWARE_NAME"/*
+          zip firmware.zip "$FIRMWARE_NAME"/*
+          # Sealed to the requester's public key under a throwaway key pair, so
+          # this step needs no secret and the runner cannot read the result.
+          node scripts/encryptFirmware.js firmware.zip firmware.zip.enc
+          # The firmware carries the requester's WiFi and MQTT credentials, and
+          # artifacts on a public repository are public.
+          rm -f firmware.zip
 
       - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: esphome-firmware-${{ env.IDENTIFIER }}
-          path: firmware.zip
+          path: firmware.zip.enc
 
       - name: Upload firmware to S3
         run: |
-          aws s3 cp firmware.zip "s3://$S3_BUCKET/firmware/$IDENTIFIER.zip"
+          aws s3 cp firmware.zip.enc "s3://$S3_BUCKET/firmware/$IDENTIFIER.zip.enc"
 
       - name: Publish build result
         env:
-          FIRMWARE_URL: https://${{ env.S3_BUCKET }}.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/${{ env.IDENTIFIER }}.zip
+          FIRMWARE_URL: https://${{ env.S3_BUCKET }}.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/${{ env.IDENTIFIER }}.zip.enc
           FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
           ESPHOME_VERSION: ${{ steps.esphome-build.outputs.version }}
         run: ./scripts/publish-build-status.sh success
 
       - name: Output firmware URL
         run: |
-          echo "::notice::Firmware available at: https://$S3_BUCKET.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/$IDENTIFIER.zip"
+          echo "::notice::Firmware available at: https://$S3_BUCKET.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/$IDENTIFIER.zip.enc"
 
       - name: Publish build failure
         if: failure()

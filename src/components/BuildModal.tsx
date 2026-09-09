@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import {
+  Alert,
+  AlertTitle,
   Dialog,
   DialogActions,
   DialogContent,
@@ -9,12 +11,13 @@ import {
   CircularProgress,
 } from '@mui/material';
 import axios from 'axios';
+import { getAllSecrets, generateRandomIdentifier } from '../utils';
 import {
-  getAllSecrets,
-  generateRandomIdentifier,
-  generatePassword,
-} from '../utils';
-import { encryptConfig, encryptPassword } from '../crypto';
+  BuildKeyPair,
+  buildKeyIsConfigured,
+  encryptConfig,
+  generateBuildKeyPair,
+} from '../crypto';
 import BuildProgressDialog from './BuildProgressDialog';
 import { FormValues } from '../types';
 
@@ -29,21 +32,23 @@ const BuildModal: React.FC<BuildModalProps> = ({
 }) => {
   const [isBuildStarted, setIsBuildStarted] = useState(false);
   const [identifier] = useState(() => generateRandomIdentifier());
-  const [password] = useState(() => generatePassword());
+  // Generated per build and never transmitted: the payload carries only the
+  // public half, and the firmware comes back sealed to it.
+  const [keyPair, setKeyPair] = useState<BuildKeyPair | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleBuild = async () => {
     if (!debouncedFormValues) return;
     setIsLoading(true);
 
-    const encryptedPassword = encryptPassword(password);
-    const configData = {
-      secrets: getAllSecrets(debouncedFormValues),
-      config: debouncedFormValues,
-    };
-    const encryptedConfig = encryptConfig(configData, password);
-
     try {
+      const buildKeyPair = await generateBuildKeyPair();
+      const configData = {
+        secrets: getAllSecrets(debouncedFormValues),
+        config: debouncedFormValues,
+      };
+      const encryptedConfig = await encryptConfig(configData, buildKeyPair);
+
       await axios.post(
         'https://publicactiontrigger.azurewebsites.net/api/dispatches/tomquist/esphome-b2500',
         {
@@ -51,7 +56,7 @@ const BuildModal: React.FC<BuildModalProps> = ({
           client_payload: {
             config: encryptedConfig,
             identifier,
-            password: encryptedPassword,
+            public_key: buildKeyPair.publicKey,
           },
         },
         {
@@ -60,11 +65,9 @@ const BuildModal: React.FC<BuildModalProps> = ({
           },
         }
       );
-      // navigator.clipboard is undefined in insecure contexts, and reading
-      // through it would throw before there is a promise to catch.
-      navigator.clipboard?.writeText(password).catch(() => {
-        // Copying is a convenience for the manual flashing route only.
-      });
+      // Only kept once the dispatch went out: without a build to match it, the
+      // key pair is of no use to the progress dialog.
+      setKeyPair(buildKeyPair);
       setIsBuildStarted(true);
     } catch (error) {
       console.error('Error triggering build:', error);
@@ -74,11 +77,11 @@ const BuildModal: React.FC<BuildModalProps> = ({
     }
   };
 
-  if (isBuildStarted) {
+  if (isBuildStarted && keyPair) {
     return (
       <BuildProgressDialog
         identifier={identifier}
-        password={password}
+        keyPair={keyPair}
         deviceName={
           debouncedFormValues.friendly_name || debouncedFormValues.name
         }
@@ -105,7 +108,18 @@ const BuildModal: React.FC<BuildModalProps> = ({
             browser such as Google Chrome or Microsoft Edge - you can always
             download the firmware and flash it manually instead.
           </p>
+          <p>
+            The key that unlocks your firmware is generated here and never
+            leaves this page, so keep it open until the build finishes.
+          </p>
         </DialogContentText>
+        {!buildKeyIsConfigured() && (
+          <Alert severity="error">
+            <AlertTitle>Builds are not configured</AlertTitle>
+            This deployment is missing its build public key, so a configuration
+            sent from here could not be decrypted. Please open an issue.
+          </Alert>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={closeModal} color="primary" disabled={isLoading}>
@@ -115,7 +129,9 @@ const BuildModal: React.FC<BuildModalProps> = ({
           onClick={handleBuild}
           color="primary"
           disabled={
-            isLoading || password.length < 8 || identifier.trim().length === 0
+            isLoading ||
+            !buildKeyIsConfigured() ||
+            identifier.trim().length === 0
           }
         >
           {isLoading ? <CircularProgress size={24} /> : 'Start Build'}

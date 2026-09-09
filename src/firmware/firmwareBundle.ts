@@ -22,15 +22,6 @@ const loadZipJs = async () => {
   return zip;
 };
 
-export class WrongPasswordError extends Error {
-  constructor() {
-    super(
-      'The firmware archive could not be decrypted with the build password.'
-    );
-    this.name = 'WrongPasswordError';
-  }
-}
-
 export interface FirmwareBundle {
   /** Blob URL of a manifest whose parts point at the extracted binaries. */
   manifestUrl: string;
@@ -77,11 +68,6 @@ export const downloadFirmwareArchive = async (
   return new Blob(chunks as BlobPart[]);
 };
 
-// zip.js reports both a wrong and a missing password through these messages.
-const isWrongPassword = (error: unknown) =>
-  error instanceof Error &&
-  /invalid password|encrypted entry/i.test(error.message);
-
 /**
  * Looks archive entries up by the path a manifest refers to them with. Paths
  * are resolved against the directory the manifest lives in; a bare file name is
@@ -103,16 +89,16 @@ export const createFileIndex = (entryNames: string[]) => {
 };
 
 /**
- * Decrypts the password protected firmware archive in the browser and exposes
- * its content as blob URLs that esp-web-tools can flash.
+ * Exposes the content of the firmware archive as blob URLs that esp-web-tools
+ * can flash. The archive is a plain ZIP by the time it gets here:
+ * `decryptFirmwareArchive` has already unwrapped what the bucket served.
  */
 export const extractFirmwareBundle = async (
   archive: Blob,
-  password: string,
   metadata: ManifestMetadata
 ): Promise<FirmwareBundle> => {
   const { BlobReader, Uint8ArrayWriter, ZipReader } = await loadZipJs();
-  const reader = new ZipReader(new BlobReader(archive), { password });
+  const reader = new ZipReader(new BlobReader(archive));
   const objectUrls: string[] = [];
   const release = () => {
     objectUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -177,7 +163,7 @@ export const extractFirmwareBundle = async (
     };
   } catch (error) {
     release();
-    throw isWrongPassword(error) ? new WrongPasswordError() : error;
+    throw error;
   } finally {
     await reader.close();
   }

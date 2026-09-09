@@ -11,6 +11,8 @@ on:
 jobs:
   build_examples:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         esphome_version: ["latest", "2026.8.1"]
@@ -29,15 +31,15 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '18'
           cache: 'npm'
@@ -46,10 +48,17 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline
       
+      # Pinned and checksummed: this step runs just before the one that handles
+      # the certificate secrets, and `releases/latest` is whatever the yq repo
+      # published most recently.
       - name: Install yq
+        env:
+          YQ_VERSION: v4.53.6
+          YQ_SHA256: c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385
         run: |
-          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-          chmod +x /usr/local/bin/yq
+          wget -q "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -O /tmp/yq
+          echo "${YQ_SHA256}  /tmp/yq" | sha256sum --check --strict
+          install -m 0755 /tmp/yq /usr/local/bin/yq
         shell: bash
       
       - name: Write certificates to secrets.yaml
@@ -66,49 +75,53 @@ jobs:
           HAME_BROKER: ${{ secrets.HAME_BROKER }}
         shell: bash
 
-      - name: Generate build password
-        id: generate_password
-        run: |
-          PASSWORD=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")
-          echo "PASSWORD=$PASSWORD" >> $GITHUB_ENV
-          echo "::add-mask::$PASSWORD"
-      
+      # Stands in for the browser and the repository at once: both key pairs are
+      # generated here and die with the runner, so the PR job needs no secret.
       - name: Encrypt configuration
         run: |
           cat examples/${{ matrix.example }}.json | jq --arg template_version ${{ matrix.template }} --arg mqtt_enabled ${{ matrix.mqtt_enabled }} '.template_version = $template_version | .mqtt.enabled = ($mqtt_enabled == "true")' > config.json
-          echo "ENCRYPTED_CONFIG=$(npx ts-node ./scripts/encrypt-config.ts config.json "${PASSWORD}")" >> $GITHUB_ENV
+          node scripts/encryptExampleConfig.js config.json "$RUNNER_TEMP"
 
       - name: Render configuration
-        run: node scripts/render.js
+        run: |
+          BUILD_PRIVATE_KEY="$(cat "$RUNNER_TEMP/private_key.pem")" \
+          CLIENT_PUBLIC_KEY="$(cat "$RUNNER_TEMP/client_public_key.txt")" \
+          ENCRYPTED_CONFIG="$(cat "$RUNNER_TEMP/encrypted_config.txt")" \
+            node scripts/render.js
 
       - name: Build firmware
         id: esphome-build
-        uses: esphome/build-action@v7.1.0
+        uses: esphome/build-action@f93bda46d83c761cd25bbfdf350cfe508a0a39d5 # v7.1.0
         with:
           yaml-file: device.yaml
           version: ${{ matrix.esphome_version }}
 
-      - name: Create zip with password
+      - name: Package and encrypt the firmware
+        env:
+          FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
         run: |
-          zip -P "$PASSWORD" firmware.zip ${{ steps.esphome-build.outputs.name }}/*
+          zip firmware.zip "$FIRMWARE_NAME"/*
+          CLIENT_PUBLIC_KEY="$(cat "$RUNNER_TEMP/client_public_key.txt")" \
+            node scripts/encryptFirmware.js firmware.zip firmware.zip.enc
+          rm -f firmware.zip
 
-      - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: esphome-firmware-${{ github.event.pull_request.number }}-${{ matrix.example }}-${{ matrix.template }}-${{ matrix.mqtt_enabled }}-${{ matrix.esphome_version }}
-          path: firmware.zip
+      # No artifact: the archive is sealed to a key pair that dies with the
+      # runner, so uploading it would only publish something nobody can open.
+      # The job proves the build and the packaging work by completing.
 
   component_tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         esphome_version: ["latest", "2026.8.1"]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
 
