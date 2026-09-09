@@ -38,6 +38,11 @@ export interface BuildProgress {
   completed: number;
   /** Absent until the build knows how much work there is. */
   total?: number;
+  /**
+   * What the compiler is on right now - the source behind the object file
+   * written most recently. Absent before the first one lands.
+   */
+  current?: string;
 }
 
 export interface BuildStatus {
@@ -187,6 +192,23 @@ const parseStep = (value: unknown): BuildStep | undefined => {
   return STEPS.find((known) => known === step);
 };
 
+/**
+ * A file name from the build tree, shown as a line of text on the page. Long
+ * enough for anything ESP-IDF compiles, short enough that a status document
+ * saying otherwise cannot push the rest of the line off screen.
+ */
+const MAX_CURRENT_CHARS = 80;
+
+const parseCurrent = (value: unknown): string | undefined => {
+  const raw = optionalString(value);
+  if (!raw) {
+    return undefined;
+  }
+  // eslint-disable-next-line no-control-regex
+  const name = raw.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  return name.length > 0 && name.length <= MAX_CURRENT_CHARS ? name : undefined;
+};
+
 const parseProgress = (value: unknown): BuildProgress | undefined => {
   if (typeof value !== 'object' || value === null) {
     return undefined;
@@ -197,8 +219,12 @@ const parseProgress = (value: unknown): BuildProgress | undefined => {
     return undefined;
   }
   const total = optionalCount(record.total);
-  // A total that cannot be reached would only ever show a stuck bar.
-  return { completed, total: total && total >= completed ? total : undefined };
+  return {
+    completed,
+    // A total that cannot be reached would only ever show a stuck bar.
+    total: total && total >= completed ? total : undefined,
+    current: parseCurrent(record.current),
+  };
 };
 
 /**

@@ -7,7 +7,7 @@ upload three kinds of object to the `esphome-b2500-images` bucket:
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `firmware/<identifier>.zip.enc`     | The firmware archive, sealed to the requesting page's key (see below).                                                                 |
 | `firmware/<identifier>.status.json` | Build status the web builder polls (`building`, `success`, `error`), including which step is running, how far along the compile is, and how many build output segments exist. |
-| `firmware/<identifier>.log.<n>`     | The build output, numbered from zero. Each segment holds only what the compiler printed since the one before it.                       |
+| `firmware/<identifier>.log.<n>`     | The build output, numbered from zero. Each segment holds only what the compiler printed since the one before it. Nothing publishes these at present - see `scripts/fetch-job-log.sh`. |
 
 All of them live under the same `firmware/` prefix so that a single public-read
 bucket policy - and the expiry rule below - covers them.

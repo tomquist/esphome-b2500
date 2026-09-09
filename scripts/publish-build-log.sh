@@ -3,6 +3,10 @@
 # Publishes the build output as append-only segments next to the status
 # document, and prints how many exist.
 #
+# NOT WIRED UP: its only source of build output was fetch-job-log.sh, which
+# cannot read this job's log while the job is running - see the header there.
+# Everything below still holds for whatever does feed it next.
+#
 # S3 has no append: an object is replaced whole or not at all. Re-uploading one
 # growing object would mean sending the entire log every few seconds, and the
 # page re-reading it. So the log is published as a run of immutable segments -

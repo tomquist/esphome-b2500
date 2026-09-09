@@ -2,12 +2,25 @@
 #
 # Prints this workflow job's own log, cleaned.
 #
-# The compile runs inside esphome/build-action, so its output belongs to that
-# step: there is no file to tail and no pipe to tee. The Actions API does serve
-# a job's log while the job is still running, so reading our own log back is the
-# one way to get the compiler's output out of the runner and in front of the
-# person waiting for the build. publish-build-log.sh turns what this prints into
-# the segments the web builder downloads.
+# NOT WIRED UP, and read this before wiring it up again. The compile runs inside
+# esphome/build-action, so its output belongs to that step: there is no file to
+# tail and no pipe to tee, which leaves reading our own log back through the
+# API. That does not work from inside the job:
+#
+#   GET /actions/jobs/<a running job>/logs    -> 404
+#   GET /actions/jobs/<a finished job>/logs   -> 200
+#
+# The log is not served until the job has ended, and every step that could
+# publish it runs before that - including the failure path. So this returned
+# nothing for a whole build, five times, and then wrote itself off, which is
+# exactly what it is built to do and produced no log at all.
+#
+# Two routes work, and this script is most of both. A workflow triggered on
+# `workflow_run: completed` runs when the log is there, so it can publish the
+# whole log and the failure reason a few seconds after the build ends - the
+# page polls for thirty minutes, so it is still watching. Live output needs the
+# compile to be ours rather than the action's, so that its stdout can be teed
+# to a file, and then none of this is needed.
 #
 # Prints the whole log by default, because the caller publishes it as a growing
 # prefix and needs the same bytes every time. `LOG_TAIL_LINES` and
