@@ -1,0 +1,16 @@
+version: 2
+
+updates:
+  # The workflows pin every action to a commit SHA, because a mutable tag on the
+  # firmware build job would run with the AWS credentials and the build private
+  # key in scope. A pin with nothing to move it is its own hazard, though - it
+  # freezes the action at whatever it was on the day it was pinned, security
+  # fixes included - so this is the half that keeps the pins current. Dependabot
+  # rewrites the SHA and updates the version comment beside it.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
