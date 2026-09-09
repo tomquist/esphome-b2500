@@ -56,7 +56,9 @@ const App: React.FC = () => {
     if (storedFormValues != null) {
       const loadedValues = JSON.parse(storedFormValues);
       const mergedValues = mergeDeep(loadedValues, defaultFormValues);
-      setFormValues(mergedValues);
+      // Normalised like an import: a config stored by an older build of this
+      // page can hold a dash-separated MAC, which nothing downstream accepts.
+      setFormValues(normalizeImportedConfig(mergedValues));
     } else {
       setFormValues(defaultFormValues);
     }

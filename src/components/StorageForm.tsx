@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import { Storage, TemplateVersion } from '../types';
 import { templates } from '../templates';
+import { MAC_ADDRESS } from '../utils';
 
 interface StorageFormProps {
   templateVersion: TemplateVersion;
@@ -96,9 +97,7 @@ const StorageForm: React.FC<StorageFormProps> = ({
         let nameValid = storage.name.trim() === '';
         let versionValid =
           !storage.version || storage.version < 1 || storage.version > 2;
-        let macValid = !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(
-          storage.mac_address
-        );
+        let macValid = !MAC_ADDRESS.test(storage.mac_address);
         let idValid = !/^[0-9A-Fa-f]{24}$/.test(storage.id ?? '');
         return (
           <Box key={index} mb={2} border={1} borderRadius={5} padding={2}>

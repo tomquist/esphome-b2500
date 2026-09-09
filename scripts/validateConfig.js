@@ -245,10 +245,10 @@ const validateConfig = (config) => {
           `storages[${index}].mac_address`,
           // Colons only: ESPHome's cv.mac_address splits on ":" and requires
           // six parts, so a dash-separated address is invalid there too.
-          // normalizeImportedConfig() in src/utils converts the one input that
-          // can carry dashes (an imported JSON file), so reaching this means a
-          // hand-made payload, and failing here gives a better message than
-          // failing in ESPHome.
+          // The web builder holds the same rule (MAC_ADDRESS in src/utils)
+          // and rewrites dashes on both of its deserialisation boundaries, so
+          // reaching this means a hand-made payload - and failing here gives a
+          // better message than failing in ESPHome.
           /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/,
           'a MAC address such as 00:11:22:33:44:55'
         );

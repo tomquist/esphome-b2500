@@ -154,19 +154,32 @@ export const redactSecrets = (config: FormValues) => {
 export const getMaxBleDevices = (): number => 9;
 
 /**
- * Normalises a config that came from a file rather than from the form. The MAC
- * field formats typed input to colons, but an imported JSON can hold anything -
- * and ESPHome's `cv.mac_address` splits on ":" and requires six parts, so a
- * dash-separated address is invalid all the way down.
+ * Colons only, matching scripts/validateConfig.js and ESPHome's
+ * `cv.mac_address`, which splits on ":" and requires six parts. Kept in step by
+ * index.test.ts, which reads the build's pattern out of validateConfig.js.
  */
-export const normalizeImportedConfig = <T extends FormValues>(
-  config: T
-): T => ({
+export const MAC_ADDRESS = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+
+/**
+ * Normalises a config that came from storage rather than from the form.
+ *
+ * The MAC field formats typed input to colons, but a JSON file and a restored
+ * localStorage blob can hold anything - including a dash-separated address that
+ * an older build of this page accepted. Rewriting beats rejecting: it repairs
+ * the stored value instead of leaving the user to retype it.
+ *
+ * Shapes are handled explicitly rather than left to the caller's try/catch, so
+ * a malformed stored config degrades to "no storages" instead of throwing
+ * further up.
+ */
+export const normalizeImportedConfig = (config: FormValues): FormValues => ({
   ...config,
-  storages: (config.storages ?? []).map((storage) => ({
-    ...storage,
-    mac_address: (storage.mac_address ?? '').replace(/-/g, ':'),
-  })),
+  storages: (Array.isArray(config.storages) ? config.storages : [])
+    .filter((storage) => storage && typeof storage === 'object')
+    .map((storage) => ({
+      ...storage,
+      mac_address: String(storage.mac_address ?? '').replace(/-/g, ':'),
+    })),
 });
 
 export const validateConfig = (config: FormValues) => {
@@ -191,9 +204,7 @@ export const validateConfig = (config: FormValues) => {
     if (storage.mac_address.trim() === '') {
       errors.push('Storage MAC address is required');
     }
-    if (
-      !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(storage.mac_address)
-    ) {
+    if (!MAC_ADDRESS.test(storage.mac_address)) {
       errors.push('Storage MAC address is invalid');
     }
     if (

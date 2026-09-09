@@ -6,6 +6,7 @@ import {
   generateRandomIdentifier,
   getMaxBleDevices,
   isPlatformVersionValid,
+  MAC_ADDRESS,
   normalizeImportedConfig,
 } from './index';
 
@@ -89,6 +90,36 @@ describe('isPlatformVersionValid', () => {
   });
 });
 
+describe('MAC_ADDRESS', () => {
+  // The client is the strict side: formatMacAddress guarantees colons for typed
+  // input and both boundaries normalise, so anything the form accepts must be
+  // something the build accepts too.
+  it('is the pattern the build enforces', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'scripts', 'validateConfig.js'),
+      'utf-8'
+    );
+    const declared = source.match(
+      /mac_address`,\s*(?:\/\/[^\n]*\n\s*)*\/(?<pattern>\^[^/]+\$)\//
+    );
+    expect(declared).not.toBeNull();
+    const build = new RegExp(declared!.groups!.pattern);
+
+    for (const value of [
+      'AA:BB:CC:DD:EE:FF',
+      '00:11:22:33:44:55',
+      'AA-BB-CC-DD-EE-FF',
+      'AA-BB:CC-DD:EE-FF',
+      'AABBCCDDEEFF',
+      'AA:BB:CC:DD:EE',
+      'GG:BB:CC:DD:EE:FF',
+      'AA:BB:CC:DD:EE:FF ',
+    ]) {
+      expect(MAC_ADDRESS.test(value)).toBe(build.test(value));
+    }
+  });
+});
+
 describe('the storage cap', () => {
   // The server rejects a config with more storages than it allows; the form
   // offers up to getMaxBleDevices(). A cap below that means a configuration the
@@ -125,6 +156,19 @@ describe('normalizeImportedConfig', () => {
       normalizeImportedConfig(withMac('AA:BB:CC:DD:EE:FF')).storages[0]
         .mac_address
     ).toBe('AA:BB:CC:DD:EE:FF');
+  });
+
+  it('drops storages that are not objects, and a list that is not one', () => {
+    // A localStorage blob written by an older build can be any shape; degrade
+    // to "no storages" rather than throwing somewhere further up.
+    const shapeless = { ...defaultFormValues, storages: {} } as never;
+    expect(normalizeImportedConfig(shapeless).storages).toEqual([]);
+    expect(
+      normalizeImportedConfig({
+        ...defaultFormValues,
+        storages: [null, 'x', { name: 'a', version: 2, mac_address: '' }],
+      } as never).storages
+    ).toHaveLength(1);
   });
 
   it('produces something the build accepts', () => {
