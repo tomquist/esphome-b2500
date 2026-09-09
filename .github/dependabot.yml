@@ -11,6 +11,12 @@ updates:
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 5
+    # One PR a cycle rather than up to eight. Ungrouped, a busy month would hit
+    # the open-PR limit and silently defer whichever bumps lost, giving them
+    # another month of lag - and the pins are only as good as what moves them.
+    groups:
+      actions:
+        patterns:
+          - '*'
     commit-message:
       prefix: ci
