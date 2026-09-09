@@ -73,6 +73,38 @@ const workspace = ({ uploadFails = false } = {}) => {
   };
 };
 
+/** Whether something other than us currently holds `file`. */
+const isLocked = (file) => {
+  try {
+    execFileSync('flock', ['-n', file, 'true'], { stdio: 'ignore' });
+    return false;
+  } catch (error) {
+    return true;
+  }
+};
+
+const hasFlock = (() => {
+  try {
+    execFileSync('flock', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch (error) {
+    return false;
+  }
+})();
+
+const waitFor = async (predicate, { timeoutMs = 15000 } = {}) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+};
+
+const exited = (child) => new Promise((resolve) => child.once('exit', resolve));
+
 /** Runs one publish and returns the segment count it printed. */
 const publish = (space, env = {}) =>
   execFileSync('bash', [script], {
@@ -199,33 +231,49 @@ test('stops publishing a build that prints without end', () => {
   ]);
 });
 
-test('publishes nothing while another publisher holds the lock', () => {
-  // The workflow's final flush can start while a publisher the watcher left
-  // behind is still uploading. Both would write the same segment key, and
-  // whichever finished last would decide what it holds.
-  const space = workspace();
-  space.write('Compiling app\n');
+// The script publishes without a lock where there is no flock to take one
+// with, so there is nothing to assert on such a machine.
+test(
+  'publishes nothing while another publisher holds the lock',
+  { skip: hasFlock ? false : 'flock is not installed' },
+  async () => {
+    // The workflow's final flush can start while a publisher the watcher left
+    // behind is still uploading. Both would write the same segment key, and
+    // whichever finished last would decide what it holds.
+    const space = workspace();
+    space.write('Compiling app\n');
+    const lock = path.join(space.dir, 'state.lock');
 
-  const holder = spawn(
-    'flock',
-    [path.join(space.dir, 'state.lock'), 'sleep', '5'],
-    { stdio: 'ignore' }
-  );
-  try {
-    // Give flock a moment to actually take it before racing it.
-    execFileSync('bash', ['-c', 'sleep 0.5']);
-    assert.equal(publish(space, { LOG_LOCK_WAIT_SECONDS: '1' }), '0');
-    assert.equal(space.uploaded().length, 0);
-  } finally {
-    holder.kill();
+    // Detached, so the group can be killed: flock passes the descriptor it
+    // holds to the command it runs, and killing flock alone would leave the
+    // child holding the lock.
+    const holder = spawn('flock', [lock, 'sleep', '30'], {
+      stdio: 'ignore',
+      detached: true,
+    });
+    try {
+      assert.ok(
+        await waitFor(() => isLocked(lock)),
+        'the holder never took the lock, so nothing was being contended'
+      );
+      assert.equal(publish(space, { LOG_LOCK_WAIT_SECONDS: '1' }), '0');
+      assert.equal(space.uploaded().length, 0);
+    } finally {
+      process.kill(-holder.pid, 'SIGTERM');
+      await exited(holder);
+    }
+    assert.ok(
+      await waitFor(() => !isLocked(lock)),
+      'the lock outlived the process holding it'
+    );
+
+    // Once it is free the same bytes go out, exactly once.
+    assert.equal(publish(space), '1');
+    assert.deepEqual(space.uploaded(), [
+      ['happy-tiny-otter-abc.log.0', 'Compiling app\n'],
+    ]);
   }
-
-  // Once it is free the same bytes go out, exactly once.
-  assert.equal(publish(space), '1');
-  assert.deepEqual(space.uploaded(), [
-    ['happy-tiny-otter-abc.log.0', 'Compiling app\n'],
-  ]);
-});
+);
 
 test('publishes nothing without a usable identifier or bucket', () => {
   const space = workspace();
