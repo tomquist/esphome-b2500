@@ -1,10 +1,12 @@
-// render.js: the template properties the YAML depends on, and the secret
-// masking, none of which anything else covers. Specifically: that requester strings are escaped where they land in a quoted
-// scalar, and that the `!secret` fallback for a missing MAC emits a real YAML
-// tag rather than a quoted literal.
+// render.js, for the parts nothing else covers:
 //
-// The PR job builds every example, but all of them supply a MAC, so the
-// fallback branch has never been exercised anywhere.
+//   - requester strings are escaped where they land in a quoted YAML scalar,
+//   - the `!secret` fallback for a missing MAC emits a real YAML tag rather
+//     than a quoted literal (no example supplies a config without a MAC, so
+//     the PR job never exercises that branch),
+//   - the trusted git ref wins over one supplied in the config,
+//   - and secrets are registered for masking without letting the payload end
+//     the workflow command.
 //
 //   node --test scripts/renderTemplates.test.mjs
 
@@ -94,6 +96,15 @@ const masked = (secrets) => {
   return lines;
 };
 
+test('escapes the characters the runner unescapes', () => {
+  // A raw % would register a mask for a different string than the payload
+  // holds, and a secret containing %25 would then not be redacted at all.
+  assert.deepEqual(masked(['100%25pure', 'a%b']), [
+    '::add-mask::100%2525pure',
+    '::add-mask::a%25b',
+  ]);
+});
+
 test('masks every secret it is given, however short', () => {
   // The old code masked anything non-empty; a length floor here would publish
   // short passwords.
@@ -132,5 +143,7 @@ test('cannot be made to emit a second workflow command', () => {
 
   assert.equal(lines.length, 1);
   assert.doesNotMatch(lines[0], /\n/);
-  assert.equal(lines[0], '::add-mask::aaa::stop-commands::xbbb');
+  // Escaped the way the runner unescapes it, so the mask registers the real
+  // value rather than a mangled one.
+  assert.equal(lines[0], '::add-mask::aaa%0A::stop-commands::x%0Abbb');
 });

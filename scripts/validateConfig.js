@@ -50,7 +50,9 @@ const CONTROL_CHARS = /[\x00-\x08\x0a-\x1f\x7f]/;
 // it.
 const RESERVED_KEYS = ['git_sha', 'automated_build', 'ref'];
 
-const MAX_STORAGES = 8;
+// Matches getMaxBleDevices() in src/utils/index.ts, which is 9 because that is
+// what esp32_ble_tracker allows. Kept in step by src/utils/index.test.ts.
+const MAX_STORAGES = 9;
 
 const LOG_LEVELS = new Set([
   'NONE',
@@ -224,7 +226,9 @@ const validateConfig = (config) => {
       throw new InvalidConfigError('storages must be an array');
     }
     // Each storage expands to roughly a hundred YAML entities, and the build is
-    // unauthenticated. The UI offers far fewer than this.
+    // unauthenticated, so the list needs an upper bound - but the bound is the
+    // one the UI offers, not a smaller number, or a supported configuration
+    // stops building.
     if (config.storages.length > MAX_STORAGES) {
       throw new InvalidConfigError(
         `storages must hold at most ${MAX_STORAGES} entries`
@@ -239,10 +243,13 @@ const validateConfig = (config) => {
         requirePattern(
           storage.mac_address,
           `storages[${index}].mac_address`,
-          // Both separators, because the form accepts both (StorageForm.tsx
-          // and utils/validateForm). A stricter rule here would only turn a
-          // valid-looking entry into a failed build five minutes later.
-          /^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/,
+          // Colons only: ESPHome's cv.mac_address splits on ":" and requires
+          // six parts, so a dash-separated address is invalid there too.
+          // normalizeImportedConfig() in src/utils converts the one input that
+          // can carry dashes (an imported JSON file), so reaching this means a
+          // hand-made payload, and failing here gives a better message than
+          // failing in ESPHome.
+          /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/,
           'a MAC address such as 00:11:22:33:44:55'
         );
       }

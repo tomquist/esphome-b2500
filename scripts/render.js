@@ -34,6 +34,13 @@ const MAX_SECRETS = 64;
  *
  * Short values are masked too. Masking a two-character password makes the log
  * noisy, but not masking it publishes the password.
+ *
+ * Values are escaped the way @actions/core escapes workflow-command data,
+ * because the runner unescapes it symmetrically: emitting a raw `%` would
+ * register a mask for a different string than the one in the payload, and a
+ * secret containing `%25`, `%0D` or `%0A` would then go unredacted. Escaping
+ * also removes the line terminators that would otherwise end the command and
+ * let the rest of the value run as a command of its own.
  */
 const maskSecrets = (secrets, log = console.log) => {
   if (secrets != null && !Array.isArray(secrets)) {
@@ -41,7 +48,12 @@ const maskSecrets = (secrets, log = console.log) => {
   }
   for (const secret of (secrets || []).slice(0, MAX_SECRETS)) {
     if (typeof secret === 'string' && secret.trim() !== '') {
-      log(`::add-mask::${secret.replace(/[\r\n]/g, '')}`);
+      log(
+        `::add-mask::${secret
+          .replace(/%/g, '%25')
+          .replace(/\r/g, '%0D')
+          .replace(/\n/g, '%0A')}`
+      );
     }
   }
 };

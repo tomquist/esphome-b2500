@@ -1,6 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { generateRandomIdentifier, isPlatformVersionValid } from './index';
+import { FormValues } from '../types';
+import {
+  defaultFormValues,
+  generateRandomIdentifier,
+  getMaxBleDevices,
+  isPlatformVersionValid,
+  normalizeImportedConfig,
+} from './index';
 
 // Read out of the workflow rather than copied: the identifier is used unquoted
 // in an S3 object key, and a copy here would stay green while the workflow
@@ -79,5 +86,60 @@ describe('isPlatformVersionValid', () => {
   it('accepts an empty value, which the build treats as absent', () => {
     expect(isPlatformVersionValid('')).toBe(true);
     expect(isPlatformVersionValid(undefined)).toBe(true);
+  });
+});
+
+describe('the storage cap', () => {
+  // The server rejects a config with more storages than it allows; the form
+  // offers up to getMaxBleDevices(). A cap below that means a configuration the
+  // UI builds for you is refused after the dispatch.
+  it('is the number the form lets you add', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'scripts', 'validateConfig.js'),
+      'utf-8'
+    );
+    const declared = source.match(/const MAX_STORAGES = (?<max>\d+);/);
+
+    expect(declared).not.toBeNull();
+    expect(Number(declared!.groups!.max)).toBe(getMaxBleDevices());
+  });
+});
+
+describe('normalizeImportedConfig', () => {
+  const withMac = (mac: string) =>
+    ({
+      ...defaultFormValues,
+      storages: [{ name: 'a', version: 2, mac_address: mac }],
+    }) as FormValues;
+
+  it('rewrites a dash-separated MAC to colons', () => {
+    // ESPHome splits on ":", so a dash address is invalid all the way down.
+    expect(
+      normalizeImportedConfig(withMac('AA-BB-CC-DD-EE-FF')).storages[0]
+        .mac_address
+    ).toBe('AA:BB:CC:DD:EE:FF');
+  });
+
+  it('leaves a colon-separated MAC alone', () => {
+    expect(
+      normalizeImportedConfig(withMac('AA:BB:CC:DD:EE:FF')).storages[0]
+        .mac_address
+    ).toBe('AA:BB:CC:DD:EE:FF');
+  });
+
+  it('produces something the build accepts', () => {
+    // The server pattern, read out of validateConfig rather than restated.
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'scripts', 'validateConfig.js'),
+      'utf-8'
+    );
+    const declared = source.match(
+      /mac_address`,\s*(?:\/\/[^\n]*\n\s*)*\/(?<pattern>\^[^/]+\$)\//
+    );
+    expect(declared).not.toBeNull();
+
+    const normalized = normalizeImportedConfig(withMac('AA-BB-CC-DD-EE-FF'))
+      .storages[0].mac_address;
+    expect(normalized).toMatch(new RegExp(declared!.groups!.pattern));
   });
 });

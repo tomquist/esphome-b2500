@@ -23,6 +23,7 @@ import {
   mergeDeep,
   newIssueLink,
   validateConfig,
+  normalizeImportedConfig,
 } from './utils';
 import GetAppOutlinedIcon from '@mui/icons-material/GetAppOutlined';
 import PublishOutlinedIcon from '@mui/icons-material/PublishOutlined';
@@ -120,7 +121,7 @@ const App: React.FC = () => {
         try {
           const importedData = JSON.parse(event.target?.result as string);
           const mergedValues = mergeDeep(importedData, defaultFormValues);
-          setFormValues(mergedValues);
+          setFormValues(normalizeImportedConfig(mergedValues));
         } catch (error) {
           console.error('Error parsing JSON file', error);
         }

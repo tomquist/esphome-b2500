@@ -153,9 +153,28 @@ export const redactSecrets = (config: FormValues) => {
 // project use ESP-IDF by default, we allow up to 9 B2500 devices.
 export const getMaxBleDevices = (): number => 9;
 
+/**
+ * Normalises a config that came from a file rather than from the form. The MAC
+ * field formats typed input to colons, but an imported JSON can hold anything -
+ * and ESPHome's `cv.mac_address` splits on ":" and requires six parts, so a
+ * dash-separated address is invalid all the way down.
+ */
+export const normalizeImportedConfig = <T extends FormValues>(
+  config: T
+): T => ({
+  ...config,
+  storages: (config.storages ?? []).map((storage) => ({
+    ...storage,
+    mac_address: (storage.mac_address ?? '').replace(/-/g, ':'),
+  })),
+});
+
 export const validateConfig = (config: FormValues) => {
   const template = templates[config.template_version];
   const errors = [];
+  if (!isPlatformVersionValid(config.idf_platform_version)) {
+    errors.push('ESP-IDF platform version is invalid');
+  }
   if (config.storages.length === 0) {
     errors.push('At least one storage is required');
   }
