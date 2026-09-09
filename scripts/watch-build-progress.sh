@@ -10,10 +10,12 @@
 # read the compiler's output.
 #
 # The same listing names what the compiler is on right now: the object written
-# most recently is the unit it just finished. That is the only live signal
-# available here - the compiler's own output goes to the job log, which the
-# Actions API refuses to serve until the job has ended, so there is nothing to
-# read while a build runs.
+# most recently is the unit it just finished.
+#
+# The compiler's own output goes alongside it. The build step tees it to a file
+# and publish-build-log.sh uploads whatever is new as its own object, so the
+# status document carries only how many of those exist. That part is best
+# effort - a build whose output cannot be read still reports progress.
 #
 # Runs in the background alongside the build step. It stops when the stop file
 # appears, which it only checks between polls: an upload in flight always
@@ -27,6 +29,10 @@ INTERVAL_SECONDS="${PROGRESS_INTERVAL_SECONDS:-5}"
 STOP_FILE="${PROGRESS_STOP_FILE:-progress-watcher.stop}"
 BUILD_ROOT="${PROGRESS_BUILD_ROOT:-.esphome/build}"
 PUBLISH="${PROGRESS_PUBLISH_COMMAND:-./scripts/publish-build-status.sh}"
+LOG_COMMAND="${PROGRESS_LOG_COMMAND:-./scripts/publish-build-log.sh}"
+# Slower than the poll: publishing a segment is an upload, and the compiler
+# does not say enough in five seconds to be worth one. Zero turns it off.
+LOG_INTERVAL_SECONDS="${PROGRESS_LOG_INTERVAL_SECONDS:-10}"
 # The ninja graph is written once and then only grows by the second graph, so
 # re-reading it every poll would spend most of the interval grepping megabytes.
 TOTAL_REFRESH_SECONDS="${PROGRESS_TOTAL_REFRESH_SECONDS:-60}"
@@ -79,8 +85,33 @@ refresh_expected() {
   expected_read_at=$moment
 }
 
+log_read_at=0
+segments=0
+
+# Uploads whatever the compiler has said since the last segment and reports how
+# many now exist. Publishing is what advances that count, so the object is
+# always in the bucket before the status document names it.
+refresh_log() {
+  [[ "$LOG_INTERVAL_SECONDS" -gt 0 ]] || return
+  local moment published
+  moment=$(now)
+  if [[ $((moment - log_read_at)) -lt "$LOG_INTERVAL_SECONDS" ]]; then
+    return
+  fi
+  log_read_at=$moment
+  published=$("$LOG_COMMAND" 2>&1)
+  if [[ "$published" =~ ^[0-9]+$ ]]; then
+    segments=$published
+  else
+    # Not discarded: without it a build that published nothing says nothing
+    # about why, which is exactly the hole the last attempt at this fell into.
+    echo "publishing the build output: $published" >&2
+  fi
+}
+
 last_completed=''
 last_current=''
+last_segments=''
 while [[ ! -e "$STOP_FILE" ]]; do
   scan=$(scan_objects)
   completed=${scan%%$'\t'*}
@@ -89,17 +120,23 @@ while [[ ! -e "$STOP_FILE" ]]; do
   current=${current%.obj}
   current=${current%.o}
   refresh_expected
-  # The name moves through files the count cannot distinguish - two units
-  # finishing between polls advance it by one either way - so publish on either.
-  if [[ "$completed" != "$last_completed" || "$current" != "$last_current" ]] &&
-     [[ "$completed" -gt 0 ]]; then
+  refresh_log
+  # Any of the three: the name moves through files the count cannot
+  # distinguish, and early on the compiler is talking before the first object
+  # exists at all.
+  if [[ "$completed" != "$last_completed" ||
+        "$current" != "$last_current" ||
+        "$segments" != "$last_segments" ]] &&
+     [[ "$completed" -gt 0 || "$segments" -gt 0 ]]; then
     STEP=compiling \
       PROGRESS_DONE="$completed" \
       PROGRESS_TOTAL="$expected" \
       PROGRESS_CURRENT="$current" \
+      LOG_SEGMENTS="$segments" \
       "$PUBLISH" building "Compiling the firmware" > /dev/null || true
     last_completed="$completed"
     last_current="$current"
+    last_segments="$segments"
   fi
   # Sleep in short ticks so that stopping does not have to wait out a full
   # interval, and so that it is noticed here rather than during a publish.

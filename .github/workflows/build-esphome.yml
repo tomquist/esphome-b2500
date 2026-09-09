@@ -110,20 +110,56 @@ jobs:
           STEP: compiling
         run: |
           ./scripts/publish-build-status.sh building "Compiling the firmware" || true
-          rm -f progress-watcher.stop
+          rm -f progress-watcher.stop build-log.published build-log.count
           nohup ./scripts/watch-build-progress.sh > progress-watcher.log 2>&1 &
           echo "PROGRESS_WATCHER_PID=$!" >> "$GITHUB_ENV"
 
+      # esphome/build-action is a composite action, so the compile happens in a
+      # `run:` step of its own that we cannot tee - and the job log its output
+      # lands in is not served by the API until the job has ended, which is
+      # after every step that could publish it. So its own entrypoint is run
+      # here instead, at the same pinned commit and with the same arguments,
+      # and the compiler's stdout is copied to a file the watcher publishes
+      # from. When bumping the pin, re-read the action's `Run container` step
+      # and this against each other.
+      - name: Check out the ESPHome build action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: esphome/build-action
+          ref: ae5408cdbc4f70692bf8e345c4982bca05a93667 # v8.1.0
+          path: .build-action
+
       - name: Build firmware
         id: esphome-build
-        uses: esphome/build-action@ae5408cdbc4f70692bf8e345c4982bca05a93667 # v8.1.0
-        with:
-          yaml-file: device.yaml
-          version: ${{ env.ESPHOME_VERSION }}
-          # Required so that the browser can flash the firmware without having
-          # to assemble an esp-web-tools manifest itself.
-          complete-manifest: true
         continue-on-error: true
+        env:
+          # action.yml is where this is defined; entrypoint.py re-checks the
+          # running ESPHome against it, and skips the check when it is absent.
+          MINIMUM_ESPHOME_VERSION: '2026.7.0'
+        run: |
+          chmod +x .build-action/entrypoint.py
+          docker pull "ghcr.io/esphome/esphome:${ESPHOME_VERSION}"
+          # Without this the failing compile would be masked by tee's success.
+          set -o pipefail
+          # --complete-manifest so the browser can flash the firmware without
+          # assembling an esp-web-tools manifest itself. PYTHONUNBUFFERED
+          # because stdout is a pipe here rather than the runner's tty, and
+          # block-buffered output would arrive in lumps instead of live.
+          docker run --rm \
+            --workdir /github/workspace \
+            -v "$(pwd)":/github/workspace -v "$HOME:$HOME" \
+            -v "$(pwd)/.build-action/entrypoint.py:/entrypoint.py:ro" \
+            --entrypoint /entrypoint.py \
+            --user "$(id -u):$(id -g)" \
+            -e HOME \
+            -e CCACHE_DIR \
+            -e MINIMUM_ESPHOME_VERSION \
+            -e PLATFORMIO_GLOBALLIB_DIR= \
+            -e PYTHONUNBUFFERED=1 \
+            "ghcr.io/esphome/esphome:${ESPHOME_VERSION}" \
+              device.yaml \
+              --outputs-file "$GITHUB_OUTPUT" \
+              --complete-manifest 2>&1 | tee build.log
 
       # Before any of the paths below publish a status of their own, so that a
       # late progress update cannot overwrite the build result. The watcher only
@@ -146,6 +182,18 @@ jobs:
             cat progress-watcher.log
             echo "::endgroup::"
           fi
+
+      # The watcher stops between polls, so the last seconds of the compile -
+      # on a failed build, the error itself - are not published yet. After the
+      # watcher has exited, so there is only ever one publisher, and before any
+      # terminal status, so the page is never told about a segment that is not
+      # in the bucket yet.
+      - name: Publish the rest of the build output
+        if: always()
+        continue-on-error: true
+        env:
+          LOG_END_AT_ERROR: 'true'
+        run: echo "LOG_SEGMENTS=$(./scripts/publish-build-log.sh)" >> "$GITHUB_ENV"
 
       # Logs on a public repository are world readable, and the config holds
       # the requester's SSID, MQTT broker and username. The redacted form keeps
@@ -201,7 +249,7 @@ jobs:
         env:
           FIRMWARE_URL: https://${{ env.S3_BUCKET }}.s3.${{ env.AWS_REGION }}.amazonaws.com/firmware/${{ env.IDENTIFIER }}.zip.enc
           FIRMWARE_NAME: ${{ steps.esphome-build.outputs.name }}
-          ESPHOME_VERSION: ${{ steps.esphome-build.outputs.version }}
+          ESPHOME_VERSION: ${{ steps.esphome-build.outputs.esphome-version }}
         run: ./scripts/publish-build-status.sh success
 
       - name: Output firmware URL

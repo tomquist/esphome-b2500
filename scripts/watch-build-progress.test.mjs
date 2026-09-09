@@ -59,7 +59,7 @@ const workspace = ({ objects, expected, publishSeconds = 0 }) => {
     [
       '#!/usr/bin/env bash',
       `echo "start $PROGRESS_DONE/$PROGRESS_TOTAL" >> "${path.join(dir, 'published.log')}"`,
-      `echo "current ${'$'}{PROGRESS_CURRENT:-none}" >> "${path.join(dir, 'published-current.log')}"`,
+      `echo "current ${'$'}{PROGRESS_CURRENT:-none} segments ${'$'}{LOG_SEGMENTS:-none}" >> "${path.join(dir, 'published-current.log')}"`,
       `sleep ${publishSeconds}`,
       `echo "end $PROGRESS_DONE/$PROGRESS_TOTAL" >> "${path.join(dir, 'published.log')}"`,
     ].join('\n'),
@@ -71,16 +71,32 @@ const workspace = ({ objects, expected, publishSeconds = 0 }) => {
       ? fs.readFileSync(path.join(dir, name), 'utf8').trim().split('\n')
       : [];
 
+  // Stands in for publish-build-log.sh: reports how many segments it has
+  // published, and fails while there is nothing to read - the way a build
+  // whose output file does not exist yet behaves.
+  fs.writeFileSync(
+    path.join(dir, 'log-stub.sh'),
+    [
+      '#!/usr/bin/env bash',
+      `[[ -s "${path.join(dir, 'segments')}" ]] || { echo "no build output yet" >&2; exit 1; }`,
+      `cat "${path.join(dir, 'segments')}"`,
+    ].join('\n'),
+    { mode: 0o755 }
+  );
+
   return {
     dir,
     stopFile: path.join(dir, 'stop'),
     build,
+    segmentsFile: path.join(dir, 'segments'),
     published: () => lines('published.log'),
     publishedCurrent: () => lines('published-current.log'),
   };
 };
 
-const start = (space, { intervalSeconds = 1 } = {}) =>
+// Publishing the build output is off unless a test asks for it: it is best
+// effort in the workflow too, and the counting has to hold up without it.
+const start = (space, { intervalSeconds = 1, logIntervalSeconds = 0 } = {}) =>
   spawn('bash', [watcher], {
     cwd: space.dir,
     env: {
@@ -88,6 +104,8 @@ const start = (space, { intervalSeconds = 1 } = {}) =>
       PROGRESS_INTERVAL_SECONDS: String(intervalSeconds),
       PROGRESS_STOP_FILE: space.stopFile,
       PROGRESS_PUBLISH_COMMAND: path.join(space.dir, 'publish-stub.sh'),
+      PROGRESS_LOG_COMMAND: path.join(space.dir, 'log-stub.sh'),
+      PROGRESS_LOG_INTERVAL_SECONDS: String(logIntervalSeconds),
     },
     stdio: 'ignore',
   });
@@ -156,13 +174,15 @@ test('names the unit the compiler is on, and republishes when it moves', async (
   const child = start(space);
 
   const named = await waitFor(() =>
-    space.publishedCurrent().includes('current sha256.c')
+    space.publishedCurrent().some((line) => line.startsWith('current sha256.c'))
   );
 
   // A unit finishing between two polls moves the name as well as the count.
   fs.writeFileSync(path.join(space.build, 'wifi_component.cpp.o'), '');
   const moved = await waitFor(() =>
-    space.publishedCurrent().includes('current wifi_component.cpp')
+    space
+      .publishedCurrent()
+      .some((line) => line.startsWith('current wifi_component.cpp'))
   );
 
   fs.writeFileSync(space.stopFile, '');
@@ -186,7 +206,7 @@ test('reports no current unit before the first object lands', async () => {
   });
   fs.writeFileSync(path.join(space.build, 'first.c.obj'), '');
   const publishedLater = await waitFor(() =>
-    space.publishedCurrent().includes('current first.c')
+    space.publishedCurrent().some((line) => line.startsWith('current first.c'))
   );
 
   fs.writeFileSync(space.stopFile, '');
@@ -194,4 +214,46 @@ test('reports no current unit before the first object lands', async () => {
 
   assert.equal(publishedEarly, false, 'published a status with nothing to say');
   assert.ok(publishedLater, 'never reported the first object once it appeared');
+});
+
+test('republishes when a new build output segment appears', async () => {
+  const space = workspace({ objects: 2, expected: 4 });
+  fs.writeFileSync(space.segmentsFile, '1\n');
+  const child = start(space, { logIntervalSeconds: 1 });
+
+  const announced = await waitFor(() =>
+    space.publishedCurrent().some((line) => line.endsWith('segments 1'))
+  );
+  // The counts stand still through a link step, which is exactly when the
+  // output is the only thing left to show.
+  fs.writeFileSync(space.segmentsFile, '2\n');
+  const republished = await waitFor(() =>
+    space.publishedCurrent().some((line) => line.endsWith('segments 2'))
+  );
+
+  fs.writeFileSync(space.stopFile, '');
+  await exited(child);
+
+  assert.ok(announced, 'the watcher never published a segment count');
+  assert.ok(republished, 'the watcher sat on a segment it had just published');
+});
+
+test('keeps reporting progress when the build output cannot be published', async () => {
+  // No segment count at all, so the stub fails the way publish-build-log.sh
+  // does before the build step has written anything.
+  const space = workspace({ objects: 3, expected: 6 });
+  const child = start(space, { logIntervalSeconds: 1 });
+
+  const reported = await waitFor(() => space.published().includes('end 3/6'));
+
+  fs.writeFileSync(space.stopFile, '');
+  await exited(child);
+
+  assert.ok(
+    reported,
+    'a build whose output cannot be published stopped reporting progress'
+  );
+  assert.ok(
+    space.publishedCurrent().every((line) => line.endsWith('segments 0'))
+  );
 });
