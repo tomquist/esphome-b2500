@@ -19,8 +19,9 @@ const nunjucks = require('nunjucks');
 // the git_sha vulnerability again, and a private copy here would stay green.
 const { buildRenderContext } = require('./render.js');
 
-const templatePath = (name) =>
-  new URL(`../src/${name}`, import.meta.url).pathname;
+// The URL itself, not its pathname: readFileSync takes a file: URL, and
+// .pathname would yield /C:/... on Windows. Matches the sibling tests.
+const templatePath = (name) => new URL(`../src/${name}`, import.meta.url);
 
 const TEMPLATES = {
   v1: templatePath('template.jinja2'),
