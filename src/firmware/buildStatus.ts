@@ -40,6 +40,11 @@ export interface BuildStatus {
   step?: BuildStep;
   /** Compile units finished so far, reported while compiling. */
   progress?: BuildProgress;
+  /**
+   * Tail of the build output. Present while the workflow can read its own job
+   * log, and on a failed build it ends at whatever stopped it.
+   */
+  log?: string;
   firmwareUrl?: string;
   /** Name of the firmware directory inside the ZIP, e.g. `b2500-esp32`. */
   firmwareName?: string;
@@ -109,6 +114,33 @@ const optionalCount = (value: unknown): number | undefined =>
     ? value
     : undefined;
 
+/**
+ * How much of the build output to keep. The workflow publishes far less than
+ * this; the cap is here so a status document that ever said otherwise cannot
+ * hand the log view something too big to render.
+ */
+const MAX_LOG_CHARS = 40000;
+
+/**
+ * The log is whatever the compiler wrote, so it arrives with terminal escapes
+ * and stray control bytes in it. React renders it as text either way - this is
+ * so what the user sees is what the build printed, rather than a `\r` eating
+ * the line it was on.
+ */
+const parseLog = (value: unknown): string | undefined => {
+  const raw = optionalString(value);
+  if (!raw) {
+    return undefined;
+  }
+  const text = raw
+    .replace(/\r\n?/g, '\n')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
+  const trimmed =
+    text.length > MAX_LOG_CHARS ? text.slice(-MAX_LOG_CHARS) : text;
+  return trimmed.trim().length > 0 ? trimmed : undefined;
+};
+
 const parseStep = (value: unknown): BuildStep | undefined => {
   const step = optionalString(value)?.toLowerCase();
   return STEPS.find((known) => known === step);
@@ -148,6 +180,7 @@ export const parseBuildStatus = (raw: unknown): BuildStatus | null => {
     message: optionalString(record.message),
     step: parseStep(record.step),
     progress: parseProgress(record.progress),
+    log: parseLog(record.log),
     firmwareUrl: trustedUrl(record.firmware_url, bucketOrigins()),
     firmwareName: optionalString(record.firmware_name),
     esphomeVersion: optionalString(record.esphome_version),
@@ -269,7 +302,7 @@ export const pollBuildStatus = async ({
   signal,
   onStatus,
   onFetchError,
-  intervalMs = 5000,
+  intervalMs = 3000,
   timeoutMs = 30 * 60 * 1000,
   requestTimeoutMs = 30000,
   fetchStatus = fetchBuildStatus,

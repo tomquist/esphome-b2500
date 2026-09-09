@@ -6,7 +6,7 @@ upload two objects to the `esphome-b2500-images` bucket:
 | Object                              | Purpose                                                                                                                                |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `firmware/<identifier>.zip.enc`     | The firmware archive, sealed to the requesting page's key (see below).                                                                 |
-| `firmware/<identifier>.status.json` | Build status the web builder polls (`building`, `success`, `error`), including which step is running and how far along the compile is. |
+| `firmware/<identifier>.status.json` | Build status the web builder polls (`building`, `success`, `error`), including which step is running, how far along the compile is, and the tail of the build output. |
 
 Both live under the same `firmware/` prefix so that a single public-read bucket
 policy covers them.

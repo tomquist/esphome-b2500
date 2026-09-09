@@ -37,6 +37,9 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     permissions:
       contents: read
+      # So the build can read its own log back and forward the compiler's
+      # output to the page waiting for it. See scripts/fetch-job-log.sh.
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -108,9 +111,12 @@ jobs:
       - name: Report compile progress
         env:
           STEP: compiling
+          # Inherited by the watcher, which reads this job's log through the
+          # API to publish the compiler's output alongside the progress.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./scripts/publish-build-status.sh building "Compiling the firmware" || true
-          rm -f progress-watcher.stop
+          rm -f progress-watcher.stop job-log-unavailable job-log-unavailable.misses
           nohup ./scripts/watch-build-progress.sh > progress-watcher.log 2>&1 &
           echo "PROGRESS_WATCHER_PID=$!" >> "$GITHUB_ENV"
 
@@ -146,6 +152,25 @@ jobs:
             cat progress-watcher.log
             echo "::endgroup::"
           fi
+
+      # The compile runs inside esphome/build-action, so the only place its
+      # output exists is this job's log - which the page cannot read, because
+      # the run is only linked from it. Reading the log back turns "the build
+      # failed" into something the requester can act on. Collected here rather
+      # than where it is published: every step that runs in between writes to
+      # the same log, and would push the compiler out of the tail.
+      - name: Collect the build output
+        if: steps.esphome-build.outcome == 'failure'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOG_TAIL_LINES: '200'
+          LOG_MAX_BYTES: '24000'
+          LOG_END_AT_ERROR: 'true'
+          # Not the file the watcher may have written off: whatever stopped it
+          # reporting during the compile is worth one more try for the failure.
+          LOG_DISABLED_FILE: job-log-failure-unavailable
+        run: ./scripts/fetch-job-log.sh > build-failure.log || true
 
       # Logs on a public repository are world readable, and the config holds
       # the requester's SSID, MQTT broker and username. The redacted form keeps
@@ -211,6 +236,17 @@ jobs:
       - name: Publish build failure
         if: failure()
         continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOG_TAIL_LINES: '200'
+          LOG_MAX_BYTES: '24000'
+          LOG_END_AT_ERROR: 'true'
+          LOG_DISABLED_FILE: job-log-failure-unavailable
         run: |
-          ./scripts/publish-build-status.sh error \
+          # Only for a failure that is not the compile's: that one was
+          # collected above, where the compiler still had the last word.
+          if [[ ! -s build-failure.log ]]; then
+            ./scripts/fetch-job-log.sh > build-failure.log || true
+          fi
+          BUILD_LOG_FILE=build-failure.log ./scripts/publish-build-status.sh error \
             "The firmware build failed. Please check the build log and open an issue with your configuration."

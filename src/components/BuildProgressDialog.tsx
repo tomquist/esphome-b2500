@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Accordion,
   AccordionDetails,
@@ -92,6 +92,52 @@ const compiledFiles = (status: BuildStatus | null): string | null => {
     : `${progress.completed} files`;
 };
 
+/**
+ * The tail of the build output, pinned to its last line.
+ *
+ * Anchored only while it is already at the bottom, so a user who scrolled up to
+ * read an error is not yanked back down by the next update - which arrives
+ * every few seconds for the length of the compile.
+ */
+const BuildLog: React.FC<{ log: string }> = ({ log }) => {
+  const box = useRef<HTMLElement | null>(null);
+  const isPinned = useRef(true);
+
+  useEffect(() => {
+    const node = box.current;
+    if (node && isPinned.current) {
+      node.scrollTop = node.scrollHeight;
+    }
+  }, [log]);
+
+  return (
+    <Box
+      component="pre"
+      ref={box}
+      onScroll={(event: React.UIEvent<HTMLElement>) => {
+        const node = event.currentTarget;
+        isPinned.current =
+          node.scrollHeight - node.scrollTop - node.clientHeight < 24;
+      }}
+      sx={{
+        m: 0,
+        p: 1,
+        maxHeight: 220,
+        overflow: 'auto',
+        bgcolor: 'action.hover',
+        borderRadius: 1,
+        fontFamily: 'monospace',
+        fontSize: '0.72rem',
+        lineHeight: 1.5,
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+      }}
+    >
+      {log}
+    </Box>
+  );
+};
+
 const formatDuration = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
   const remainder = Math.floor(seconds % 60);
@@ -142,6 +188,10 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [isStatusUnreachable, setIsStatusUnreachable] = useState(false);
+  // Kept out of `status` so it survives the polls that carry no log - the
+  // workflow only republishes the tail when it has changed, and a build that
+  // loses access to its own log mid-compile should keep what it already showed.
+  const [buildLog, setBuildLog] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -154,6 +204,7 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
       setArchive(null);
       setDidBuildFail(false);
       setIsStatusUnreachable(false);
+      setBuildLog(null);
       try {
         const finalStatus = await pollBuildStatus({
           identifier,
@@ -161,6 +212,9 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
           onStatus: (update) => {
             setStatus(update);
             setIsStatusUnreachable(false);
+            if (update.log) {
+              setBuildLog(update.log);
+            }
           },
           // A handful of failures in a row usually means the browser blocked
           // the request, e.g. because the bucket is missing a CORS rule.
@@ -326,6 +380,14 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
               {didBuildFail ? 'Build failed' : 'Could not prepare the firmware'}
             </AlertTitle>
             {error}
+            {buildLog && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Build output
+                </Typography>
+                <BuildLog log={buildLog} />
+              </Box>
+            )}
             <Box sx={{ mt: 1 }}>
               <Link href={runLink} target="_blank" rel="noopener">
                 View build log
@@ -373,6 +435,16 @@ const BuildProgressDialog: React.FC<BuildProgressDialogProps> = ({
                     View build log
                   </Link>
                 </Typography>
+                {buildLog && (
+                  <Accordion sx={{ mt: 1 }} disableGutters defaultExpanded>
+                    <AccordionSummary expandIcon={<ExpandMore />}>
+                      <Typography variant="body2">Build output</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ p: 1, pt: 0 }}>
+                      <BuildLog log={buildLog} />
+                    </AccordionDetails>
+                  </Accordion>
+                )}
               </StepContent>
             </Step>
             <Step>

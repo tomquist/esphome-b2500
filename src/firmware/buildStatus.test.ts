@@ -142,6 +142,41 @@ describe('parseBuildStatus', () => {
     expect(status?.progress).toEqual({ completed: 1600, total: undefined });
   });
 
+  it('reads the tail of the build output', () => {
+    expect(
+      parseBuildStatus({ status: 'building', log: 'Compiling app\n' })?.log
+    ).toBe('Compiling app\n');
+    expect(
+      parseBuildStatus({ status: 'building', log: '' })?.log
+    ).toBeUndefined();
+    expect(
+      parseBuildStatus({ status: 'building', log: ' \n' })?.log
+    ).toBeUndefined();
+    expect(
+      parseBuildStatus({ status: 'building', log: 42 })?.log
+    ).toBeUndefined();
+  });
+
+  it('keeps the build output printable', () => {
+    const status = parseBuildStatus({
+      status: 'error',
+      // What a compiler writes: CRLF from the runner, a progress line rewritten
+      // with a carriage return, and the colour codes around the level.
+      log: 'Compiling\r\n\u001b[31mERROR\u001b[0m failed\r  retrying\u0000\n',
+    });
+
+    expect(status?.log).toBe('Compiling\n[31mERROR[0m failed\n  retrying\n');
+  });
+
+  it('keeps only the end of a build output that is too long to render', () => {
+    const log = `${'x'.repeat(50000)}last`;
+
+    const parsed = parseBuildStatus({ status: 'error', log })?.log ?? '';
+
+    expect(parsed.length).toBe(40000);
+    expect(parsed.endsWith('last')).toBe(true);
+  });
+
   it('returns null for documents it does not understand', () => {
     expect(parseBuildStatus(null)).toBeNull();
     expect(parseBuildStatus('building')).toBeNull();
