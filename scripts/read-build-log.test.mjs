@@ -74,6 +74,42 @@ test('strips the whole CSI form, not just colour codes', () => {
   assert.equal(printed, 'red fancy true\n');
 });
 
+test('gives each of ninja\'s progress updates its own line', () => {
+  // Ninja means its updates to overwrite one another on a terminal, so it ends
+  // them with CR and writes no newline until the phase does. Dropping the CRs
+  // would leave one line per phase, thousands of characters wide.
+  const printed = run(
+    logFile('[1/3] Building a.c.obj\r[2/3] Building b.c.obj\r[3/3] Linking\n')
+  );
+
+  assert.deepEqual(printed.trimEnd().split('\n'), [
+    '[1/3] Building a.c.obj',
+    '[2/3] Building b.c.obj',
+    '[3/3] Linking',
+  ]);
+});
+
+test('publishes an update the moment it is overwritten, not when the phase ends', () => {
+  // A phase can compile for minutes without writing a newline. Waiting for one
+  // is what made the output arrive in lumps rather than as the build ran.
+  const file = logFile('[1/2] Building a.c.obj\r');
+
+  assert.equal(run(file), '[1/2] Building a.c.obj\n');
+
+  fs.appendFileSync(file, '[2/2] Building b.c');
+  assert.equal(
+    run(file),
+    '[1/2] Building a.c.obj\n',
+    'the update still being written must wait for its terminator'
+  );
+
+  fs.appendFileSync(file, 'pp.obj\r');
+  assert.deepEqual(run(file).trimEnd().split('\n'), [
+    '[1/2] Building a.c.obj',
+    '[2/2] Building b.cpp.obj',
+  ]);
+});
+
 test('holds back a line the compiler has not finished writing', () => {
   const file = logFile('[1/2] done\n[2/2] half');
 

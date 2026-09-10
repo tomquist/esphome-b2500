@@ -13,8 +13,17 @@
 #
 # What it prints is whole lines only. publish-build-log.sh sends the difference
 # since last time and the page joins those back up, so a line still being
-# written must wait for its newline - it would read differently once the rest
-# arrived, and the bytes already sent would no longer be a prefix of the log.
+# written must wait for its terminator - it would read differently once the
+# rest arrived, and the bytes already sent would no longer be a prefix of the
+# log.
+#
+# Ninja separates its progress updates with CR rather than LF, because it means
+# them to overwrite one another on a terminal. Deleting those CRs would run
+# every update in a build phase together into one line tens of thousands of
+# characters long, so they are converted to newlines instead: an overwrite and
+# a newline both end a line, and only the newline survives being read back on a
+# page. That is also what makes the output flow while a phase is compiling -
+# held to LF alone, a phase says nothing until it ends.
 #
 # Usage: read-build-log.sh
 #
@@ -31,14 +40,21 @@ ESC=$(printf '\033')
 
 [[ -r "$SOURCE" && -s "$SOURCE" ]] || exit 1
 
+# Every terminator becomes a newline before anything else looks at the bytes,
+# so that "the last line" below means the same thing to ninja and to gcc. `tr`
+# is what does it rather than sed, because sed would end the file with a
+# newline the compiler had not written yet and make a half-line look finished.
+LINES=$(mktemp)
+trap 'rm -f "$LINES"' EXIT
+tr '\r' '\n' <"$SOURCE" >"$LINES"
+
 # A last line without its newline is one the compiler has not finished writing.
-{ if [[ -n "$(tail -c 1 "$SOURCE")" ]]; then
-    head -n -1 "$SOURCE"
+{ if [[ -n "$(tail -c 1 "$LINES")" ]]; then
+    head -n -1 "$LINES"
   else
-    cat "$SOURCE"
+    cat "$LINES"
   fi; } |
   sed -E \
-    -e 's/\r$//' \
     -e "s,${ESC}\\[[0-?]*[ -/]*[@-~],,g" \
     -e "s/${ESC}[()][A-B0-2]//g" \
     -e "s/${ESC}\\][^${ESC}]*(\\a|${ESC}\\\\)//g" |
