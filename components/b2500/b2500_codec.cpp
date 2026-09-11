@@ -1,5 +1,9 @@
 #include "b2500_codec.h"
+#include <algorithm>
+#include <cctype>
+#include <charconv>
 #include <cstddef>
+#include <cstring>
 
 namespace esphome {
 namespace b2500 {
@@ -98,6 +102,22 @@ bool B2500Codec::is_valid_cell_info(uint8_t *data, uint16_t data_len) {
   }
   const char *start = reinterpret_cast<const char *>(data);
   const char *end = reinterpret_cast<const char *>(data + data_len);
+  const bool has_only_digits_and_underscores =
+      std::all_of(start, end, [](char c) { return std::isdigit(static_cast<unsigned char>(c)) || c == '_'; });
+  if (!has_only_digits_and_underscores) {
+    return false;
+  }
+
+  if (*start == '_' || *(end - 1) == '_') {
+    return false;
+  }
+
+  for (const char *ptr = start; ptr + 1 < end; ptr++) {
+    if (*ptr == '_' && *(ptr + 1) == '_') {
+      return false;
+    }
+  }
+
   return ((std::count(start, end, '_') == 16) || (std::count(start, start + 10, '_') == 3));
 }
 
@@ -126,8 +146,21 @@ bool B2500Codec::parse_cell_info(uint8_t *data, uint16_t data_len, CellInfoPacke
   int i = 0;
 
   while (std::getline(ss, item, '_')) {
-    // Convert the string to an integer
-    int value = std::stoi(item);
+    if (item.empty()) {
+      ESP_LOGW(TAG, "Failed to parse cell info token: empty token");
+      return false;
+    }
+
+    int value = 0;
+    const char *token_start = item.data();
+    const char *token_end = token_start + item.size();
+    const std::from_chars_result parse_result = std::from_chars(token_start, token_end, value);
+
+    if (parse_result.ec != std::errc() || parse_result.ptr != token_end) {
+      ESP_LOGW(TAG, "Failed to parse cell info token '%s'", item.c_str());
+      return false;
+    }
+
     // Assign the value to the corresponding property
     if (i == SOC_INDEX) {
       payload.soc = value;
