@@ -16,8 +16,12 @@ import {
   emittedKeys,
   evaluate,
   idBuilder,
+  isReasoning,
   maskCommentsAndLiterals,
+  MIN_NOTE_LENGTH,
   pinnedRef,
+  snapshotProblems,
+  variantProblem,
 } from "./check-web-server-contract.mjs";
 
 // A miniature stand-in for web_server.cpp: `extra` is dropped into the function
@@ -212,9 +216,41 @@ test("every recorded acceptance carries a ref, a hash and its reasoning", () => 
   const snapshot = JSON.parse(
     fs.readFileSync(new URL("./web-server-contract.json", import.meta.url), "utf8"),
   );
-  for (const variant of acceptedVariants(snapshot)) {
-    assert.match(variant.idBuilder, /^[0-9a-f]{64}$/);
-    assert.ok(variant.ref, "an accepted variant without a ref");
-    assert.ok(variant.note && variant.note.length > 20, `${variant.ref}: no reasoning recorded`);
-  }
+  assert.deepEqual(snapshotProblems(snapshot), []);
+});
+
+// The rules the CLI applies to a --accept note and the ones the snapshot is held
+// to are the same rules, or --accept reports success and writes a record the
+// next run refuses.
+test("a note has to be reasoning, not a token", () => {
+  assert.equal(isReasoning("ids unchanged"), false);
+  assert.equal(isReasoning("x".repeat(MIN_NOTE_LENGTH)), false);
+  assert.equal(isReasoning(`${"x".repeat(MIN_NOTE_LENGTH)}y`), true);
+  assert.equal(isReasoning(`  ${"x".repeat(MIN_NOTE_LENGTH)}  `), false);
+  assert.equal(isReasoning(undefined), false);
+});
+
+test("an acceptance is reported unusable, field by field", () => {
+  const good = {
+    ref: "dev",
+    idBuilder: "a".repeat(64),
+    note: "pass by value only; the id bytes are identical",
+  };
+  assert.equal(variantProblem(good), null);
+  assert.equal(variantProblem(null), "is not an object");
+  assert.equal(variantProblem({ ...good, ref: undefined }), "has no ref");
+  assert.equal(variantProblem({ ...good, idBuilder: "short" }), "has no idBuilder hash");
+  assert.match(variantProblem({ ...good, note: "unchanged" }), /^has no reasoning/);
+  assert.deepEqual(snapshotProblems({ alsoAccepted: [good, null] }), [
+    "alsoAccepted[1] is not an object",
+  ]);
+});
+
+// A hand-edited record that reads `null` used to throw here, and an uncaught
+// throw exits 1 -- the code the nightly job files an issue on. The verdict has
+// to stay a verdict about ESPHome.
+test("a malformed acceptance cannot turn the verdict into a crash", () => {
+  const { failures } = verdict({ builderHash: "changed" }, { alsoAccepted: [null] });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /set_json_id\(\) changed/);
 });
