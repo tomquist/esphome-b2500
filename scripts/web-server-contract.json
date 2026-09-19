@@ -1,5 +1,5 @@
 {
-  "_comment": "Snapshot of the ESPHome web_server event format the B2500 web UI parses. See scripts/check-web-server-contract.mjs. requiredKeys is hand-maintained: the fields the web UI actually reads.",
+  "_comment": "Snapshot of the ESPHome web_server event format the B2500 web UI parses. See scripts/check-web-server-contract.mjs. requiredKeys is hand-maintained: the fields the web UI actually reads. alsoAccepted holds set_json_id() bodies that differ from the baseline but were read and found to emit the same id, each with the reasoning; add one with --accept, never by hand.",
   "requiredKeys": [
     "id",
     "domain",
@@ -77,5 +77,13 @@
     "uptime",
     "value"
   ],
-  "idBuilder": "6b03ed6824aebd94a6eae8cc7f218ccc281ff7ec751feccbb76aea2170fa4e4f"
+  "idBuilder": "6b03ed6824aebd94a6eae8cc7f218ccc281ff7ec751feccbb76aea2170fa4e4f",
+  "alsoAccepted": [
+    {
+      "ref": "dev",
+      "recorded": "2026-09-19",
+      "idBuilder": "91a04165da9e327ed0749f83571604bf92eb7b91e072536e6ac9eb745e725ee0",
+      "note": "set_json_id() takes JsonObject by value and casts id_buf to const char* at the assignment (esphome/esphome f946615). Neither touches the bytes written: the id is still {domain}/{device}/{name}, or {domain}/{name} without USE_DEVICES, which parseStorageEntity() splits on '/' as before (issue #317)."
+    }
+  ]
 }

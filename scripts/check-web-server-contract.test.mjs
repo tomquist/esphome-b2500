@@ -1,4 +1,5 @@
-// Fixtures for the contract checker's source extraction.
+// Fixtures for the contract checker: source extraction, then the verdict it
+// reaches from what it extracted.
 //
 // The checker's whole value is precision: it fails CI and files an issue when it
 // says the ESPHome event format changed. Extraction that miscounts braces would
@@ -11,7 +12,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
 import {
+  acceptedVariants,
   emittedKeys,
+  evaluate,
   idBuilder,
   maskCommentsAndLiterals,
   pinnedRef,
@@ -110,4 +113,108 @@ test("reads the version the build workflow actually pins", () => {
   assert.ok(declared, "the build workflow no longer pins a literal version");
   assert.equal(pinnedRef(), declared.groups.version);
   assert.match(pinnedRef(), /^\d{4}\.\d{1,2}\.\d{1,2}$/);
+});
+
+// The verdict itself. A live run only reaches most of these branches on the day
+// ESPHome changes something, which is the worst moment to find out the reporting
+// is wrong, so they are exercised against fixtures instead.
+
+const BASELINE = "baseline-hash";
+const KEYS = ["domain", "id", "name"];
+
+const snapshotOf = (overrides = {}) => ({
+  requiredKeys: ["id", "domain", "name"],
+  ref: "2026.8.1",
+  keys: KEYS,
+  idBuilder: BASELINE,
+  ...overrides,
+});
+
+const verdict = (overrides = {}, snapshotOverrides = {}) =>
+  evaluate({
+    snapshot: snapshotOf(snapshotOverrides),
+    ref: "dev",
+    keys: KEYS,
+    builder: "static void set_json_id(JsonObject root) { }",
+    builderHash: BASELINE,
+    ...overrides,
+  });
+
+test("passes silently when nothing moved", () => {
+  assert.deepEqual(verdict(), { failures: [], notes: [] });
+});
+
+test("an unrecognized set_json_id() body fails, and says how to settle it", () => {
+  const { failures } = verdict({ builderHash: "rewritten" });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /set_json_id\(\) changed/);
+  assert.match(failures[0], /--ref dev --accept/);
+  assert.match(failures[0], /--ref dev --update/);
+});
+
+test("a body recorded as emitting the same ids passes, saying whose verdict that was", () => {
+  const accepted = {
+    ref: "dev",
+    recorded: "2026-09-19",
+    idBuilder: "refactored",
+    note: "pass by value; ids unchanged",
+  };
+  const { failures, notes } = verdict(
+    { builderHash: "refactored" },
+    { alsoAccepted: [accepted] },
+  );
+  assert.deepEqual(failures, []);
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /not the 2026\.8\.1 baseline/);
+  assert.match(notes[0], /accepted at dev on 2026-09-19/);
+  assert.match(notes[0], /pass by value; ids unchanged/);
+});
+
+test("an acceptance covers one body, not every later one", () => {
+  const { failures } = verdict(
+    { builderHash: "changed-again" },
+    { alsoAccepted: [{ ref: "dev", idBuilder: "refactored", note: "ids unchanged" }] },
+  );
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /set_json_id\(\) changed/);
+});
+
+test("a missing set_json_id() is reported, not thrown", () => {
+  const { failures } = verdict({ builder: null, builderHash: null });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /set_json_id\(\) is gone/);
+});
+
+test("a key the web UI reads going missing fails on its own", () => {
+  const { failures } = verdict({ keys: ["domain", "name"] });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /keys the web UI depends on are gone: id/);
+});
+
+test("keys coming and going outside requiredKeys are notes, not failures", () => {
+  const { failures, notes } = verdict({ keys: ["domain", "id", "name", "sorting_group"] });
+  assert.deepEqual(failures, []);
+  assert.deepEqual(notes, ["new event keys at dev: sorting_group"]);
+
+  const gone = verdict({ keys: KEYS }, { keys: [...KEYS, "tilt"] });
+  assert.deepEqual(gone.failures, []);
+  assert.deepEqual(gone.notes, ["event keys gone at dev: tilt"]);
+});
+
+test("a snapshot with no accepted variants is not a broken snapshot", () => {
+  assert.deepEqual(acceptedVariants(snapshotOf()), []);
+  assert.deepEqual(acceptedVariants(snapshotOf({ alsoAccepted: null })), []);
+});
+
+// Acceptances are written by --accept, but nothing stops a hand edit, and an
+// entry missing its reasoning is the one thing this record cannot do without.
+test("every recorded acceptance carries a ref, a hash and its reasoning", () => {
+  const snapshot = JSON.parse(
+    fs.readFileSync(new URL("./web-server-contract.json", import.meta.url), "utf8"),
+  );
+  for (const variant of acceptedVariants(snapshot)) {
+    assert.match(variant.idBuilder, /^[0-9a-f]{64}$/);
+    assert.ok(variant.ref, "an accepted variant without a ref");
+    assert.ok(variant.note && variant.note.length > 20, `${variant.ref}: no reasoning recorded`);
+  }
 });
