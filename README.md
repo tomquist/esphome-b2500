@@ -186,7 +186,7 @@ Replace `{timer}` with the timer slot number (`1` to `5`). Each slot is exposed 
 - **Timer Start Time** / **Timer End Time**: a JSON object `{"hour": 8, "minute": 0, "second": 0}` (each field is an optional integer; ESPHome time entities use JSON, not a `HH:MM:SS` string)
 - **Timer Output Power**: an integer number of watts, e.g. `500`
 
-Older HMA/HMF/HMK devices (firmware < 218) only expose 3 timer slots; slots `4` and `5` require newer firmware. HMJ devices use a separate firmware numbering (e.g. 116.x) and always support all 5 slots.
+Older HMA/HMF/HMK devices (firmware < 218) only expose 3 timer slots; slots `4` and `5` require newer firmware. HMJ devices use a separate firmware numbering (e.g. 116.x) and support all 5 slots from firmware 100.
 
 > **⚠️ Do not use the timers to build a zero feed-in / zero-export automation.** It is tempting to repeatedly rewrite the timer output power based on your current consumption (e.g. every few seconds or minutes) to keep grid feed-in at zero. **Don't.** Every timer write is persisted to the device's flash/EEPROM over BLE, which only tolerates a limited number of write cycles. Continuously steering the output through the timers will wear the flash out and can permanently damage the device. Use the timers only for occasional schedule changes. For a dynamic control loop, drive the output limit instead (e.g. via [hm2mqtt](https://github.com/tomquist/hm2mqtt), which does not write to flash by default). See [Set Timer Configuration](#set-timer-configuration-b2500storagetimerset---v2-only) for more details.
 
@@ -414,7 +414,7 @@ Fields:
 
 > **⚠️ Do not use the timers for a fast control loop (e.g. zero-export regulation).** Every write is persisted to the device's flash/EEPROM over BLE, which has a limited number of write cycles — writing the timers frequently will wear it out and eventually damage the device. The timers are meant for occasional schedule changes, not for continuously steering output power. For a control loop, drive the output limit dynamically instead (e.g. via [hm2mqtt](https://github.com/tomquist/hm2mqtt), which does not write to flash by default).
 >
-> **Note:** the all-slots `timer/set` topic writes every slot in one message. HMA/HMF/HMK devices with firmware < 218 only have 3 timer slots, while newer firmware and all HMJ devices have 5; the configuration always handles 5 slots, so on a 3-slot device writing to `timer/set` produces harmless log warnings such as `SetTimerAction: invalid timer index 3 (valid range: 0-2)`. The valid slots are still updated; the out-of-range slots are ignored. The per-slot `timer/{timer}/set` topic only touches the slot you address (and only warns if that specific slot doesn't exist).
+> **Note:** the all-slots `timer/set` topic writes every slot in one message. HMA/HMF/HMK devices with firmware < 218 only have 3 timer slots, while newer firmware (and HMJ devices with firmware >= 100) has 5; the configuration always handles 5 slots, so on a 3-slot device writing to `timer/set` produces harmless log warnings such as `SetTimerAction: invalid timer index 3 (valid range: 0-2)`. The valid slots are still updated; the out-of-range slots are ignored. The per-slot `timer/{timer}/set` topic only touches the slot you address (and only warns if that specific slot doesn't exist).
 
 </details>
 

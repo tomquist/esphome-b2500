@@ -70,13 +70,14 @@ bool B2500State::set_dod(int dod, std::vector<uint8_t> &payload) {
 }
 
 // Timer slots 4 and 5 arrived with firmware 218 on HMA/HMF/HMK. HMJ devices run a separate
-// firmware line (e.g. 108 matches HMA 226, 116 matches HMA 230), so their version numbers are
-// below 218 even though every HMJ release supports all 5 slots.
+// firmware line (e.g. 108 matches HMA 226) and support all 5 slots from firmware 100.
 constexpr uint8_t kMinFirmwareFiveTimers = 218;
+constexpr uint8_t kMinFirmwareFiveTimersHMJ = 100;
 
 uint8_t B2500State::get_number_of_timers() const {
   const bool is_hmj = this->device_info_.type.rfind("HMJ", 0) == 0;
-  if (is_hmj || this->runtime_info_.dev_version >= kMinFirmwareFiveTimers) {
+  const uint8_t required_fw = is_hmj ? kMinFirmwareFiveTimersHMJ : kMinFirmwareFiveTimers;
+  if (this->runtime_info_.dev_version >= required_fw) {
     return 5;
   }
   return 3;
