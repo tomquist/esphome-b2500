@@ -4,14 +4,6 @@
 namespace esphome {
 namespace b2500 {
 
-constexpr uint8_t kMinFirmwareSurplusFeedIn = 226;
-constexpr uint8_t kMinFirmwareSurplusFeedInHMJ = 110;
-
-static bool supports_surplus_feed_in(const DeviceInfoPacket &device_info, uint8_t firmware) {
-  const bool is_hmj = device_info.type.rfind("HMJ", 0) == 0;
-  return firmware >= (is_hmj ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn);
-}
-
 void SurplusFeedInSwitch::setup() {
   this->parent_->get_state()->add_on_message_callback([this](B2500Message message) {
     if (message != B2500_MSG_RUNTIME_INFO) {
@@ -20,10 +12,9 @@ void SurplusFeedInSwitch::setup() {
 
     auto *state = this->parent_->get_state();
     const auto runtime_info = state->get_runtime_info();
-    const auto device_info = state->get_device_info();
 
-    // Firmware gate mirrors command path: HMJ >= 110, others >= 226.
-    if (!supports_surplus_feed_in(device_info, runtime_info.dev_version)) {
+    // Firmware gate mirrors command path
+    if (!state->supports_surplus_feed_in()) {
       return;
     }
 

@@ -369,13 +369,8 @@ void B2500ComponentBase::interpret_cell_info() {
 void B2500ComponentBase::interpret_runtime_info() {
   auto payload = this->state_->get_runtime_info();
   // For now just dump the values
-  constexpr uint8_t kMinFirmwareSurplusFeedIn = 226;
-  constexpr uint8_t kMinFirmwareSurplusFeedInHMJ = 110;
-  const auto device_info = this->state_->get_device_info();
-  const bool is_hmj = device_info.type.rfind("HMJ", 0) == 0;
-  const uint8_t required_fw = is_hmj ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn;
   constexpr uint16_t kRuntimeSurplusFlagPayloadIndex = 55;
-  const bool has_surplus_flag = payload.dev_version >= required_fw &&
+  const bool has_surplus_flag = this->state_->supports_surplus_feed_in() &&
                                 this->state_->get_last_runtime_payload_size() > kRuntimeSurplusFlagPayloadIndex;
   const uint8_t surplus_disabled = payload.surplus_feed_in_disabled;
 

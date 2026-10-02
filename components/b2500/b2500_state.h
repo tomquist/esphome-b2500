@@ -62,10 +62,14 @@ class B2500State {
   const TimerInfo get_timer(int timer) const;
 
   uint8_t get_number_of_timers() const;
+  bool is_hmj() const;
+  uint8_t get_min_firmware_surplus_feed_in() const;
+  bool supports_surplus_feed_in() const;
 
  protected:
   void message_received(B2500Message message, time_t timestamp);
   bool encode_timers(std::vector<uint8_t> &payload);
+  bool timer_slot_count_known_() const;
 
   B2500Codec *codec_;
   std::unordered_map<B2500Message, time_t> info_timestamps_ = {{B2500_MSG_DEVICE_INFO, 0}, {B2500_MSG_RUNTIME_INFO, 0},
