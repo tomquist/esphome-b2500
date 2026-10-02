@@ -62,6 +62,9 @@ class B2500State {
   const TimerInfo get_timer(int timer) const;
 
   uint8_t get_number_of_timers() const;
+  bool is_hmj() const;
+  uint8_t get_min_firmware_surplus_feed_in() const;
+  bool supports_surplus_feed_in() const;
 
  protected:
   void message_received(B2500Message message, time_t timestamp);

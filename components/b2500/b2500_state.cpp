@@ -69,14 +69,25 @@ bool B2500State::set_dod(int dod, std::vector<uint8_t> &payload) {
   return true;
 }
 
-// Timer slots 4 and 5 arrived with firmware 218 on HMA/HMF/HMK. HMJ devices run a separate
-// firmware line (e.g. 108 matches HMA 226) and support all 5 slots from firmware 100.
+// HMJ devices run a separate firmware line (e.g. 108 matches HMA 226), so feature thresholds differ by device type.
+// Timer slots 4 and 5 arrived with firmware 218 on HMA/HMF/HMK and are available from firmware 100 on HMJ.
 constexpr uint8_t kMinFirmwareFiveTimers = 218;
 constexpr uint8_t kMinFirmwareFiveTimersHMJ = 100;
+constexpr uint8_t kMinFirmwareSurplusFeedIn = 226;
+constexpr uint8_t kMinFirmwareSurplusFeedInHMJ = 108;
+
+bool B2500State::is_hmj() const { return this->device_info_.type.rfind("HMJ", 0) == 0; }
+
+uint8_t B2500State::get_min_firmware_surplus_feed_in() const {
+  return this->is_hmj() ? kMinFirmwareSurplusFeedInHMJ : kMinFirmwareSurplusFeedIn;
+}
+
+bool B2500State::supports_surplus_feed_in() const {
+  return this->runtime_info_.dev_version >= this->get_min_firmware_surplus_feed_in();
+}
 
 uint8_t B2500State::get_number_of_timers() const {
-  const bool is_hmj = this->device_info_.type.rfind("HMJ", 0) == 0;
-  const uint8_t required_fw = is_hmj ? kMinFirmwareFiveTimersHMJ : kMinFirmwareFiveTimers;
+  const uint8_t required_fw = this->is_hmj() ? kMinFirmwareFiveTimersHMJ : kMinFirmwareFiveTimers;
   if (this->runtime_info_.dev_version >= required_fw) {
     return 5;
   }
