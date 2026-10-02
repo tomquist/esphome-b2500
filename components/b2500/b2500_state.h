@@ -66,6 +66,7 @@ class B2500State {
  protected:
   void message_received(B2500Message message, time_t timestamp);
   bool encode_timers(std::vector<uint8_t> &payload);
+  bool timer_slot_count_known_() const;
 
   B2500Codec *codec_;
   std::unordered_map<B2500Message, time_t> info_timestamps_ = {{B2500_MSG_DEVICE_INFO, 0}, {B2500_MSG_RUNTIME_INFO, 0},

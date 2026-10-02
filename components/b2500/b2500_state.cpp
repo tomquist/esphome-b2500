@@ -83,8 +83,18 @@ uint8_t B2500State::get_number_of_timers() const {
   return 3;
 }
 
+bool B2500State::timer_slot_count_known_() const {
+  // Below the generic threshold the slot count depends on the device type, so don't guess it
+  if (this->is_message_received(B2500_MSG_RUNTIME_INFO) && this->runtime_info_.dev_version < kMinFirmwareFiveTimers &&
+      !this->is_message_received(B2500_MSG_DEVICE_INFO)) {
+    ESP_LOGW(TAG, "Device info not received yet, can't determine the number of timer slots");
+    return false;
+  }
+  return true;
+}
+
 bool B2500State::set_timer_enabled(int timer, bool enabled, std::vector<uint8_t> &payload) {
-  if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
+  if (!this->is_message_received(B2500_MSG_TIMER_INFO) || !this->timer_slot_count_known_()) {
     return false;
   }
   if (timer < 0 || timer >= 5) {
@@ -99,7 +109,7 @@ bool B2500State::set_timer_enabled(int timer, bool enabled, std::vector<uint8_t>
 }
 
 bool B2500State::set_timer_output_power(int timer, int output_power, std::vector<uint8_t> &payload) {
-  if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
+  if (!this->is_message_received(B2500_MSG_TIMER_INFO) || !this->timer_slot_count_known_()) {
     return false;
   }
   if (timer < 0 || timer >= 5) {
@@ -114,7 +124,7 @@ bool B2500State::set_timer_output_power(int timer, int output_power, std::vector
 }
 
 bool B2500State::set_timer_start(int timer, uint8_t hour, uint8_t minute, std::vector<uint8_t> &payload) {
-  if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
+  if (!this->is_message_received(B2500_MSG_TIMER_INFO) || !this->timer_slot_count_known_()) {
     return false;
   }
   if (timer < 0 || timer >= 5) {
@@ -133,7 +143,7 @@ bool B2500State::set_timer_start(int timer, uint8_t hour, uint8_t minute, std::v
 }
 
 bool B2500State::set_timer_end(int timer, uint8_t hour, uint8_t minute, std::vector<uint8_t> &payload) {
-  if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
+  if (!this->is_message_received(B2500_MSG_TIMER_INFO) || !this->timer_slot_count_known_()) {
     return false;
   }
   if (timer < 0 || timer >= 5) {
@@ -157,7 +167,7 @@ bool B2500State::set_timer_end(int timer, uint8_t hour, uint8_t minute, std::vec
 
 bool B2500State::set_timer(int timer, bool enabled, float output_power, uint8_t start_hour, uint8_t start_minute,
                            uint8_t end_hour, uint8_t end_minute, std::vector<uint8_t> &payload) {
-  if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
+  if (!this->is_message_received(B2500_MSG_TIMER_INFO) || !this->timer_slot_count_known_()) {
     return false;
   }
   if (timer < 0 || timer >= 5) {
@@ -182,15 +192,11 @@ bool B2500State::set_timer(int timer, bool enabled, float output_power, uint8_t 
 }
 
 bool B2500State::encode_timers(std::vector<uint8_t> &payload) {
-  if (this->is_message_received(B2500_MSG_RUNTIME_INFO)) {
-    // Below the generic threshold the slot count depends on the device type, so don't guess it
-    if (this->runtime_info_.dev_version < kMinFirmwareFiveTimers && !this->is_message_received(B2500_MSG_DEVICE_INFO)) {
-      ESP_LOGW(TAG, "Device info not received yet, can't determine the number of timer slots");
-      return false;
-    }
-    if (this->get_number_of_timers() < 5) {
-      return this->codec_->encode_timers(this->timer_info_.base.timer, 3, payload);
-    }
+  if (!this->timer_slot_count_known_()) {
+    return false;
+  }
+  if (this->is_message_received(B2500_MSG_RUNTIME_INFO) && this->get_number_of_timers() < 5) {
+    return this->codec_->encode_timers(this->timer_info_.base.timer, 3, payload);
   }
   TimerInfo timer[5];
   std::memcpy(timer, this->timer_info_.base.timer, sizeof(TimerInfo) * 3);
@@ -200,6 +206,10 @@ bool B2500State::encode_timers(std::vector<uint8_t> &payload) {
 
 bool B2500State::set_adaptive_mode_enabled(bool enabled, std::vector<uint8_t> &payload) {
   if (!this->is_message_received(B2500_MSG_TIMER_INFO)) {
+    return false;
+  }
+  // Disabling adaptive mode writes the timers
+  if (!enabled && !this->timer_slot_count_known_()) {
     return false;
   }
   this->timer_info_.base.adaptive_mode_enabled = enabled;
