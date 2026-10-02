@@ -182,14 +182,20 @@ bool B2500State::set_timer(int timer, bool enabled, float output_power, uint8_t 
 }
 
 bool B2500State::encode_timers(std::vector<uint8_t> &payload) {
-  if (this->is_message_received(B2500_MSG_RUNTIME_INFO) && this->get_number_of_timers() < 5) {
-    return this->codec_->encode_timers(this->timer_info_.base.timer, 3, payload);
-  } else {
-    TimerInfo timer[5];
-    std::memcpy(timer, this->timer_info_.base.timer, sizeof(TimerInfo) * 3);
-    std::memcpy(timer + 3, this->timer_info_.additional_timers, sizeof(TimerInfo) * 2);
-    return this->codec_->encode_timers(timer, 5, payload);
+  if (this->is_message_received(B2500_MSG_RUNTIME_INFO)) {
+    // Below the generic threshold the slot count depends on the device type, so don't guess it
+    if (this->runtime_info_.dev_version < kMinFirmwareFiveTimers && !this->is_message_received(B2500_MSG_DEVICE_INFO)) {
+      ESP_LOGW(TAG, "Device info not received yet, can't determine the number of timer slots");
+      return false;
+    }
+    if (this->get_number_of_timers() < 5) {
+      return this->codec_->encode_timers(this->timer_info_.base.timer, 3, payload);
+    }
   }
+  TimerInfo timer[5];
+  std::memcpy(timer, this->timer_info_.base.timer, sizeof(TimerInfo) * 3);
+  std::memcpy(timer + 3, this->timer_info_.additional_timers, sizeof(TimerInfo) * 2);
+  return this->codec_->encode_timers(timer, 5, payload);
 }
 
 bool B2500State::set_adaptive_mode_enabled(bool enabled, std::vector<uint8_t> &payload) {
