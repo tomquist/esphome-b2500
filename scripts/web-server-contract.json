@@ -84,6 +84,12 @@
       "recorded": "2026-09-19",
       "idBuilder": "91a04165da9e327ed0749f83571604bf92eb7b91e072536e6ac9eb745e725ee0",
       "note": "set_json_id() takes JsonObject by value and casts id_buf to const char* at the assignment (esphome/esphome f946615). Neither touches the bytes written: the id is still {domain}/{device}/{name}, or {domain}/{name} without USE_DEVICES, which parseStorageEntity() splits on '/' as before (issue #317)."
+    },
+    {
+      "ref": "dev",
+      "recorded": "2026-10-12",
+      "idBuilder": "62c4103c2e9469138d604a062d6460698ab63d774a66c658c6362dff1844fec9",
+      "note": "Only the DETAIL_ALL fields changed: domain, name and device are now set through json::linked() and icon through json_table_str(), which store a pointer to the same string (ArduinoJson JsonString isStatic=true) instead of copying it, so the serialized bytes are identical. The id assignment is unchanged from the accepted dev variant of 2026-09-19 -- still static_cast<const char *>(id_buf) holding {domain}/{device}/{name}, or {domain}/{name} without USE_DEVICES -- which parseStorageEntity() splits on '/' as before (issue #324)."
     }
   ]
 }
