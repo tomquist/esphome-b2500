@@ -90,6 +90,12 @@
       "recorded": "2026-10-12",
       "idBuilder": "62c4103c2e9469138d604a062d6460698ab63d774a66c658c6362dff1844fec9",
       "note": "Only the DETAIL_ALL fields changed: domain, name and device are now set through json::linked() and icon through json_table_str(), which store a pointer to the same string (ArduinoJson JsonString isStatic=true) instead of copying it, so the serialized bytes are identical. The id assignment is unchanged from the accepted dev variant of 2026-09-19 -- still static_cast<const char *>(id_buf) holding {domain}/{device}/{name}, or {domain}/{name} without USE_DEVICES -- which parseStorageEntity() splits on '/' as before (issue #324)."
+    },
+    {
+      "ref": "dev",
+      "recorded": "2026-10-22",
+      "idBuilder": "578e5d468a63d4ba6ea53750a3ed392bdce4a83a2c8d66d2dc434c933f54356d",
+      "note": "The entity name is no longer memcpy'd from get_name() but written into id_buf by obj->write_name_to(), which copies the same name_ bytes (the entity's own name, or the device/friendly-name fallback as before) and null-terminates them; it only bounds the copy to the room left in id_buf, which a name within the 120-char limit never reaches (esphome/esphome#20423, names kept in flash on ESP8266). icon now goes through linked(get_icon_progmem()), the same string read in place (esphome/esphome#21111). The id assignment is unchanged -- static_cast<const char *>(id_buf) holding {domain}/{device}/{name}, or {domain}/{name} without USE_DEVICES -- which parseStorageEntity() splits on '/' as before (issue #326)."
     }
   ]
 }
