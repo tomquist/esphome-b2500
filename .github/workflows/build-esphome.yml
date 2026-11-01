@@ -1,33 +1,46 @@
 name: Build ESPHome Firmware
 run-name: >
-  B2500 [${{
-    github.event.client_payload.identifier &&
-    github.event.client_payload.identifier || 'N/A' }}]
+  B2500 [${{ inputs.identifier || 'N/A' }}]
 
+# Started by the dispatcher in infra/dispatcher, which the web builder calls.
+# workflow_dispatch rather than repository_dispatch because starting it needs
+# only `actions: write`, where a repository dispatch needs `contents: write` -
+# which would let the dispatcher's credentials push to the repository.
 on:
-  repository_dispatch:
-    types:
-      - build_esphome
+  workflow_dispatch:
+    inputs:
+      identifier:
+        description: Build identifier the web builder polls for
+        required: true
+        type: string
+      config:
+        description: Configuration, sealed to the build key
+        required: true
+        type: string
+      public_key:
+        description: The requesting page's public key
+        required: true
+        type: string
 
 # The dispatch endpoint is public, so the same identifier can be submitted more
 # than once. Serialising per identifier keeps two runs from interleaving their
 # writes to the same firmware and status objects.
 concurrency:
-  group: build-esphome-${{ github.event.client_payload.identifier }}
+  group: build-esphome-${{ inputs.identifier }}
   cancel-in-progress: false
 
 jobs:
   build_esphome:
     runs-on: ubuntu-latest
     env:
-      ENCRYPTED_CONFIG: ${{ github.event.client_payload.config }}
+      ENCRYPTED_CONFIG: ${{ inputs.config }}
       # The browser's ephemeral public key. Public material, so unlike the
       # password it replaces there is nothing here to protect.
-      CLIENT_PUBLIC_KEY: ${{ github.event.client_payload.public_key }}
+      CLIENT_PUBLIC_KEY: ${{ inputs.public_key }}
       S3_BUCKET: esphome-b2500-images
       AWS_REGION: eu-west-1
       AUTOMATED_BUILD: 'true'
-      IDENTIFIER: ${{ github.event.client_payload.identifier }}
+      IDENTIFIER: ${{ inputs.identifier }}
       # Pinned rather than read from the dispatch payload. The build action
       # splices this straight into a docker tag and a shell command, and which
       # config keys ESPHome honours (platform_version, among others) differs

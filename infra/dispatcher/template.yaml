@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Starts esphome-b2500 firmware builds for the web builder: a public Lambda
+  function URL that turns a build request into a workflow_dispatch of
+  build-esphome.yml. See infra/dispatcher/README.md.
+
+Parameters:
+  GitHubAppId:
+    Type: String
+    AllowedPattern: '^[0-9]+$'
+    Description: App ID of the GitHub App installed on the repository.
+  PrivateKeyParameterName:
+    Type: String
+    Default: /esphome-b2500/dispatcher/github-app-private-key
+    AllowedPattern: '^/[A-Za-z0-9/_.-]+$'
+    Description: >
+      SecureString SSM parameter holding the app's private key (PEM). Created
+      by hand, because CloudFormation cannot create SecureString parameters.
+  GitHubOwner:
+    Type: String
+    Default: tomquist
+  GitHubRepo:
+    Type: String
+    Default: esphome-b2500
+  WorkflowFile:
+    Type: String
+    Default: build-esphome.yml
+  WorkflowRef:
+    Type: String
+    Default: main
+    Description: Branch the build workflow is dispatched on.
+  AllowedOrigins:
+    Type: CommaDelimitedList
+    Default: https://tomquist.github.io,http://localhost:3000
+    Description: Origins the browser may call the function URL from.
+  ReservedConcurrency:
+    Type: Number
+    Default: 5
+    MinValue: 0
+    Description: >
+      Upper bound on concurrent invocations, a cost cap for a public endpoint.
+      0 leaves it unreserved, for accounts whose concurrency quota is too low
+      to reserve from.
+
+Conditions:
+  ReserveConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}
+      RetentionInDays: 14
+
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: dispatcher
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt LogGroup.Arn
+              # Decryption under the AWS managed aws/ssm key needs no kms
+              # statement: that key's policy already allows use through SSM.
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${PrivateKeyParameterName}
+
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref AWS::StackName
+      Description: Starts esphome-b2500 firmware builds for the web builder
+      Runtime: nodejs24.x
+      Architectures: [arm64]
+      Handler: index.handler
+      MemorySize: 256
+      Timeout: 15
+      Role: !GetAtt Role.Arn
+      ReservedConcurrentExecutions: !If
+        - ReserveConcurrency
+        - !Ref ReservedConcurrency
+        - !Ref AWS::NoValue
+      LoggingConfig:
+        LogGroup: !Ref LogGroup
+      Environment:
+        Variables:
+          GITHUB_APP_ID: !Ref GitHubAppId
+          GITHUB_APP_PRIVATE_KEY_PARAMETER: !Ref PrivateKeyParameterName
+          GITHUB_OWNER: !Ref GitHubOwner
+          GITHUB_REPO: !Ref GitHubRepo
+          GITHUB_WORKFLOW_FILE: !Ref WorkflowFile
+          GITHUB_WORKFLOW_REF: !Ref WorkflowRef
+      # A placeholder that answers 503 until the real code is uploaded with
+      # `aws lambda update-function-code` (see the README). The stack does not
+      # own the code, so redeploying it never rolls the function back.
+      Code:
+        ZipFile: |
+          exports.handler = async () => ({
+            statusCode: 503,
+            body: JSON.stringify({ error: 'Dispatcher code not deployed yet' }),
+          });
+
+  FunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref Function
+      AuthType: NONE
+      Cors:
+        AllowOrigins: !Ref AllowedOrigins
+        AllowMethods: [POST]
+        AllowHeaders: [content-type]
+        MaxAge: 3600
+
+  # A public function URL needs both grants since October 2025. The second is
+  # limited to calls through the URL, so it does not also open the function to
+  # direct Invoke calls from any AWS account.
+  PublicUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+      FunctionUrlAuthType: NONE
+
+  PublicInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: lambda:InvokeFunction
+      Principal: '*'
+      InvokedViaFunctionUrl: true
+
+Outputs:
+  FunctionName:
+    Value: !Ref Function
+  DispatchUrl:
+    Description: Set this as the BUILD_DISPATCH_URL repository variable.
+    Value: !GetAtt FunctionUrl.FunctionUrl

@@ -1,7 +1,8 @@
 # Firmware bucket configuration
 
 Builds started from the [web builder](https://tomquist.github.io/esphome-b2500/)
-upload three kinds of object to the `esphome-b2500-images` bucket:
+are started through the dispatcher in [`dispatcher/`](./dispatcher/README.md)
+and upload three kinds of object to the `esphome-b2500-images` bucket:
 
 | Object                              | Purpose                                                                                                                                |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -75,7 +76,7 @@ knowing the URL gets you ciphertext and nothing else.
 The 96 bits in `generateRandomIdentifier()` are therefore collision and
 enumeration hygiene rather than a secret: two builds must never land on the same
 object, and the bucket should not be walkable. Because the identifier is public
-and the dispatch endpoint is unauthenticated, anyone who reads it out of the
+and the [dispatch endpoint](./dispatcher/README.md) is unauthenticated, anyone who reads it out of the
 Actions list can start a build reusing it and clobber the objects of a build in
 flight. The `concurrency` group serialises those runs so they cannot interleave,
 but it does not prevent the overwrite - an accepted denial of service against a
@@ -139,7 +140,7 @@ directions so they cannot drift apart.
 The public half is deployment configuration rather than a constant in the
 source, so rotating costs a variable, a secret and a redeploy - no code change.
 Rotate it: it decrypts every configuration ever submitted, and there is no
-forward secrecy to be had here. `repository_dispatch` is fire-and-forget, so
+forward secrecy to be had here. `workflow_dispatch` is fire-and-forget, so
 there is no round trip in which the runner could offer an ephemeral key before
 the browser encrypts, which means the recipient key is necessarily long-lived
 and anyone who kept old payloads can read them if it ever leaks.
