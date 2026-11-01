@@ -59,11 +59,16 @@ const BuildModal: React.FC<BuildModalProps> = ({
   closeModal,
   debouncedFormValues,
 }) => {
-  const [isBuildStarted, setIsBuildStarted] = useState(false);
-  const [identifier] = useState(() => generateRandomIdentifier());
-  // Generated per build and never transmitted: the payload carries only the
-  // public half, and the firmware comes back sealed to it.
-  const [keyPair, setKeyPair] = useState<BuildKeyPair | null>(null);
+  // The identifier and key pair of the dispatch that went out. Both are
+  // generated per attempt: a dispatch reported as failed may still have
+  // started a build, and a retry under the same identifier would have the
+  // progress dialog follow that build, whose firmware is sealed to the
+  // previous attempt's key. The private key is never transmitted: the payload
+  // carries only the public half, and the firmware comes back sealed to it.
+  const [build, setBuild] = useState<{
+    identifier: string;
+    keyPair: BuildKeyPair;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
 
@@ -73,6 +78,7 @@ const BuildModal: React.FC<BuildModalProps> = ({
     setDispatchError(null);
 
     try {
+      const identifier = generateRandomIdentifier();
       const buildKeyPair = await generateBuildKeyPair();
       const configData = {
         secrets: getAllSecrets(debouncedFormValues),
@@ -95,8 +101,7 @@ const BuildModal: React.FC<BuildModalProps> = ({
       );
       // Only kept once the dispatch went out: without a build to match it, the
       // key pair is of no use to the progress dialog.
-      setKeyPair(buildKeyPair);
-      setIsBuildStarted(true);
+      setBuild({ identifier, keyPair: buildKeyPair });
     } catch (error) {
       console.error('Error triggering build:', error);
       setDispatchError(describeDispatchError(error));
@@ -105,11 +110,11 @@ const BuildModal: React.FC<BuildModalProps> = ({
     }
   };
 
-  if (isBuildStarted && keyPair) {
+  if (build) {
     return (
       <BuildProgressDialog
-        identifier={identifier}
-        keyPair={keyPair}
+        identifier={build.identifier}
+        keyPair={build.keyPair}
         deviceName={
           debouncedFormValues.friendly_name || debouncedFormValues.name
         }
@@ -163,11 +168,7 @@ const BuildModal: React.FC<BuildModalProps> = ({
         <Button
           onClick={handleBuild}
           color="primary"
-          disabled={
-            isLoading ||
-            !buildsAreConfigured() ||
-            identifier.trim().length === 0
-          }
+          disabled={isLoading || !buildsAreConfigured()}
         >
           {isLoading ? <CircularProgress size={24} /> : 'Start Build'}
         </Button>

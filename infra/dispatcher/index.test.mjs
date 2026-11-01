@@ -7,6 +7,7 @@ import {
   IDENTIFIER_PATTERN,
   PUBLIC_KEY_PATTERN,
   MAX_BODY_LENGTH,
+  RESPONSE_MARGIN_MS,
   MAX_CONFIG_LENGTH,
   createAppJwt,
   createHandler,
@@ -203,6 +204,69 @@ test('a key the browser produces is accepted', () => {
     JSON.stringify({ ...VALID, public_key: raw })
   );
   assert.equal(inputs.public_key, raw);
+});
+
+const lambdaContext = (remainingMs) => ({
+  getRemainingTimeInMillis: () => remainingMs,
+});
+
+// Never answers, as a GitHub that hangs would not; gives up only when aborted.
+const hangingFetch =
+  (calls) =>
+  async (url, init = {}) => {
+    calls.push({ url, ...init });
+    return new Promise((resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(init.signal.reason));
+    });
+  };
+
+test('every GitHub call shares one deadline taken from the invocation', async () => {
+  const { calls, fetchImpl } = recordingFetch(jsonResponse(204));
+  const tokenSignals = [];
+  const handler = makeHandler(fetchImpl, async ({ signal }) => {
+    tokenSignals.push(signal);
+    return 'installation-token';
+  });
+  const response = await handler(post(VALID), lambdaContext(15000));
+
+  assert.equal(response.statusCode, 202);
+  assert.ok(tokenSignals[0] instanceof AbortSignal);
+  assert.equal(calls[0].signal, tokenSignals[0]);
+});
+
+test('a dispatch GitHub never answers is given up before the invocation ends', async () => {
+  const calls = [];
+  const handler = makeHandler(hangingFetch(calls));
+  const started = Date.now();
+  const response = await handler(
+    post(VALID),
+    lambdaContext(RESPONSE_MARGIN_MS + 50)
+  );
+
+  assert.equal(response.statusCode, 502);
+  assert.equal(calls.length, 1);
+  assert.ok(Date.now() - started < 1000, 'gave up at the deadline');
+});
+
+test('a token GitHub never issues is given up before the invocation ends', async () => {
+  const calls = [];
+  const fetchImpl = hangingFetch(calls);
+  const getToken = createTokenSource({
+    appId: 1,
+    owner: 'tomquist',
+    repo: 'esphome-b2500',
+    loadPrivateKey: async () => privateKey,
+    fetchImpl,
+  });
+  const response = await makeHandler(fetchImpl, getToken)(
+    post(VALID),
+    lambdaContext(RESPONSE_MARGIN_MS + 50)
+  );
+
+  assert.equal(response.statusCode, 502);
+  // Stuck on the installation lookup, so the dispatch was never attempted.
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /\/installation$/);
 });
 
 test('parseBuildRequest returns exactly the three workflow inputs', () => {

@@ -39,6 +39,11 @@ const API_HEADERS = {
   'User-Agent': 'esphome-b2500-dispatcher',
 };
 
+// Kept back from the invocation's time limit for answering, so that a GitHub
+// call that hangs is abandoned in time to return a 502 the page can explain,
+// instead of running into the Lambda timeout.
+export const RESPONSE_MARGIN_MS = 2000;
+
 // Installation tokens live an hour. Renewed this long before they expire, so
 // a token is never used in its last minutes.
 const TOKEN_RENEW_MARGIN_MS = 5 * 60 * 1000;
@@ -132,8 +137,11 @@ export const createTokenSource = ({
   let installationId;
   let cached;
 
-  const call = async (path, init, what) => {
-    const response = await fetchImpl(`${GITHUB_API}${path}`, init);
+  const call = async (path, init, what, signal) => {
+    const response = await fetchImpl(`${GITHUB_API}${path}`, {
+      ...init,
+      signal,
+    });
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
       throw new Error(`${what} failed: HTTP ${response.status} ${detail}`);
@@ -141,11 +149,12 @@ export const createTokenSource = ({
     return response.json();
   };
 
-  return async () => {
+  // `signal` is the invocation's deadline, shared by every call made here.
+  return async ({ signal } = {}) => {
     if (cached && cached.expiresAt - TOKEN_RENEW_MARGIN_MS > now()) {
       return cached.token;
     }
-    privateKey ??= await loadPrivateKey();
+    privateKey ??= await loadPrivateKey({ signal });
     const appHeaders = {
       ...API_HEADERS,
       Authorization: `Bearer ${createAppJwt(appId, privateKey, now())}`,
@@ -154,7 +163,8 @@ export const createTokenSource = ({
       await call(
         `/repos/${owner}/${repo}/installation`,
         { headers: appHeaders },
-        'Looking up the app installation'
+        'Looking up the app installation',
+        signal
       )
     ).id;
     const issued = await call(
@@ -167,7 +177,8 @@ export const createTokenSource = ({
           permissions: { actions: 'write' },
         }),
       },
-      'Creating an installation token'
+      'Creating an installation token',
+      signal
     );
     cached = { token: issued.token, expiresAt: Date.parse(issued.expires_at) };
     return cached.token;
@@ -187,7 +198,7 @@ export const createHandler = ({
   fetchImpl = fetch,
   log = console,
 }) => {
-  return async (event) => {
+  return async (event, context) => {
     const method = event?.requestContext?.http?.method;
     if (method !== 'POST') {
       return reject(405, 'Only POST is supported');
@@ -210,9 +221,31 @@ export const createHandler = ({
       return reject(400, error);
     }
 
+    // One deadline for every GitHub call this invocation makes, taken from
+    // what is left of it rather than a fixed timeout per call, so that the
+    // calls cannot add up to more than the invocation has. A plain timer
+    // rather than AbortSignal.timeout(), whose timer does not keep the event
+    // loop alive on its own.
+    const remaining = context?.getRemainingTimeInMillis?.();
+    if (remaining === undefined) {
+      return dispatch(inputs, undefined);
+    }
+    const deadline = new AbortController();
+    const timer = setTimeout(
+      () => deadline.abort(new Error('Invocation deadline reached')),
+      Math.max(0, remaining - RESPONSE_MARGIN_MS)
+    );
+    try {
+      return await dispatch(inputs, deadline.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  async function dispatch(inputs, signal) {
     let token;
     try {
-      token = await getToken();
+      token = await getToken({ signal });
     } catch (err) {
       log.error(`Could not authenticate with GitHub: ${err.message}`);
       return reject(
@@ -233,6 +266,7 @@ export const createHandler = ({
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ ref, inputs }),
+          signal,
         }
       );
     } catch (err) {
@@ -252,10 +286,10 @@ export const createHandler = ({
 
     log.log(`Dispatched build ${inputs.identifier}`);
     return respond(202, { identifier: inputs.identifier });
-  };
+  }
 };
 
-const loadPrivateKeyFromSsm = async () => {
+const loadPrivateKeyFromSsm = async ({ signal } = {}) => {
   // Shipped with the Lambda Node.js runtime, so it is not a dependency here,
   // and imported lazily so the tests never need it.
   const { SSMClient, GetParameterCommand } = await import(
@@ -265,14 +299,15 @@ const loadPrivateKeyFromSsm = async () => {
     new GetParameterCommand({
       Name: process.env.GITHUB_APP_PRIVATE_KEY_PARAMETER,
       WithDecryption: true,
-    })
+    }),
+    { abortSignal: signal }
   );
   return Parameter.Value;
 };
 
 let defaultHandler;
 
-export const handler = (event) => {
+export const handler = (event, context) => {
   if (!defaultHandler) {
     const owner = process.env.GITHUB_OWNER;
     const repo = process.env.GITHUB_REPO;
@@ -289,5 +324,5 @@ export const handler = (event) => {
       }),
     });
   }
-  return defaultHandler(event);
+  return defaultHandler(event, context);
 };

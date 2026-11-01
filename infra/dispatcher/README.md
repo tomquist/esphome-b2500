@@ -126,10 +126,14 @@ aws lambda update-function-code --region eu-west-1 \
 ### 5. Point the page at it
 
 ```bash
-aws cloudformation describe-stacks --region eu-west-1 \
+DISPATCH_URL=$(aws cloudformation describe-stacks --region eu-west-1 \
   --stack-name esphome-b2500-dispatcher \
   --query "Stacks[0].Outputs[?OutputKey=='DispatchUrl'].OutputValue" \
-  --output text
+  --output text)
+```
+
+```bash
+echo "$DISPATCH_URL"
 ```
 
 Set that URL as the repository variable **`BUILD_DISPATCH_URL`** under
@@ -140,8 +144,8 @@ takes effect at the next deploy of `main`.
 
 ### 6. Check it
 
-A malformed request should be refused by the function itself, with the CORS
-header the page needs:
+With `DISPATCH_URL` from step 5 still set, a malformed request should be
+refused by the function itself, with the CORS header the page needs:
 
 ```bash
 curl -sS -i -X POST "$DISPATCH_URL" \
