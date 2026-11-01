@@ -25,3 +25,6 @@ yarn-error.log*
 .esphome
 .idea
 __pycache__
+
+# local Wi-Fi credentials for the FC41D examples
+/examples/fc41d/secrets.yaml

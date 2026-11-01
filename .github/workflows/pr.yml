@@ -7,6 +7,8 @@ on:
       - '.github/workflows/pr.yml'
       - 'src/**/*.jinja2'
       - 'components/**/*'
+      - 'examples/fc41d/**'
+      - 'tests/**'
 
 jobs:
   build_examples:
@@ -135,3 +137,27 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+  # Firmware for the battery's own Wi-Fi module (Quectel FC41D / BK7231N).
+  fc41d_firmware:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        example:
+          - ble-spike
+      fail-fast: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Write placeholder Wi-Fi secrets
+        run: |
+          printf 'wifi_ssid: "ci"\nwifi_password: "ci-password"\n' > examples/fc41d/secrets.yaml
+
+      - name: Build firmware
+        uses: esphome/build-action@ae5408cdbc4f70692bf8e345c4982bca05a93667 # v8.1.0
+        with:
+          yaml-file: examples/fc41d/${{ matrix.example }}.yaml
+          version: latest

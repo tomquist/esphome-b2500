@@ -1,0 +1,121 @@
+# BLE spike for the Quectel FC41D (BK7231N), e.g. on the FC41D-TE-B eval board.
+#
+# Recreates the GATT service the B2500 exposes through its FC41D module
+# (FF00 with ff01/ff02/ff06), advertises like a battery, and echoes every
+# write on ff01 back as a notification on ff02, while Wi-Fi, the native API
+# and the web server run. Exit criterion (doc/esphome-fc41d-plan.md, Phase 2a
+# in the hm2500 research repo): a stable BLE link under Wi-Fi load for 24 h
+# with at least ~30 KB of free heap.
+#
+# Flash (TE-B: J201 = main UART, SW301 = reset; start ltchiptool first, then
+# press reset when it waits for the chip). Back up the stock firmware first:
+#   ltchiptool flash read bk7231n fc41d-stock.bin
+#   esphome compile ble-spike.yaml
+#   ltchiptool flash write .esphome/build/fc41d-ble-spike/.pioenvs/fc41d-ble-spike/firmware.uf2
+# (the UF2 holds the app only; the Quectel bootloader stays in place)
+# Logs come out on the debug UART (TE-B: J202, 115200).
+
+substitutions:
+  name: fc41d-ble-spike
+  ble_name: HMA-1_SPIK
+
+esphome:
+  name: ${name}
+
+bk72xx:
+  board: generic-bk7231n-qfn32
+
+external_components:
+  - source:
+      type: local
+      path: ../../components
+    components: [bk72xx_ble_server]
+
+logger:
+  level: DEBUG
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: ${name}
+
+captive_portal:
+
+web_server:
+  port: 80
+
+debug:
+  update_interval: 30s
+
+bk72xx_ble:
+
+bk72xx_ble_server:
+  id: gatts
+  name: ${ble_name}
+  service_uuid: 0xFF00
+  characteristics:
+    - id: chr_ff01
+      uuid: 0xFF01
+      write: true
+      write_no_response: true
+      on_write:
+        - lambda: |-
+            id(write_count) += 1;
+            id(write_count_sensor).publish_state(id(write_count));
+        - bk72xx_ble_server.notify:
+            id: chr_ff02
+            data: !lambda return x;
+    - id: chr_ff02
+      uuid: 0xFF02
+      read: true
+      notify: true
+    - id: chr_ff06
+      uuid: 0xFF06
+      write: true
+      write_no_response: true
+      on_write:
+        - logger.log:
+            format: "ff06 write, %u bytes"
+            args: [x.size()]
+  on_connect:
+    - binary_sensor.template.publish:
+        id: ble_connected
+        state: true
+  on_disconnect:
+    - binary_sensor.template.publish:
+        id: ble_connected
+        state: false
+
+globals:
+  - id: write_count
+    type: uint32_t
+    initial_value: "0"
+
+binary_sensor:
+  - platform: template
+    id: ble_connected
+    name: BLE connected
+
+sensor:
+  - platform: debug
+    free:
+      name: Heap free
+    block:
+      name: Heap max block
+    loop_time:
+      name: Loop time
+  - platform: wifi_signal
+    name: Wi-Fi signal
+    update_interval: 30s
+  - platform: uptime
+    name: Uptime
+  - platform: template
+    id: write_count_sensor
+    name: BLE writes
+    accuracy_decimals: 0
