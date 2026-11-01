@@ -25,6 +25,9 @@ jobs:
       # than a constant in the source, so rotating the pair (see
       # scripts/generateBuildKeypair.js) needs no code change.
       REACT_APP_BUILD_PUBLIC_KEY: ${{ vars.BUILD_PUBLIC_KEY }}
+      # The function URL of the build dispatcher (infra/dispatcher), output by
+      # its CloudFormation stack as DispatchUrl.
+      REACT_APP_BUILD_DISPATCH_URL: ${{ vars.BUILD_DISPATCH_URL }}
     steps:
     - name: Checkout repository
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,12 +57,16 @@ jobs:
     - name: Run script tests
       run: node --test --test-concurrency=1 scripts/*.test.mjs
 
+    - name: Run dispatcher tests
+      run: node --test --test-concurrency=1 infra/dispatcher/*.test.mjs
+
     - name: Build the app
       run: npm run build
       env:
         REACT_APP_S3_BUCKET: ${{ env.REACT_APP_S3_BUCKET }}
         REACT_APP_AWS_REGION: ${{ env.REACT_APP_AWS_REGION }}
         REACT_APP_BUILD_PUBLIC_KEY: ${{ env.REACT_APP_BUILD_PUBLIC_KEY }}
+        REACT_APP_BUILD_DISPATCH_URL: ${{ env.REACT_APP_BUILD_DISPATCH_URL }}
 
     - name: Upload artifact
       if: github.event_name == 'push'
