@@ -65,6 +65,11 @@ bool bdk_create_db(uint8_t prf_id, uint16_t service_uuid16, const BdkAttr *attrs
 /// Start connectable+scannable legacy advertising with the given payloads.
 /// Returns false if the stack is busy (retry later).
 bool bdk_adv_start(const uint8_t *adv, uint8_t adv_len, const uint8_t *rsp, uint8_t rsp_len, uint16_t interval);
+/// Stop advertising, keeping the activity for a later bdk_adv_start().
+void bdk_adv_stop();
+/// Drop the advertising activity so the next bdk_adv_start() creates a new one
+/// with fresh payloads (a restarted activity keeps its old data).
+void bdk_adv_delete();
 /// Send a notification on the value attribute `att_idx` of profile `prf_id`.
 bool bdk_notify(uint8_t conn_idx, uint8_t prf_id, uint16_t att_idx, const uint8_t *data, uint16_t len);
 /// Disconnect a central.

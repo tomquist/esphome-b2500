@@ -174,6 +174,27 @@ bool bdk_adv_start(const uint8_t *adv, uint8_t adv_len, const uint8_t *rsp, uint
   return true;
 }
 
+void bdk_adv_stop() {
+  if (s_adv_idx != UNKNOW_ACT_IDX && app_ble_actv_state_get(s_adv_idx) == ACTV_ADV_STARTED)
+    bk_ble_stop_advertising(s_adv_idx, nullptr);
+}
+
+void bdk_adv_delete() {
+  if (s_adv_idx == UNKNOW_ACT_IDX)
+    return;
+  switch (app_ble_actv_state_get(s_adv_idx)) {
+    case ACTV_ADV_STARTED:
+      bk_ble_adv_stop(s_adv_idx, nullptr);  // stop + delete
+      break;
+    case ACTV_ADV_CREATED:
+      bk_ble_delete_advertising(s_adv_idx, nullptr);
+      break;
+    default:
+      break;
+  }
+  s_adv_idx = UNKNOW_ACT_IDX;
+}
+
 bool bdk_notify(uint8_t conn_idx, uint8_t prf_id, uint16_t att_idx, const uint8_t *data, uint16_t len) {
   ble_err_t ret = bk_ble_conidx_send_ntf(conn_idx, len, const_cast<uint8_t *>(data), prf_id, att_idx);
   return ret == ERR_SUCCESS;

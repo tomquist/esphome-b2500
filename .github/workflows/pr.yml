@@ -147,6 +147,7 @@ jobs:
       matrix:
         example:
           - ble-spike
+          - b2500-module
       fail-fast: false
     steps:
       - name: Checkout repository

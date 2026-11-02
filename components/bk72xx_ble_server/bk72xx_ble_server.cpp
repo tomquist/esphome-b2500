@@ -237,6 +237,7 @@ void BK72xxBLEServer::handle_event_(const GattsEvent &ev) {
       snprintf(addr, sizeof(addr), "%02X:%02X:%02X:%02X:%02X:%02X", ev.data[5], ev.data[4], ev.data[3], ev.data[2],
                ev.data[1], ev.data[0]);
       ESP_LOGI(TAG, "Central %s connected (conn %u)", addr, ev.conn_idx);
+      this->connection_callbacks_.call(true);
       this->on_connect_.trigger();
       return;
     }
@@ -245,6 +246,7 @@ void BK72xxBLEServer::handle_event_(const GattsEvent &ev) {
       this->connected_ = false;
       for (auto *chr : this->characteristics_)
         chr->ccc_ = 0;
+      this->connection_callbacks_.call(false);
       this->on_disconnect_.trigger();
       if (this->state_ == State::RUNNING) {
         this->state_ = State::ADVERTISE;
@@ -267,6 +269,7 @@ void BK72xxBLEServer::handle_event_(const GattsEvent &ev) {
           char hex[format_hex_pretty_size(16)];
           ESP_LOGV(TAG, "Write 0x%04X (%u bytes): %s", chr->uuid_, ev.len,
                    format_hex_pretty_to(hex, ev.data, std::min<uint16_t>(ev.len, 16)));
+          chr->write_callbacks_.call(value);
           chr->on_write_.trigger(value);
           return;
         }
@@ -306,6 +309,35 @@ void BK72xxBLEServer::set_read_value_(BLECharacteristic *chr, const std::vector<
       return;
     }
   }
+}
+
+void BK72xxBLEServer::start_advertising(const std::string &name) {
+  if (!name.empty() && name != this->name_) {
+    this->name_ = name;
+    this->build_adv_();
+    // A restarted activity keeps its old payload: replace it.
+    if (this->state_ == State::RUNNING || this->state_ == State::ADVERTISE)
+      bdk_adv_delete();
+  }
+  this->adv_wanted_ = true;
+  if (this->state_ == State::RUNNING && !this->connected_) {
+    this->state_ = State::ADVERTISE;
+    this->last_attempt_ms_ = 0;
+  }
+}
+
+void BK72xxBLEServer::stop_advertising() {
+  this->adv_wanted_ = false;
+  if (!this->connected_)
+    bdk_adv_stop();
+}
+
+BLECharacteristic *BK72xxBLEServer::get_characteristic(uint16_t uuid) {
+  for (auto *chr : this->characteristics_) {
+    if (chr->uuid_ == uuid)
+      return chr;
+  }
+  return nullptr;
 }
 
 void BK72xxBLEServer::disconnect() {

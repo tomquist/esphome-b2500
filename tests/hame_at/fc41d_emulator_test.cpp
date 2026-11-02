@@ -23,6 +23,9 @@ struct FakeBackend : Fc41dBackend {
   std::vector<uint16_t> adv_chars;
   int restarts{0};
   std::string creds;
+  MqttSession session;
+  int sessions{0};
+  int closed{0};
 
   WifiStatus wifi_status() override { return wifi; }
   void wifi_credentials(const std::string &ssid, const std::string &pw) override { creds = ssid + "/" + pw; }
@@ -32,6 +35,11 @@ struct FakeBackend : Fc41dBackend {
     adv_chars = chars;
   }
   void ble_notify(uint16_t uuid, const std::vector<uint8_t> &data) override { notifications.push_back({uuid, data}); }
+  void mqtt_connected(const MqttSession &s) override {
+    session = s;
+    sessions++;
+  }
+  void mqtt_closed() override { closed++; }
   void mqtt_subscribed(const std::string &topic) override { subscribed.push_back(topic); }
   void mqtt_publish(const std::string &topic, const std::string &payload) override {
     published.push_back({topic, payload});
@@ -176,11 +184,23 @@ static void test_mqtt() {
   Harness h;
   // Publishing before a session is open fails like a real module would.
   EXPECT_STR(h.cmd("AT+QMTPUB=0,0,0,0,\"t\",1,\"x\""), "\r\nOK\r\n\r\n+QMTPUB: 0,0,2\r\n");
-  h.cmd("AT+QMTCFG=\"version\",0,3");
+  h.cmd("AT+QMTCFG=\"version\",0,4");
   h.cmd("AT+QMTCFG=\"keepalive\",0,60");
+  h.cmd("AT+QMTCFG=\"ssl\",0,1,2");
   EXPECT_STR(h.cmd("AT+QMTOPEN=0,\"eu.hamedata.com\",8883"), "\r\nOK\r\n\r\n+QMTOPEN: 0,0\r\n");
-  EXPECT_STR(h.cmd("AT+QMTCONN=0,\"mst_aabbccddeeff\""), "\r\nOK\r\n\r\n+QMTCONN: 0,0,0\r\n");
+  EXPECT_STR(h.cmd("AT+QMTCONN=0,\"mst_aabbccddeeff\",\"user\",\"pw,1\""), "\r\nOK\r\n\r\n+QMTCONN: 0,0,0\r\n");
   EXPECT(h.emu.mqtt_connected());
+  // Everything a real connection needs reaches the backend.
+  EXPECT_EQ(h.backend.sessions, 1);
+  EXPECT_STR(h.backend.session.host, "eu.hamedata.com");
+  EXPECT_EQ(h.backend.session.port, 8883);
+  EXPECT_STR(h.backend.session.client_id, "mst_aabbccddeeff");
+  EXPECT_STR(h.backend.session.username, "user");
+  EXPECT_STR(h.backend.session.password, "pw,1");
+  EXPECT(h.backend.session.ssl);
+  EXPECT_EQ(h.backend.session.ssl_ctx, 2);
+  EXPECT_EQ(h.backend.session.keepalive, 60);
+  EXPECT_EQ(h.backend.session.version, 4);
   EXPECT_STR(h.cmd("AT+QMTSUB=0,1,\"hame_energy/HMA-1/App/aabbccddeeff/ctrl\",0"),
              "\r\nOK\r\n\r\n+QMTSUB: 0,1,0,0\r\n");
   EXPECT_EQ(h.backend.subscribed.size(), 1u);
@@ -209,6 +229,8 @@ static void test_mqtt() {
   h.tick(10);
   EXPECT(h.out.find("+QMTSTAT: 0,1") != std::string::npos);
   EXPECT(!h.emu.mqtt_connected());
+  EXPECT_EQ(h.backend.closed, 1);
+  EXPECT(h.emu.mqtt_topics().empty());
 }
 
 static void test_ssl_and_http() {

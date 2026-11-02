@@ -33,6 +33,7 @@ CONF_ON_WRITE = "on_write"
 CONF_ON_CONNECT = "on_connect"
 CONF_ON_DISCONNECT = "on_disconnect"
 CONF_ADVERTISING_INTERVAL = "advertising_interval"
+CONF_AUTO_ADVERTISE = "auto_advertise"
 
 bk72xx_ble_server_ns = cg.esphome_ns.namespace("bk72xx_ble_server")
 BK72xxBLEServer = bk72xx_ble_server_ns.class_("BK72xxBLEServer", cg.Component)
@@ -108,6 +109,9 @@ CONFIG_SCHEMA = cv.Schema(
                 min=cv.TimePeriod(milliseconds=20), max=cv.TimePeriod(milliseconds=10240)
             ),
         ),
+        # Advertise as soon as the service exists. Off: only after
+        # start_advertising() (hame_at lets the battery MCU decide).
+        cv.Optional(CONF_AUTO_ADVERTISE, default=True): cv.boolean,
         cv.Required(CONF_CHARACTERISTICS): cv.All(
             cv.ensure_list(CHARACTERISTIC_SCHEMA), cv.Length(min=1, max=8), _unique_uuids
         ),
@@ -136,6 +140,7 @@ async def to_code(config):
     cg.add(var.set_ble(ble))
     cg.add(var.set_name(config[CONF_NAME]))
     cg.add(var.set_service_uuid(config[CONF_SERVICE_UUID]))
+    cg.add(var.set_auto_advertise(config[CONF_AUTO_ADVERTISE]))
     # BLE advertising interval unit: 0.625 ms.
     cg.add(
         var.set_advertising_interval(

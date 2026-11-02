@@ -33,6 +33,21 @@ struct WifiStatus {
   std::string dns;
 };
 
+/// What the MCU configured for its broker session (AT+QMTCFG/QMTOPEN/QMTCONN).
+/// Everything a real connection to that broker needs, apart from the
+/// certificates, which arrive separately through ssl_cert().
+struct MqttSession {
+  std::string host;
+  int port{0};
+  std::string client_id;
+  std::string username;
+  std::string password;
+  bool ssl{false};
+  int ssl_ctx{0};
+  int keepalive{120};  // Quectel default
+  int version{4};      // MQTT protocol level: AT+QMTCFG "version" 3 -> 3.1, 4 -> 3.1.1
+};
+
 struct HttpResult {
   int error{0};    // 0 = ok, otherwise a Quectel HTTP error code
   int status{0};   // HTTP status
@@ -54,7 +69,9 @@ class Fc41dBackend {
   virtual void ble_notify(uint16_t uuid, const std::vector<uint8_t> &data) = 0;
 
   /// The MCU "connected" to its MQTT broker (local termination: always succeeds).
-  virtual void mqtt_connected(const std::string &/*host*/, int /*port*/, const std::string &/*client_id*/) {}
+  virtual void mqtt_connected(const MqttSession &/*session*/) {}
+  /// The MCU closed or lost its broker session.
+  virtual void mqtt_closed() {}
   virtual void mqtt_subscribed(const std::string &/*topic*/) {}
   virtual void mqtt_publish(const std::string &topic, const std::string &payload) = 0;
 
@@ -103,6 +120,7 @@ class Fc41dEmulator {
   bool ble_session() const { return this->ble_session_; }
   bool mqtt_connected() const { return this->mqtt_conn_; }
   const std::vector<std::string> &mqtt_topics() const { return this->mqtt_topics_; }
+  const MqttSession &mqtt_session() const { return this->mqtt_session_; }
   bool rebooting() const { return this->ready_at_ != 0; }
 
  protected:
@@ -133,8 +151,7 @@ class Fc41dEmulator {
   bool ble_session_{false};
 
   // MQTT
-  std::string mqtt_host_;
-  int mqtt_port_{0};
+  MqttSession mqtt_session_;
   bool mqtt_open_{false};
   bool mqtt_conn_{false};
   std::vector<std::string> mqtt_topics_;

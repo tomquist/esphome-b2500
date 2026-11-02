@@ -63,7 +63,9 @@ void Fc41dEmulator::wifi_urcs_(const WifiStatus &st) {
       // A real module loses its MQTT session with the station.
       this->mqtt_conn_ = false;
       this->mqtt_open_ = false;
+      this->mqtt_topics_.clear();
       this->engine_.send_line("+QMTSTAT: 0,1");
+      this->backend_->mqtt_closed();
     }
   }
 }
@@ -134,9 +136,12 @@ void Fc41dEmulator::register_handlers_() {
     this->ble_session_ = false;
     this->ble_tran_uuid_ = 0;
     this->ble_chars_.clear();
+    if (this->mqtt_conn_)
+      this->backend_->mqtt_closed();
     this->mqtt_open_ = false;
     this->mqtt_conn_ = false;
     this->mqtt_topics_.clear();
+    this->mqtt_session_ = MqttSession{};
     this->http_busy_ = false;
     if (e.get_mode() == AtEngine::Mode::TRANSPARENT)
       e.exit_transparent();
@@ -262,7 +267,19 @@ void Fc41dEmulator::register_handlers_() {
 
   // ---------------------------------------------------------------- MQTT
   // Terminated locally: every operation succeeds at once.
-  e.on("QMTCFG", [](AtEngine &e, const AtCommand &) { e.ok(); });
+  e.on("QMTCFG", [this](AtEngine &e, const AtCommand &cmd) {
+    // AT+QMTCFG="<key>",<client>,<values...>
+    const std::string &key = cmd.arg(0);
+    if (key == "ssl") {
+      this->mqtt_session_.ssl = cmd.arg_int(2, 0) != 0;
+      this->mqtt_session_.ssl_ctx = static_cast<int>(cmd.arg_int(3, 0));
+    } else if (key == "keepalive") {
+      this->mqtt_session_.keepalive = static_cast<int>(cmd.arg_int(2, 120));
+    } else if (key == "version") {
+      this->mqtt_session_.version = cmd.arg_int(2, 4) == 3 ? 3 : 4;
+    }
+    e.ok();
+  });
   e.on("QMTOPEN", [this](AtEngine &e, const AtCommand &cmd) {
     if (cmd.kind == AtCommand::Kind::QUERY) {
       if (this->mqtt_open_)
@@ -273,8 +290,8 @@ void Fc41dEmulator::register_handlers_() {
     e.ok();
     this->mqtt_open_ = true;
     e.send_line("+QMTOPEN: 0,0");
-    this->mqtt_host_ = cmd.arg(1);
-    this->mqtt_port_ = static_cast<int>(cmd.arg_int(2, 0));
+    this->mqtt_session_.host = cmd.arg(1);
+    this->mqtt_session_.port = static_cast<int>(cmd.arg_int(2, 0));
   });
   e.on("QMTCONN", [this](AtEngine &e, const AtCommand &cmd) {
     if (cmd.kind == AtCommand::Kind::QUERY) {
@@ -290,7 +307,10 @@ void Fc41dEmulator::register_handlers_() {
     }
     this->mqtt_conn_ = true;
     e.send_line("+QMTCONN: 0,0,0");
-    this->backend_->mqtt_connected(this->mqtt_host_, this->mqtt_port_, cmd.arg(1));
+    this->mqtt_session_.client_id = cmd.arg(1);
+    this->mqtt_session_.username = cmd.arg(2);
+    this->mqtt_session_.password = cmd.arg(3);
+    this->backend_->mqtt_connected(this->mqtt_session_);
   });
   e.on("QMTSUB", [this](AtEngine &e, const AtCommand &cmd) {
     // AT+QMTSUB=<id>,<msgid>,"topic",<qos>[,"topic",<qos>...]
@@ -346,21 +366,32 @@ void Fc41dEmulator::register_handlers_() {
   });
   e.on("QMTCLOSE", [this](AtEngine &e, const AtCommand &) {
     e.ok();
+    bool was = this->mqtt_conn_;
     this->mqtt_open_ = false;
     this->mqtt_conn_ = false;
+    this->mqtt_topics_.clear();
     e.send_line("+QMTCLOSE: 0,0");
+    if (was)
+      this->backend_->mqtt_closed();
   });
   e.on("QMTDISC", [this](AtEngine &e, const AtCommand &) {
     e.ok();
+    bool was = this->mqtt_conn_;
     this->mqtt_conn_ = false;
+    this->mqtt_topics_.clear();
     e.send_line("+QMTDISC: 0,0");
+    if (was)
+      this->backend_->mqtt_closed();
   });
 
   // ---------------------------------------------------------------- TLS
   e.on("QSSLCFG", [](AtEngine &e, const AtCommand &) { e.ok(); });
   e.on("QSSLCERT", [this](AtEngine &e, const AtCommand &cmd) {
     if (cmd.kind == AtCommand::Kind::QUERY) {
-      e.ok();  // unverified: listing format
+      // Report an empty store so the MCU uploads its certificates on every
+      // boot: they are kept in RAM only (cloud forwarding needs them).
+      // unverified: the listing format and how the MCU reads an empty one.
+      e.ok();
       return;
     }
     std::string kind = cmd.arg(0);

@@ -53,6 +53,10 @@ class BLECharacteristic {
   bool notifications_enabled() const { return this->ccc_ != 0; }
 
   Trigger<std::vector<uint8_t>> *get_on_write_trigger() { return &this->on_write_; }
+  /// C++ listeners for writes (main task), e.g. the hame_at bridge.
+  void add_on_write_callback(std::function<void(const std::vector<uint8_t> &)> &&cb) {
+    this->write_callbacks_.add(std::move(cb));
+  }
 
  protected:
   friend class BK72xxBLEServer;
@@ -68,6 +72,7 @@ class BLECharacteristic {
   volatile uint16_t ccc_{0};
   BK72xxBLEServer *parent_{nullptr};
   Trigger<std::vector<uint8_t>> on_write_;
+  CallbackManager<void(const std::vector<uint8_t> &)> write_callbacks_;
 };
 
 /// One SDK event, copied out of the BLE task.
@@ -90,6 +95,9 @@ class BK72xxBLEServer final : public Component {
   void set_name(const std::string &name) { this->name_ = name; }
   void set_service_uuid(uint16_t uuid) { this->service_uuid_ = uuid; }
   void set_advertising_interval(uint16_t interval) { this->adv_interval_ = interval; }
+  /// Advertise as soon as the service exists (default). When false, nothing is
+  /// advertised until start_advertising() is called.
+  void set_auto_advertise(bool auto_advertise) { this->adv_wanted_ = auto_advertise; }
   void add_characteristic(BLECharacteristic *chr) {
     chr->set_parent(this);
     this->characteristics_.push_back(chr);
@@ -103,6 +111,12 @@ class BK72xxBLEServer final : public Component {
   bool is_connected() const { return this->connected_; }
   uint16_t get_mtu() const { return this->mtu_; }
   void disconnect();
+  /// Advertise, optionally under a new name (applies to the next advertising start).
+  void start_advertising(const std::string &name = "");
+  void stop_advertising();
+  BLECharacteristic *get_characteristic(uint16_t uuid);
+  /// C++ listeners for connect (true) / disconnect (false), main task.
+  void add_on_connection_callback(std::function<void(bool)> &&cb) { this->connection_callbacks_.add(std::move(cb)); }
 
   Trigger<> *get_on_connect_trigger() { return &this->on_connect_; }
   Trigger<> *get_on_disconnect_trigger() { return &this->on_disconnect_; }
@@ -143,6 +157,7 @@ class BK72xxBLEServer final : public Component {
 
   Trigger<> on_connect_;
   Trigger<> on_disconnect_;
+  CallbackManager<void(bool)> connection_callbacks_;
 
   uint32_t last_attempt_ms_{0};
   uint16_t mtu_{23};

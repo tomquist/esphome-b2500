@@ -1,0 +1,132 @@
+# ESPHome for the Wi-Fi module inside a B2500 (Quectel FC41D, BK7231N).
+#
+# Replaces the module's Quectel AT firmware. The battery MCU keeps talking AT
+# on the module's main UART and hame_at answers it:
+#   - Wi-Fi is ESPHome's (set it below; the app's Wi-Fi setup is ignored),
+#   - the battery's Bluetooth service stays available to the Marstek app,
+#   - the battery's MQTT session ends on the module; with `cloud: true`
+#     (default) it is also forwarded to the Hame cloud with the battery's own
+#     broker, credentials and certificates, so the app works remotely,
+#   - every status message the battery publishes fires on_mcu_publish.
+#
+# Status: untested on a real battery. Response formats follow the Quectel
+# manual until UART captures from a stock module confirm them.
+#
+# Before flashing a battery's module, back it up and copy its BLE MAC into
+# `ble_mac` (the battery derives its device id from it):
+#   ltchiptool flash read bk7231n fc41d-<serial>.bin
+#
+# On the FC41D-TE-B eval kit the same file works: J201 (main UART) plays the
+# battery MCU (tools/fc41d_mcu_sim.py), logs are on J202.
+
+substitutions:
+  name: b2500-module
+  # The stock module's BLE address (from the backup / a UART capture).
+  ble_mac: "AA:BB:CC:DD:EE:FF"
+
+esphome:
+  name: ${name}
+  platformio_options:
+    # uart.rx_buffer_size is ignored on bk72xx; the MCU sends long AT lines.
+    build_flags:
+      - -DLT_SERIAL_BUFFER_SIZE=8192
+
+bk72xx:
+  board: generic-bk7231n-qfn32
+
+external_components:
+  - source:
+      type: local
+      path: ../../components
+    components: [bk72xx_ble_server, hame_at]
+
+logger:
+  level: DEBUG
+  # UART1 (P10/P11, the module's main UART) belongs to the battery MCU.
+  hardware_uart: UART2
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: ${name}
+
+captive_portal:
+
+time:
+  - platform: sntp
+    id: sntp_time
+
+uart:
+  id: mcu_uart
+  tx_pin: P11
+  rx_pin: P10
+  baud_rate: 115200
+
+bk72xx_ble:
+
+bk72xx_ble_server:
+  id: ble_server
+  # Replaced by the name the battery sets (AT+QBLENAME) before advertising.
+  name: B2500
+  service_uuid: 0xFF00
+  characteristics:
+    - uuid: 0xFF01
+      write: true
+      write_no_response: true
+    - uuid: 0xFF02
+      read: true
+      notify: true
+    - uuid: 0xFF06
+      write: true
+      write_no_response: true
+
+hame_at:
+  id: battery
+  uart_id: mcu_uart
+  ble_server_id: ble_server
+  time_id: sntp_time
+  ble_mac: ${ble_mac}
+  cloud: true
+  allow_mcu_ota: false
+  on_mcu_publish:
+    - lambda: |-
+        // Device status replies ("p1=..,p2=..,w1=..") arrive on the device topic.
+        if (topic.find("/device/") != std::string::npos)
+          id(battery_status).publish_state(payload);
+
+interval:
+  # Ask the battery for its status, as the app and hm2mqtt do.
+  - interval: 60s
+    then:
+      - hame_at.send_to_mcu:
+          payload: "cd=1"
+
+switch:
+  - platform: hame_at
+    cloud:
+      name: Cloud forwarding
+
+text_sensor:
+  - platform: hame_at
+    cloud_status:
+      name: Cloud status
+  - platform: template
+    id: battery_status
+    name: Battery status (raw)
+    entity_category: diagnostic
+
+sensor:
+  - platform: debug
+    free:
+      name: Heap free
+    block:
+      name: Heap max block
+
+debug:
+  update_interval: 30s
