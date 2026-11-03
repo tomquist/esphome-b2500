@@ -36,6 +36,7 @@
 
 #include "cloud_link.h"
 #include "fc41d_emulator.h"
+#include "hame_cloud.h"
 #include "net_worker.h"
 
 namespace esphome::hame_at {
@@ -90,11 +91,23 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   void mqtt_publish(const std::string &topic, const std::string &payload) override;
   void http_request(const std::string &method, const std::string &url, const std::string &content_type,
                     const std::vector<uint8_t> &body, std::function<void(HttpResult)> done) override;
+  void socket_open(const SocketSpec &spec, std::function<void(int)> done) override;
+  void socket_send(int id, const std::string &data, const std::string &ip, int port) override;
+  void socket_close(int id) override;
   void ssl_cert(const std::string &kind, const std::vector<uint8_t> &data) override;
   void module_restart() override;
 
  protected:
-  bool local_date_info_(std::string &body);
+  struct LiveSocket {
+    SocketSpec spec;
+    int fd{-1};
+    bool connecting{false};
+    uint32_t started{0};
+    std::function<void(int)> open_done;
+  };
+
+  bool local_time_(LocalTime &out);
+  void service_sockets_();
   void publish_cloud_status_();
 
   Fc41dEmulator emulator_{this};
@@ -107,6 +120,7 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   TlsCredentials creds_;
   uint32_t next_http_id_{1};
   std::map<uint32_t, std::function<void(HttpResult)>> http_pending_;
+  std::map<int, LiveSocket> sockets_;
   std::string last_cloud_status_;
   uint32_t last_status_ms_{0};
   uint8_t rx_buf_[256];

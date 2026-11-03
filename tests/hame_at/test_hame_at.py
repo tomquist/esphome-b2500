@@ -12,7 +12,7 @@ import pytest
 HERE = Path(__file__).parent
 REPO_ROOT = HERE.parents[1]
 COMPONENT_DIR = REPO_ROOT / "components" / "hame_at"
-SOURCES = ["at_engine.cpp", "fc41d_emulator.cpp", "mqtt_codec.cpp", "cloud_link.cpp"]
+SOURCES = ["at_engine.cpp", "fc41d_emulator.cpp", "mqtt_codec.cpp", "cloud_link.cpp", "hame_cloud.cpp"]
 
 
 @pytest.mark.skipif(shutil.which("g++") is None, reason="g++ is not available")

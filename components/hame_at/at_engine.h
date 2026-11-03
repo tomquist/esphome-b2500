@@ -5,10 +5,15 @@
 // compiled and tested on the host (tests/hame_at).
 //
 // Bytes from the MCU go into feed(); everything the engine wants to send to
-// the MCU goes through the output callback. Three input modes:
-//   - LINE: AT command lines terminated by CR and/or LF;
+// the MCU goes through the output callback. Input modes:
+//   - LINE: AT command lines terminated by CR and/or LF. Commands registered
+//     with on_inline() carry a length-prefixed payload after their fields
+//     (AT+QBLEGATTSNTFY=<uuid>,<n>,<payload>, AT+QMTPUB=...,<n>,"<payload>",
+//     AT+QISEND=<id>,<n>,"<payload>",<ip>,<port>): the payload is taken by
+//     length, so binary data with CR/LF in it does not break the line;
 //   - DATA: a handler asked for exactly N raw bytes (AT+QSSLCERT, AT+QHTTPPOST,
-//     AT+QISEND), delivered to its callback;
+//     AT+QISEND prompt form), delivered to its callback;
+//   - UNTIL: raw bytes up to a terminator (Ctrl-Z for the AT+QMTPUB prompt form);
 //   - TRANSPARENT: everything is forwarded raw to a sink until "+++" arrives
 //     as a burst of its own followed by a guard time (AT+QBLETRANMODE).
 
@@ -28,6 +33,8 @@ struct AtCommand {
   std::vector<std::string> args;  // SET only; surrounding quotes removed
   std::string raw_args;           // SET only; everything after '=' verbatim
   std::string line;               // the full line as received (resynced)
+  bool has_payload{false};        // inline command: payload taken by length
+  std::string payload;            // inline payload (binary safe, hex decoded)
 
   /// Argument i, or `def` if missing.
   const std::string &arg(size_t i, const std::string &def = empty_()) const {
@@ -56,7 +63,7 @@ class AtEngine {
   using Sink = std::function<void(const uint8_t *data, size_t len)>;
   using LineLogger = std::function<void(bool from_mcu, const std::string &line)>;
 
-  enum class Mode : uint8_t { LINE, DATA, TRANSPARENT };
+  enum class Mode : uint8_t { LINE, DATA, UNTIL, TRANSPARENT };
 
   static constexpr size_t MAX_LINE = 2048;
   static constexpr uint32_t DATA_TIMEOUT_MS = 5000;
@@ -70,6 +77,11 @@ class AtEngine {
 
   /// Register a handler for a command name ("QMTPUB", or "" for plain "AT").
   void on(const std::string &name, Handler handler) { this->handlers_[name] = std::move(handler); }
+  /// Register a command whose SET form carries a payload after `fields`
+  /// arguments, the last of which is the payload length. `hex` accepts the
+  /// payload as 2*<len> hex digits too (AT+QBLEGATTSNTFY). A line that ends
+  /// before the length field is dispatched as a plain command.
+  void on_inline(const std::string &name, size_t fields, bool hex, Handler handler);
   /// Handler for commands nobody registered. Default: reply OK and count it.
   void set_default_handler(Handler handler) { this->default_handler_ = std::move(handler); }
 
@@ -89,6 +101,8 @@ class AtEngine {
   /// Switch to DATA mode: the next `len` bytes go to `callback`. Typically
   /// called by a handler right after sending its prompt ("CONNECT" or "> ").
   void expect_data(size_t len, DataCallback callback);
+  /// Switch to UNTIL mode: bytes up to `terminator` (excluded) go to `callback`.
+  void expect_until(uint8_t terminator, DataCallback callback);
   /// Switch to TRANSPARENT mode until "+++" (or exit_transparent()).
   void enter_transparent(Sink sink, std::function<void()> on_exit = nullptr);
   void exit_transparent();
@@ -99,7 +113,19 @@ class AtEngine {
   const std::vector<std::string> &get_unknown_commands() const { return this->unknown_commands_; }
 
  protected:
+  struct InlineSpec {
+    std::string prefix;  // "AT+NAME="
+    size_t fields;
+    bool hex;
+  };
+  enum class Step : uint8_t { NEED_MORE, DONE, NOT_INLINE };
+
+  void process_();
+  bool line_step_();
+  Step parse_inline_(const InlineSpec &spec);
   void handle_line_(const std::string &line);
+  void dispatch_(AtCommand &cmd, const std::string &shown);
+  void finish_data_();
   void flush_plus_();
 
   Output output_;
@@ -108,15 +134,17 @@ class AtEngine {
   Handler default_handler_;
 
   Mode mode_{Mode::LINE};
-  std::string line_;
-  bool line_overflow_{false};
+  std::string rx_;  // unconsumed input
   bool skip_lf_{false};
+  bool burst_start_{false};
+  std::vector<InlineSpec> inline_;
 
   // DATA mode
   size_t data_remaining_{0};
   std::vector<uint8_t> data_buf_;
   DataCallback data_cb_;
   uint32_t data_deadline_{0};
+  uint8_t until_{0};
 
   // TRANSPARENT mode
   Sink sink_;

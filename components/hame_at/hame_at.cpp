@@ -1,24 +1,23 @@
 #include "hame_at.h"
 
 #include <WiFi.h>
+#include <lwip/netdb.h>
+#include <lwip/sockets.h>
 
+#include <cerrno>
 #include <cstdio>
+#include <cstring>
 
 #include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 
+#include "hame_cloud.h"
+
 namespace esphome::hame_at {
 
 static const char *const TAG = "hame_at";
-
-static std::string host_of(const std::string &url) {
-  size_t start = url.find("://");
-  start = start == std::string::npos ? 0 : start + 3;
-  size_t end = url.find_first_of(":/?", start);
-  return url.substr(start, end == std::string::npos ? std::string::npos : end - start);
-}
 
 static std::string ip_str(const IPAddress &ip) {
   char buf[16];
@@ -26,8 +25,22 @@ static std::string ip_str(const IPAddress &ip) {
   return buf;
 }
 
-static bool ends_with(const std::string &s, const std::string &suffix) {
-  return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+// Quectel socket error codes (unverified for the FC41D build).
+static constexpr int SOCK_ERR_CREATE = 554;
+static constexpr int SOCK_ERR_BIND = 556;
+static constexpr int SOCK_ERR_DNS = 565;
+static constexpr int SOCK_ERR_CONNECT = 566;
+static constexpr uint32_t SOCK_CONNECT_TIMEOUT_MS = 10000;
+
+static bool resolve(const std::string &host, struct in_addr &out) {
+  if (lwip_inet_pton(AF_INET, host.c_str(), &out) == 1)
+    return true;
+  // LAN meters are addressed by IP; a name means a (short) blocking lookup.
+  struct hostent *he = lwip_gethostbyname(host.c_str());
+  if (he == nullptr || he->h_addr_list[0] == nullptr)
+    return false;
+  memcpy(&out, he->h_addr_list[0], sizeof(out));
+  return true;
 }
 
 void HameAtComponent::setup() {
@@ -65,8 +78,8 @@ void HameAtComponent::setup() {
   if (!this->worker_started_)
     ESP_LOGE(TAG, "Could not start the network task; cloud forwarding and HTTP are unavailable");
 
-  // The MCU may have been waiting for the module since power-up.
-  this->emulator_.announce_ready();
+  // Power-up: "ready", then the station once the MCU is quiet.
+  this->emulator_.power_on(millis());
 }
 
 void HameAtComponent::loop() {
@@ -82,6 +95,7 @@ void HameAtComponent::loop() {
     avail = this->available();
   }
   this->emulator_.loop(now);
+  this->service_sockets_();
 
   if (!this->worker_started_)
     return;
@@ -172,6 +186,11 @@ WifiStatus HameAtComponent::wifi_status() {
   st.gateway = ip_str(WiFi.gatewayIP());
   st.netmask = ip_str(WiFi.subnetMask());
   st.dns = ip_str(WiFi.dnsIP(0));
+  uint8_t mac[6];
+  get_mac_address_raw(mac);
+  char buf[18];
+  snprintf(buf, sizeof(buf), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  st.mac = buf;
   return st;
 }
 
@@ -238,19 +257,14 @@ void HameAtComponent::mqtt_publish(const std::string &topic, const std::string &
     this->worker_.publish(topic, payload);  // dropped by the worker when the cloud is off
 }
 
-bool HameAtComponent::local_date_info_(std::string &body) {
+bool HameAtComponent::local_time_(LocalTime &out) {
 #ifdef USE_TIME
   if (this->time_ == nullptr)
     return false;
   ESPTime t = this->time_->now();
   if (!t.is_valid())
     return false;
-  // "_YYYY_MM_DD_hh_mm_ss_" in local time, then four fields a CT ignores
-  // (AstraMeter docs/marstek-mqtt-http.md §6.3). unverified for the B2500.
-  char buf[48];
-  snprintf(buf, sizeof(buf), "_%04d_%02d_%02d_%02d_%02d_%02d_04_0_0_0", t.year, t.month, t.day_of_month, t.hour,
-           t.minute, t.second);
-  body = buf;
+  out = {t.year, t.month, t.day_of_month, t.hour, t.minute, t.second};
   return true;
 #else
   return false;
@@ -260,12 +274,11 @@ bool HameAtComponent::local_date_info_(std::string &body) {
 void HameAtComponent::http_request(const std::string &method, const std::string &url,
                                    const std::string &content_type, const std::vector<uint8_t> &body,
                                    std::function<void(HttpResult)> done) {
-  const std::string host = host_of(url);
-  const bool hame = ends_with(host, "hamedata.com");
+  const bool hame = is_hame_cloud_url(url);
 
   // MCU firmware images: the update is driven by the cloud/app and fetched by
   // the MCU itself. Only let it through when explicitly allowed.
-  if (hame && !this->allow_mcu_ota_ && (url.find(".bin") != std::string::npos)) {
+  if (is_mcu_firmware_url(url) && !this->allow_mcu_ota_) {
     ESP_LOGW(TAG, "Blocked an MCU firmware download (%s); set allow_mcu_ota to permit", url.c_str());
     HttpResult r;
     r.status = 404;
@@ -274,17 +287,19 @@ void HameAtComponent::http_request(const std::string &method, const std::string 
   }
 
   if (hame && !this->cloud_enabled_) {
+    // Answer as Marsrelay does: the battery needs the clock reply and its
+    // output limits (getDeviceFire); reports are acknowledged.
+    LocalTime t;
+    bool have_time = this->local_time_(t);
     HttpResult r;
-    r.status = 200;
-    if (url.find("getDateInfo") != std::string::npos) {
-      if (!this->local_date_info_(r.body)) {
-        ESP_LOGW(TAG, "No valid time for the battery's clock request yet");
-        r.status = 0;
-        r.error = 702;
-      }
+    std::string body_str(body.begin(), body.end());
+    if (!local_hame_answer(method, url, body_str, have_time ? &t : nullptr, r.status, r.body)) {
+      ESP_LOGW(TAG, "No valid time for the battery's clock request yet");
+      r.status = 0;
+      r.error = 702;
+    } else {
+      ESP_LOGD(TAG, "HTTP %s %s answered locally (%d)", method.c_str(), url.c_str(), r.status);
     }
-    // Stats uploads (put_tenmins_v2, puterrinfo, setB2500Report...): accept and drop.
-    ESP_LOGD(TAG, "HTTP %s %s answered locally", method.c_str(), url.c_str());
     done(r);
     return;
   }
@@ -303,6 +318,159 @@ void HameAtComponent::http_request(const std::string &method, const std::string 
   job.body = body;
   this->http_pending_[job.id] = std::move(done);
   this->worker_.http(std::move(job));
+}
+
+// ---------------------------------------------------------------------------
+// Sockets: non-blocking lwIP, serviced from loop(). The MCU reaches its CT
+// meter over a UDP service and Shelly meters over TCP.
+// ---------------------------------------------------------------------------
+
+void HameAtComponent::socket_open(const SocketSpec &spec, std::function<void(int)> done) {
+  this->socket_close(spec.id);
+  const bool udp = spec.kind.rfind("UDP", 0) == 0;
+  int fd = lwip_socket(AF_INET, udp ? SOCK_DGRAM : SOCK_STREAM, 0);
+  if (fd < 0) {
+    done(SOCK_ERR_CREATE);
+    return;
+  }
+  int one = 1;
+  lwip_fcntl(fd, F_SETFL, lwip_fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+  LiveSocket ls;
+  ls.spec = spec;
+  ls.fd = fd;
+  if (spec.kind == "UDP SERVICE") {
+    lwip_setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &one, sizeof(one));
+    lwip_setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    struct sockaddr_in local {};
+    local.sin_family = AF_INET;
+    local.sin_port = htons(spec.local_port);
+    local.sin_addr.s_addr = htonl(INADDR_ANY);
+    if (lwip_bind(fd, reinterpret_cast<struct sockaddr *>(&local), sizeof(local)) != 0) {
+      lwip_close(fd);
+      done(SOCK_ERR_BIND);
+      return;
+    }
+    ESP_LOGD(TAG, "Socket %d: UDP service on port %d", spec.id, spec.local_port);
+    this->sockets_[spec.id] = ls;
+    done(0);
+    return;
+  }
+  struct sockaddr_in remote {};
+  remote.sin_family = AF_INET;
+  remote.sin_port = htons(spec.port);
+  if (!resolve(spec.host, remote.sin_addr)) {
+    lwip_close(fd);
+    done(SOCK_ERR_DNS);
+    return;
+  }
+  int r = lwip_connect(fd, reinterpret_cast<struct sockaddr *>(&remote), sizeof(remote));
+  if (udp || r == 0) {
+    ESP_LOGD(TAG, "Socket %d: %s to %s:%d", spec.id, spec.kind.c_str(), spec.host.c_str(), spec.port);
+    this->sockets_[spec.id] = ls;
+    done(0);
+    return;
+  }
+  if (errno != EINPROGRESS) {
+    lwip_close(fd);
+    done(SOCK_ERR_CONNECT);
+    return;
+  }
+  ls.connecting = true;
+  ls.started = millis();
+  ls.open_done = std::move(done);
+  this->sockets_[spec.id] = std::move(ls);
+}
+
+void HameAtComponent::socket_send(int id, const std::string &data, const std::string &ip, int port) {
+  auto it = this->sockets_.find(id);
+  if (it == this->sockets_.end() || it->second.connecting)
+    return;
+  LiveSocket &ls = it->second;
+  std::string host = ip.empty() ? ls.spec.host : ip;
+  int to_port = ip.empty() ? ls.spec.port : port;
+  if (ls.spec.kind == "UDP SERVICE") {
+    struct sockaddr_in to {};
+    to.sin_family = AF_INET;
+    to.sin_port = htons(to_port);
+    if (host.empty() || to_port == 0 || !resolve(host, to.sin_addr)) {
+      ESP_LOGW(TAG, "Socket %d: no target for %u bytes", id, (unsigned) data.size());
+      return;
+    }
+    lwip_sendto(ls.fd, data.data(), data.size(), 0, reinterpret_cast<struct sockaddr *>(&to), sizeof(to));
+    return;
+  }
+  lwip_send(ls.fd, data.data(), data.size(), 0);
+}
+
+void HameAtComponent::socket_close(int id) {
+  auto it = this->sockets_.find(id);
+  if (it == this->sockets_.end())
+    return;
+  lwip_close(it->second.fd);
+  this->sockets_.erase(it);
+}
+
+void HameAtComponent::service_sockets_() {
+  char buf[1460];
+  for (auto it = this->sockets_.begin(); it != this->sockets_.end();) {
+    int id = it->first;
+    LiveSocket &ls = it->second;
+    if (ls.connecting) {
+      int err = 0;
+      socklen_t len = sizeof(err);
+      fd_set wfds;
+      FD_ZERO(&wfds);
+      FD_SET(ls.fd, &wfds);
+      struct timeval tv {};
+      int ready = lwip_select(ls.fd + 1, nullptr, &wfds, nullptr, &tv);
+      if (ready > 0) {
+        lwip_getsockopt(ls.fd, SOL_SOCKET, SO_ERROR, &err, &len);
+      } else if (millis() - ls.started < SOCK_CONNECT_TIMEOUT_MS) {
+        ++it;
+        continue;
+      } else {
+        err = ETIMEDOUT;
+      }
+      auto done = std::move(ls.open_done);
+      if (err != 0) {
+        lwip_close(ls.fd);
+        it = this->sockets_.erase(it);
+        if (done)
+          done(SOCK_ERR_CONNECT);
+        continue;
+      }
+      ls.connecting = false;
+      if (done)
+        done(0);
+      ++it;
+      continue;
+    }
+    bool closed = false;
+    for (int guard = 0; guard < 8; guard++) {
+      struct sockaddr_in from {};
+      socklen_t from_len = sizeof(from);
+      int n = lwip_recvfrom(ls.fd, buf, sizeof(buf), 0, reinterpret_cast<struct sockaddr *>(&from), &from_len);
+      if (n > 0) {
+        char ip[16] = "";
+        if (from_len >= sizeof(from) && from.sin_family == AF_INET)
+          lwip_inet_ntop(AF_INET, &from.sin_addr, ip, sizeof(ip));
+        this->emulator_.socket_received(id, std::string(buf, n), ip, ntohs(from.sin_port));
+        continue;
+      }
+      if (n == 0 && ls.spec.kind.rfind("TCP", 0) == 0)
+        closed = true;
+      else if (n < 0 && errno != EWOULDBLOCK && errno != EAGAIN)
+        closed = ls.spec.kind.rfind("TCP", 0) == 0;
+      break;
+    }
+    if (closed) {
+      lwip_close(ls.fd);
+      it = this->sockets_.erase(it);
+      this->emulator_.socket_closed(id);
+      continue;
+    }
+    ++it;
+  }
 }
 
 void HameAtComponent::ssl_cert(const std::string &kind, const std::vector<uint8_t> &data) {

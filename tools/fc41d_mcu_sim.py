@@ -108,6 +108,15 @@ class Sim:
             print(f"!! no {wait} for {cmd}")
             return None
 
+    def wait_line(self, prefix, timeout):
+        deadline = time.time() + timeout
+        with self.lock:
+            while time.time() < deadline:
+                if any(line.startswith(prefix) for line in self.lines):
+                    return True
+                self.lock.wait(0.1)
+        return False
+
     def on_line(self, line):
         with self.lock:
             self.lines.append(line)
@@ -155,6 +164,9 @@ class Sim:
         self.send("AT+QBLEADVSTART")
         self.send("AT+QBLETRANMODE=ff02")
         self.send("AT+QSTAST", wait=("+QSTAST",))
+        # Like the battery: no network use before the station has an address.
+        if not self.wait_line("+QSTASTAT:GOT_IP", 30):
+            print("!! no GOT_IP from the module")
         self.send("AT+QGETWIFISTATE")
         self.send("AT+QGETIP=station")
 
@@ -164,9 +176,12 @@ class Sim:
             f"&fcv=202409090159&aid={DEVICE_TYPE}&sv=226&mv=1"
         )
         self.send(f'AT+QHTTPCFG="url","{url}"')
-        if self.send("AT+QHTTPGET=60", wait=("+QHTTPGET", "ERROR"), timeout=20) in (None, "ERROR"):
+        result = self.send("AT+QHTTPGET=60", wait=("+QHTTPGET", "ERROR"), timeout=20)
+        if result is None or not result.startswith("+QHTTPGET: 0,"):
+            print(f"!! time request failed: {result}")
             return
         self.send("AT+QHTTPREAD=60", wait=("+QHTTPREAD",))
+        self.http_body_pending = False
 
     def mqtt(self):
         a = self.args

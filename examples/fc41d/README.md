@@ -17,9 +17,11 @@ Components (in `components/`):
 - `bk72xx_ble_server`: BLE GATT server (peripheral) for the BK7231N, on
   top of esphome's `bk72xx_ble`.
 - `hame_at`: the AT firmware emulator. It covers system, Wi-Fi, BLE, MQTT,
-  certificate upload and HTTP. Optional cloud forwarding uses the broker,
-  credentials and certificates the battery MCU sends. Host-tested in
-  `tests/hame_at`.
+  certificate upload, HTTP and TCP/UDP sockets (the CT and Shelly meter
+  path). Optional cloud forwarding uses the broker, credentials and
+  certificates the battery MCU sends. Formats and timing follow the hm2500
+  firmware emulator, which runs the real MCU images against a module model.
+  Host-tested in `tests/hame_at`.
 
 ## Bench testing on the eval kit
 
@@ -65,7 +67,7 @@ See the plan in the hm2500 research repository.
 
 ## Known limits
 
-- **Flash.** `b2500-module.yaml` uses about 82% of the app partition.
+- **Flash.** `b2500-module.yaml` uses about 84% of the app partition.
 - **RAM.** RAM use with TLS and BLE running together still has to be
   measured on hardware.
 - **Battery firmware updates.** These are blocked unless `allow_mcu_ota: true`.
