@@ -39,7 +39,9 @@ int main() {
   EXPECT_STR(answer("http://eu.hamedata.com/prod/api/v1/setB2500Report?v=abc"), R"({"code":1,"msg":"ok"})");
   EXPECT_STR(answer("http://eu.hamedata.com/prod/api/v1/setSmallReporting?v=abc"),
              R"({"code":1,"msg":"ok","data":{"de":1}})");
-  EXPECT_STR(answer("http://eu.hamedata.com/ems/api/v2/setAcCoupleReport?v=1"), R"({"code":1,"msg":"success","data":[]})");
+  EXPECT_STR(answer("http://eu.hamedata.com/prod/api/v1/setCtReporting?v=abc"), R"({"code":1,"msg":"success"})");
+  EXPECT_STR(answer("http://eu.hamedata.com/ems/api/v2/setAcCoupleReporting?v=1"),
+             R"({"code":1,"msg":"success","data":[]})");
   EXPECT_STR(answer("http://eu.hamedata.com/ems/api/v1/getDevicesApply?devid=x"),
              R"({"code":1,"msg":"success","data":[]})");
   int status = 0;

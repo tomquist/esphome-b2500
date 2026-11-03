@@ -55,7 +55,11 @@ CONFIG_SCHEMA = (
             # Identity the MCU builds its device id from: copy both from the
             # stock module (dump / UART capture) before flashing.
             cv.Optional(CONF_BLE_MAC): _mac,
-            cv.Optional(CONF_MODULE_VERSION, default="FC41DAAR18A04M02_HM"): cv.string_strict,
+            # The MCU reports the build date after "_" to the cloud (fcv), and
+            # it decides the AT+QSSLCERT? format.
+            cv.Optional(
+                CONF_MODULE_VERSION, default="FC41DAAR18A04M02_HM.bin_202409090159"
+            ): cv.string_strict,
             # Forward the MCU's MQTT session (and the Hame HTTP endpoints) to
             # the real cloud, so the Marstek app keeps working.
             cv.Optional(CONF_CLOUD, default=True): cv.boolean,

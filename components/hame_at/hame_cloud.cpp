@@ -84,8 +84,14 @@ bool local_hame_answer(const std::string & /*method*/, const std::string &url, c
     response = R"({"code":1,"msg":"ok","data":{"de":1}})";
     return true;
   }
-  // Other reports (/prod|ems/api/v1|v2/set...Report), getters and external services.
-  bool report = (starts_with(path, "/prod/api/v") || starts_with(path, "/ems/api/v")) && ends_with(path, "Report");
+  // CT002 (122+) / CT003 every 5 min; a CT002 without a 200 repeats it back to back.
+  if (path == "/prod/api/v1/setCtReporting") {
+    response = R"({"code":1,"msg":"success"})";
+    return true;
+  }
+  // Other reports (/prod|ems/api/v1|v2/set...Report[ing]), getters and external services.
+  bool report = (starts_with(path, "/prod/api/v") || starts_with(path, "/ems/api/v")) &&
+                path.find("/set") != std::string::npos && path.find("Report") != std::string::npos;
   if (report || starts_with(path, "/ems/api/v1/get") || starts_with(path, "/external-services/api/v1/") ||
       starts_with(path, "/data-upload/")) {
     response = OK_JSON;

@@ -162,7 +162,7 @@ class Fc41dEmulator {
   size_t socket_count() const { return this->sockets_.size(); }
 
   static bool topic_matches(const std::string &filter, const std::string &topic);
-  /// Checksum the Hame module firmware appends to AT+QSSLCERT? lines. The real
+  /// Checksum later Hame module builds append to AT+QSSLCERT? lines. The real
   /// algorithm is unknown; CRC-16/CCITT-FALSE as in the firmware emulator. A
   /// mismatch only makes the MCU delete and upload its certificate again.
   static uint16_t cert_checksum(const std::string &data);
@@ -189,6 +189,9 @@ class Fc41dEmulator {
   void net_used_() { this->net_used_ms_ = this->now_; }
   void socket_sent_(Socket &s, const std::string &data, const std::string &ip, int port);
   static uint16_t parse_uuid16_(const std::string &s);
+  /// Whether AT+QSSLCERT? appends checksums: not for module builds
+  /// 202406141323 and 202409090159, yes for later ones.
+  bool cert_checksums_() const;
 
   Fc41dBackend *backend_;
   AtEngine engine_;

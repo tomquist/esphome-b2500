@@ -3,6 +3,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 namespace esphome::hame_at {
 
@@ -20,6 +21,14 @@ uint16_t Fc41dEmulator::cert_checksum(const std::string &data) {
       crc = (crc & 0x8000) ? static_cast<uint16_t>((crc << 1) ^ 0x1021) : static_cast<uint16_t>(crc << 1);
   }
   return crc;
+}
+
+bool Fc41dEmulator::cert_checksums_() const {
+  auto ends = [this](const char *build) {
+    size_t n = strlen(build);
+    return this->version_.size() >= n && this->version_.compare(this->version_.size() - n, n, build) == 0;
+  };
+  return !(ends("202406141323") || ends("202409090159"));
 }
 
 bool Fc41dEmulator::topic_matches(const std::string &filter, const std::string &topic) {
@@ -597,17 +606,27 @@ void Fc41dEmulator::register_handlers_() {
   // ---------------------------------------------------------------- TLS
   e.on("QSSLCERT", [this](AtEngine &e, const AtCommand &cmd) {
     if (cmd.kind == AtCommand::Kind::QUERY) {
-      // '"<kind>",<exists>,<checksum>' per kind (module FW 2024-09+). The MCU
-      // looks for '"User Key",1'; when a checksum does not match its own
-      // certificate it deletes and uploads again. Certificates are kept in
-      // RAM only, so after a module boot the MCU uploads them again.
+      // '"<kind>",<exists>' per kind, all three lines in one block (single
+      // CRLFs between them): some firmwares (CT00x) compare the whole reply
+      // with a string. Module builds 202406141323 and 202409090159 send no
+      // checksum, later builds append one (seen in the firmware emulator).
+      // The B2500 looks for '"User Key",1'. Certificates are kept in RAM only,
+      // so after a module boot the MCU uploads them again.
+      const bool with_checksum = this->cert_checksums_();
+      std::string block = "\r\n";
       for (const char *kind : {"CA", "User Cert", "User Key"}) {
         auto it = this->certs_.find(kind);
-        char ck[8] = "0";
-        if (it != this->certs_.end())
-          snprintf(ck, sizeof(ck), "%x", cert_checksum(it->second));
-        e.send_line(std::string("+QSSLCERT: \"") + kind + "\"," + (it != this->certs_.end() ? "1" : "0") + "," + ck);
+        bool have = it != this->certs_.end();
+        block += std::string("+QSSLCERT: \"") + kind + "\"," + (have ? "1" : "0");
+        if (with_checksum) {
+          char ck[8] = "0";
+          if (have)
+            snprintf(ck, sizeof(ck), "%x", cert_checksum(it->second));
+          block += std::string(",") + ck;
+        }
+        block += "\r\n";
       }
+      e.send_raw(block);
       e.ok();
       return;
     }

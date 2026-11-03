@@ -339,9 +339,10 @@ static void test_mqtt() {
 
 static void test_ssl() {
   Harness h;
-  // Nothing stored: every kind reported missing, so the MCU uploads.
-  EXPECT_STR(h.cmd("AT+QSSLCERT?"), "\r\n+QSSLCERT: \"CA\",0,0\r\n\r\n+QSSLCERT: \"User Cert\",0,0\r\n"
-                                    "\r\n+QSSLCERT: \"User Key\",0,0\r\n\r\nOK\r\n");
+  // Nothing stored: every kind reported missing, so the MCU uploads. One
+  // block, no checksums (module build 202409090159).
+  EXPECT_STR(h.cmd("AT+QSSLCERT?"), "\r\n+QSSLCERT: \"CA\",0\r\n+QSSLCERT: \"User Cert\",0\r\n"
+                                    "+QSSLCERT: \"User Key\",0\r\n\r\nOK\r\n");
   std::string pem = "-----BEGIN CERTIFICATE-----\r\nMIIB\r\n-----END CERTIFICATE-----\r\n";
   EXPECT_STR(h.cmd("AT+QSSLCERT=\"User Key\",2," + std::to_string(pem.size())), "\r\nCONNECT\r\n");
   h.out.clear();
@@ -349,10 +350,15 @@ static void test_ssl() {
   EXPECT_STR(h.out, "\r\nOK\r\n");
   EXPECT_EQ(h.backend.certs.size(), 1u);
   EXPECT_STR(h.backend.certs[0].first, "User Key");
-  // Stored: '"User Key",1,<checksum>', which is what the MCU looks for.
+  // Stored: '"User Key",1', which is what the MCU looks for.
+  EXPECT_STR(h.cmd("AT+QSSLCERT?"), "\r\n+QSSLCERT: \"CA\",0\r\n+QSSLCERT: \"User Cert\",0\r\n"
+                                    "+QSSLCERT: \"User Key\",1\r\n\r\nOK\r\n");
+  // Later module builds append a checksum.
+  h.emu.set_module_version("FC41DAAR18A04M02_HM.bin_202503010000");
   char ck[8];
   snprintf(ck, sizeof(ck), "%x", Fc41dEmulator::cert_checksum(pem));
-  EXPECT(h.cmd("AT+QSSLCERT?").find(std::string("+QSSLCERT: \"User Key\",1,") + ck) != std::string::npos);
+  EXPECT_STR(h.cmd("AT+QSSLCERT?"), std::string("\r\n+QSSLCERT: \"CA\",0,0\r\n+QSSLCERT: \"User Cert\",0,0\r\n") +
+                                        "+QSSLCERT: \"User Key\",1," + ck + "\r\n\r\nOK\r\n");
   // Read back, delete.
   EXPECT_STR(h.cmd("AT+QSSLCERT=\"User Key\",1"), "\r\nCONNECT\r\n" + pem + "\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QSSLCERT=\"User Key\",0"), "\r\nOK\r\n");
