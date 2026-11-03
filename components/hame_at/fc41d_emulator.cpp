@@ -552,31 +552,42 @@ void Fc41dEmulator::register_handlers_() {
     std::string urc = "+QMTUNS: " + cmd.arg(0, "0") + "," + std::to_string(cmd.arg_int(1, 0)) + ",0";
     this->later_(20, [this, urc]() { this->engine_.send_line(urc); });
   });
-  auto publish = [this](AtEngine &e, const std::string &idx, long msgid, const std::string &topic,
+  auto publish = [this](AtEngine &e, const std::string &idx, long msgid, bool retain, const std::string &topic,
                         const std::string &payload) {
     e.ok();
     if (!this->mqtt_conn_) {
       this->engine_.send_line("+QMTPUB: " + idx + "," + std::to_string(msgid) + ",2");
       return;
     }
-    this->backend_->mqtt_publish(topic, payload);
+    this->backend_->mqtt_publish(topic, payload, retain);
     std::string urc = "+QMTPUB: " + idx + "," + std::to_string(msgid) + ",0";
     this->later_(10, [this, urc]() { this->engine_.send_line(urc); });
+    // A broker delivers a message to every matching subscription, the
+    // publisher's own included. Do it here when no real broker will.
+    if (!this->backend_->mqtt_broker_echoes()) {
+      for (auto &f : this->mqtt_topics_) {
+        if (topic_matches(f, topic)) {
+          this->later_(60, [this, topic, payload]() { this->mqtt_receive(topic, payload); });
+          break;
+        }
+      }
+    }
   };
   // AT+QMTPUB=<id>,<msgid>,<qos>,<retain>,"topic",<len>,"payload" (B2500), or
   // without <len>: "> " prompt, payload, Ctrl-Z.
   e.on_inline("QMTPUB", 6, false, [this, publish](AtEngine &e, const AtCommand &cmd) {
     std::string idx = cmd.arg(0, "0");
     long msgid = cmd.arg_int(1, 0);
+    bool retain = cmd.arg_int(3, 0) != 0;
     std::string topic = cmd.arg(4);
     if (cmd.has_payload) {
-      publish(e, idx, msgid, topic, cmd.payload);
+      publish(e, idx, msgid, retain, topic, cmd.payload);
       return;
     }
     if (cmd.args.size() == 5) {
       e.send_raw("\r\n>");
-      e.expect_until(0x1A, [publish, idx, msgid, topic](AtEngine &e, std::vector<uint8_t> data) {
-        publish(e, idx, msgid, topic, std::string(data.begin(), data.end()));
+      e.expect_until(0x1A, [publish, idx, msgid, retain, topic](AtEngine &e, std::vector<uint8_t> data) {
+        publish(e, idx, msgid, retain, topic, std::string(data.begin(), data.end()));
       });
       return;
     }
@@ -668,6 +679,22 @@ void Fc41dEmulator::register_handlers_() {
       this->http_url_ = url;
     } else if (key == "contenttype" || key == "content_type") {
       this->http_content_type_ = cmd.arg(1);
+    } else if (key == "header" && cmd.args.size() >= 2) {
+      // AT+QHTTPCFG="header","<name>","<value>" sets, without a value removes
+      // (Venus E 3.0/D/A).
+      const std::string &name = cmd.arg(1);
+      for (auto it = this->http_headers_.begin(); it != this->http_headers_.end(); ++it) {
+        if (it->first == name) {
+          this->http_headers_.erase(it);
+          break;
+        }
+      }
+      if (cmd.args.size() > 2) {
+        std::string value = raw_arg_tail(cmd.raw_args, 2);
+        if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+          value = value.substr(1, value.size() - 2);
+        this->http_headers_.emplace_back(name, value);
+      }
     }
     e.ok();
   });
@@ -688,8 +715,8 @@ void Fc41dEmulator::register_handlers_() {
       return;
     }
     const uint32_t epoch = this->epoch_;
-    this->backend_->http_request(method, this->http_url_, this->http_content_type_, body,
-                                 [this, urc, ok_ms, epoch](HttpResult r) {
+    HttpRequest req{method, this->http_url_, this->http_content_type_, this->http_headers_, std::move(body)};
+    this->backend_->http_request(req, [this, urc, ok_ms, epoch](HttpResult r) {
                                    if (epoch != this->epoch_)
                                      return;  // the module was reset meanwhile
                                    uint32_t due = ok_ms + HTTP_RESULT_MIN_MS;

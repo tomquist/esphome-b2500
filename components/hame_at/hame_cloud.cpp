@@ -46,6 +46,33 @@ bool is_mcu_firmware_url(const std::string &url) {
   return is_hame_cloud_url(url) && ends_with(path_of(url), ".bin");
 }
 
+HameEndpoint classify_hame_url(const std::string &url) {
+  const std::string path = path_of(url);
+  if (ends_with(path, ".bin"))
+    return HameEndpoint::FIRMWARE;
+  if (starts_with(path, "/app/neng/getDateInfo"))
+    return HameEndpoint::TIME;
+  bool api = starts_with(path, "/prod/api/v") || starts_with(path, "/ems/api/v");
+  if (starts_with(path, "/app/Solar/put") || starts_with(path, "/data-upload/") ||
+      (api && path.find("/set") != std::string::npos && path.find("Report") != std::string::npos))
+    return HameEndpoint::REPORTS;
+  return HameEndpoint::DEVICE_CONFIG;
+}
+
+const char *hame_endpoint_name(HameEndpoint e) {
+  switch (e) {
+    case HameEndpoint::TIME:
+      return "time";
+    case HameEndpoint::DEVICE_CONFIG:
+      return "device config";
+    case HameEndpoint::REPORTS:
+      return "report";
+    case HameEndpoint::FIRMWARE:
+      return "firmware";
+  }
+  return "?";
+}
+
 bool local_hame_answer(const std::string & /*method*/, const std::string &url, const std::string &body,
                        const LocalTime *now, int &status, std::string &response) {
   const std::string path = path_of(url);

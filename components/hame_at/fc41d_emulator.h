@@ -53,6 +53,15 @@ struct MqttSession {
   int version{4};      // MQTT protocol level: AT+QMTCFG "version" 3 -> 3.1, 4 -> 3.1.1
 };
 
+/// An HTTP request as the MCU configured it (AT+QHTTPCFG, AT+QHTTPGET/POST).
+struct HttpRequest {
+  std::string method;  // "GET" / "POST"
+  std::string url;
+  std::string content_type;
+  std::vector<std::pair<std::string, std::string>> headers;  // AT+QHTTPCFG="header"
+  std::vector<uint8_t> body;
+};
+
 struct HttpResult {
   int error{0};    // 0 = ok, otherwise a Quectel HTTP error code
   int status{0};   // HTTP status
@@ -89,11 +98,15 @@ class Fc41dBackend {
   /// The MCU closed or lost its broker session.
   virtual void mqtt_closed() {}
   virtual void mqtt_subscribed(const std::string & /*topic*/) {}
-  virtual void mqtt_publish(const std::string &topic, const std::string &payload) = 0;
+  virtual void mqtt_publish(const std::string &topic, const std::string &payload, bool retain) = 0;
+  /// Whether a real broker currently delivers the MCU's publishes back to its
+  /// own matching subscriptions (cloud forwarding connected). If not, the
+  /// emulator does it, as a broker would: Venus firmware publishes to its own
+  /// ctrl topic and takes the echo as proof that the connection works.
+  virtual bool mqtt_broker_echoes() { return false; }
 
   /// An HTTP request. Call `done` exactly once, now or later (from the main loop).
-  virtual void http_request(const std::string &method, const std::string &url, const std::string &content_type,
-                            const std::vector<uint8_t> &body, std::function<void(HttpResult)> done) = 0;
+  virtual void http_request(const HttpRequest &request, std::function<void(HttpResult)> done) = 0;
 
   /// Open a socket; call `done` once with 0 or a Quectel socket error code.
   /// Received data goes back through Fc41dEmulator::socket_received().
@@ -234,6 +247,7 @@ class Fc41dEmulator {
   // HTTP
   std::string http_url_;
   std::string http_content_type_{"application/x-www-form-urlencoded"};
+  std::vector<std::pair<std::string, std::string>> http_headers_;
   std::string http_body_;
   bool http_busy_{false};
 

@@ -44,6 +44,20 @@ int main() {
              R"({"code":1,"msg":"success","data":[]})");
   EXPECT_STR(answer("http://eu.hamedata.com/ems/api/v1/getDevicesApply?devid=x"),
              R"({"code":1,"msg":"success","data":[]})");
+  // Classification for the per-category cloud modes.
+  EXPECT(classify_hame_url("http://eu.hamedata.com/app/neng/getDateInfoeu.php?uid=a") == HameEndpoint::TIME);
+  EXPECT(classify_hame_url("http://eu.hamedata.com/ems/api/v1/getDeviceFire?devid=x") == HameEndpoint::DEVICE_CONFIG);
+  EXPECT(classify_hame_url("http://eu.hamedata.com/ems/api/v1/getRealtimeSoc?devid=x") == HameEndpoint::DEVICE_CONFIG);
+  EXPECT(classify_hame_url("https://eu.hamedata.com/external-services/api/v1/schedulings/policies?devid=x") ==
+         HameEndpoint::DEVICE_CONFIG);
+  EXPECT(classify_hame_url("http://eu.hamedata.com/app/Solar/put_tenmins_v2.php?devid=x") == HameEndpoint::REPORTS);
+  EXPECT(classify_hame_url("http://eu.hamedata.com/app/Solar/puterrinfo.php") == HameEndpoint::REPORTS);
+  EXPECT(classify_hame_url("http://eu.hamedata.com/prod/api/v1/setB2500Report?v=a") == HameEndpoint::REPORTS);
+  EXPECT(classify_hame_url("http://eu.hamedata.com/prod/api/v1/setCtReporting?v=a") == HameEndpoint::REPORTS);
+  EXPECT(classify_hame_url("http://eu.hamedata.com/ems/api/v2/setAcCoupleReporting?v=1") == HameEndpoint::REPORTS);
+  EXPECT(classify_hame_url("https://eu.hamedata.com/app/neng/admin/upload/B2500V23_All_V224.3.bin") ==
+         HameEndpoint::FIRMWARE);
+
   int status = 0;
   answer("http://eu.hamedata.com/something/else", "", nullptr, &status);
   EXPECT_EQ(status, 404);

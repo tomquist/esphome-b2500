@@ -136,10 +136,11 @@ void NetWorker::subscribe(const std::string &topic) {
   c.a = topic;
   this->push_cmd_(std::move(c));
 }
-void NetWorker::publish(const std::string &topic, const std::string &payload) {
+void NetWorker::publish(const std::string &topic, const std::string &payload, bool retain) {
   Cmd c{CmdType::PUBLISH};
   c.a = topic;
   c.b = payload;
+  c.flag = retain;
   this->push_cmd_(std::move(c));
 }
 void NetWorker::http(HttpJob job) {
@@ -251,7 +252,7 @@ void NetWorker::run_() {
           link.subscribe(c.a);
           break;
         case CmdType::PUBLISH:
-          link.publish(c.a, c.b);
+          link.publish(c.a, c.b, c.flag);
           break;
       }
     }
@@ -310,6 +311,8 @@ HttpResult NetWorker::do_http_(const HttpJob &job) {
   }
 
   std::string req = job.method + " " + path + " HTTP/1.0\r\nHost: " + hostport + "\r\nConnection: close\r\n";
+  for (const auto &h : job.headers)
+    req += h.first + ": " + h.second + "\r\n";
   if (job.method == "POST") {
     req += "Content-Type: " + (job.content_type.empty() ? std::string("application/x-www-form-urlencoded")
                                                          : job.content_type) +

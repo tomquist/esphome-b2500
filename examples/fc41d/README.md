@@ -23,6 +23,33 @@ Components (in `components/`):
   firmware emulator, which runs the real MCU images against a module model.
   Host-tested in `tests/hame_at`.
 
+## Cloud access
+
+The battery's traffic to the Hame cloud can be passed through or answered on
+the module itself, the way [Marsrelay](https://github.com/tomquist/marsrelay)
+does.
+
+- **Master switch.** `cloud:` (also a switch in Home Assistant) turns all
+  cloud access on or off. Off means everything is answered on the module, and
+  the Marstek app then only works over Bluetooth.
+- **Per kind of traffic.** While cloud access is on, `cloud_access:` decides
+  for each kind of traffic:
+
+| Key | Covers | Default |
+|---|---|---|
+| `mqtt` | the battery's broker session: app control, cloud data | `forward` |
+| `time` | the battery's clock request | `auto` |
+| `device_config` | output limits, SOC, schedules, weather | `auto` |
+| `reports` | statistics and error uploads | `forward` |
+
+- **Modes.** `forward` passes the traffic through. `local` answers on the
+  module. `auto` passes through and answers locally when the cloud fails
+  (HTTP only).
+- **Not covered by these settings:**
+  - Requests to devices on your network (CT, P1 and Shelly meters) always go
+    out.
+  - Battery firmware downloads are blocked unless `allow_mcu_ota: true`.
+
 ## Bench testing on the eval kit
 
 On the FC41D-TE-B, J201 is the module's main UART (the battery MCU's side)

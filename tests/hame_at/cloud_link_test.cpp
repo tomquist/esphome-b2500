@@ -182,6 +182,9 @@ static void test_link_flow() {
   // Live publish and a new subscription while connected.
   link.publish("hame_energy/HMA-1/device/aabbccddeeff/ctrl", "p1=1,p2=0");
   EXPECT_EQ(t.count(mq::PUBLISH), 3);
+  EXPECT_EQ(t.received.back().flags & 0x01, 0);
+  link.publish("hame_energy/HMN-1/device/x/ctrl", "a=1", true);
+  EXPECT_EQ(t.received.back().flags & 0x01, 1);  // retain
   link.subscribe("other/topic");
   EXPECT_EQ(t.count(mq::SUBSCRIBE), 2);
 

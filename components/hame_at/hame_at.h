@@ -48,6 +48,10 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   void set_ble_mac(const std::string &mac) { this->ble_mac_ = mac; }
   void set_cloud_enabled(bool enabled);
   void set_allow_mcu_ota(bool allow) { this->allow_mcu_ota_ = allow; }
+  /// What reaches the real cloud while cloud access is on (the master switch);
+  /// with it off everything is answered locally.
+  void set_mqtt_mode(CloudMode mode) { this->mqtt_mode_ = mode; }
+  void set_http_mode(HameEndpoint endpoint, CloudMode mode);
 #ifdef USE_TIME
   void set_time(time::RealTimeClock *t) { this->time_ = t; }
 #endif
@@ -88,9 +92,9 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   void mqtt_connected(const MqttSession &session) override;
   void mqtt_closed() override;
   void mqtt_subscribed(const std::string &topic) override;
-  void mqtt_publish(const std::string &topic, const std::string &payload) override;
-  void http_request(const std::string &method, const std::string &url, const std::string &content_type,
-                    const std::vector<uint8_t> &body, std::function<void(HttpResult)> done) override;
+  void mqtt_publish(const std::string &topic, const std::string &payload, bool retain) override;
+  bool mqtt_broker_echoes() override;
+  void http_request(const HttpRequest &request, std::function<void(HttpResult)> done) override;
   void socket_open(const SocketSpec &spec, std::function<void(int)> done) override;
   void socket_send(int id, const std::string &data, const std::string &ip, int port) override;
   void socket_close(int id) override;
@@ -107,6 +111,10 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   };
 
   bool local_time_(LocalTime &out);
+  CloudMode http_mode_(HameEndpoint endpoint) const;
+  bool mqtt_forwarding_() const { return this->cloud_enabled_ && this->mqtt_mode_ != CloudMode::LOCAL; }
+  void answer_locally_(const HttpRequest &request, std::function<void(HttpResult)> done);
+  void forward_http_(const HttpRequest &request, std::function<void(HttpResult)> done);
   void service_sockets_();
   void publish_cloud_status_();
 
@@ -115,6 +123,10 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   std::string ble_mac_;
   bool cloud_enabled_{true};
   bool allow_mcu_ota_{false};
+  CloudMode mqtt_mode_{CloudMode::FORWARD};
+  CloudMode time_mode_{CloudMode::AUTO};
+  CloudMode config_mode_{CloudMode::AUTO};
+  CloudMode reports_mode_{CloudMode::FORWARD};
   bool worker_started_{false};
   bool network_up_{false};
   TlsCredentials creds_;

@@ -16,6 +16,9 @@ struct FakeBackend : Fc41dBackend {
   WifiStatus wifi;
   std::vector<std::pair<uint16_t, std::vector<uint8_t>>> notifications;
   std::vector<std::pair<std::string, std::string>> published;
+  std::vector<bool> retained;
+  bool broker_echoes{false};
+  std::vector<std::pair<std::string, std::string>> last_headers;
   std::vector<std::string> subscribed;
   std::vector<std::string> requests;
   std::vector<std::pair<std::string, size_t>> certs;
@@ -48,12 +51,15 @@ struct FakeBackend : Fc41dBackend {
   }
   void mqtt_closed() override { closed++; }
   void mqtt_subscribed(const std::string &topic) override { subscribed.push_back(topic); }
-  void mqtt_publish(const std::string &topic, const std::string &payload) override {
+  void mqtt_publish(const std::string &topic, const std::string &payload, bool retain) override {
     published.push_back({topic, payload});
+    retained.push_back(retain);
   }
-  void http_request(const std::string &method, const std::string &url, const std::string &,
-                    const std::vector<uint8_t> &body, std::function<void(HttpResult)> done) override {
-    requests.push_back(method + " " + url + (body.empty() ? "" : " " + std::string(body.begin(), body.end())));
+  bool mqtt_broker_echoes() override { return broker_echoes; }
+  void http_request(const HttpRequest &req, std::function<void(HttpResult)> done) override {
+    last_headers = req.headers;
+    requests.push_back(req.method + " " + req.url +
+                       (req.body.empty() ? "" : " " + std::string(req.body.begin(), req.body.end())));
     if (answer_http_now)
       done(http_answer);
     else
@@ -326,6 +332,24 @@ static void test_mqtt() {
   h.cmd("AT+QMTSUB=0,2,\"marstek_energy/+/App/#\",0");
   EXPECT(h.emu.mqtt_receive("marstek_energy/HMA-1/App/x/ctrl", "cd=1"));
 
+  // Retain flag (Jupiter publishes with retain=1).
+  h.cmd("AT+QMTPUB=0,0,0,1,\"hame_energy/HMN-1/device/x/ctrl\",3,\"a=1\"");
+  EXPECT(h.backend.retained.back());
+
+  // Self-echo: Venus publishes to its own server topic and expects it back.
+  h.cmd("AT+QMTSUB=0,3,\"marstek/VNSE3-0/server/x/ctrl\",0");
+  std::string echo = h.cmd("AT+QMTPUB=0,0,0,0,\"marstek/VNSE3-0/server/x/ctrl\",4,\"ping\"");
+  EXPECT(echo.find("+QMTRECV: 0,") != std::string::npos);
+  EXPECT(echo.find("\"marstek/VNSE3-0/server/x/ctrl\",4,\"ping\"") != std::string::npos);
+  // ...but not when a real broker (cloud forwarding) already echoes it.
+  h.backend.broker_echoes = true;
+  echo = h.cmd("AT+QMTPUB=0,0,0,0,\"marstek/VNSE3-0/server/x/ctrl\",4,\"ping\"");
+  EXPECT(echo.find("+QMTRECV") == std::string::npos);
+  h.backend.broker_echoes = false;
+  // A B2500 publishes to its device topic and subscribes to App: no echo.
+  echo = h.cmd("AT+QMTPUB=0,0,0,0,\"hame_energy/HMA-1/device/aabbccddeeff/ctrl\",3,\"x=1\"");
+  EXPECT(echo.find("+QMTRECV") == std::string::npos);
+
   // Losing Wi-Fi drops the session with a URC.
   h.out.clear();
   h.backend.wifi.connected = false;
@@ -377,11 +401,24 @@ static void test_http() {
   h.backend.http_answer.body = "_2026_11_01_21_30_00_04_0_0_0";
   EXPECT_STR(h.cmd("AT+QHTTPGET=60", 250), "\r\nOK\r\n");
   EXPECT_STR(h.backend.requests[0], "GET " + url);
+  EXPECT(h.backend.last_headers.empty());
   EXPECT_STR(h.cmd("AT+QHTTPGET=60", 10), "\r\nERROR\r\n");  // busy until the result
   h.out.clear();
   h.tick(60);
   EXPECT_STR(h.out, "\r\n+QHTTPGET: 0,200,29\r\n");
   EXPECT_STR(h.cmd("AT+QHTTPREAD=60"), "\r\nCONNECT\r\n_2026_11_01_21_30_00_04_0_0_0\r\nOK\r\n\r\n+QHTTPREAD: 0\r\n");
+
+  // Request headers (Venus E 3.0/D/A): set, replace, remove.
+  h.cmd("AT+QHTTPCFG=\"header\",\"Authorization\",\"Bearer a,b\"");
+  h.cmd("AT+QHTTPCFG=\"header\",\"X-Dev\",\"1\"");
+  h.cmd("AT+QHTTPCFG=\"header\",\"X-Dev\",\"2\"");
+  h.cmd("AT+QHTTPGET=60", 400);
+  EXPECT_EQ(h.backend.last_headers.size(), 2u);
+  EXPECT_STR(h.backend.last_headers[0].second, "Bearer a,b");
+  EXPECT_STR(h.backend.last_headers[1].second, "2");
+  h.cmd("AT+QHTTPCFG=\"header\",\"Authorization\"");
+  h.cmd("AT+QHTTPGET=60", 400);
+  EXPECT_EQ(h.backend.last_headers.size(), 1u);
 
   // A slow backend: the result follows as soon as it arrives.
   h.backend.answer_http_now = false;
@@ -391,7 +428,7 @@ static void test_http() {
   h.send("err=1,2");
   h.tick(10);
   EXPECT_STR(h.out, "\r\nOK\r\n");
-  EXPECT_STR(h.backend.requests[1], "POST http://eu.hamedata.com/app/Solar/puterrinfo.php err=1,2");
+  EXPECT_STR(h.backend.requests.back(), "POST http://eu.hamedata.com/app/Solar/puterrinfo.php err=1,2");
   h.tick(1000);
   h.out.clear();
   HttpResult fail;

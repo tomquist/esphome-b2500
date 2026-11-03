@@ -81,7 +81,7 @@ class CloudLink {
   void set_network(bool up, uint32_t now_ms);
 
   void subscribe(const std::string &topic);
-  void publish(const std::string &topic, const std::string &payload);
+  void publish(const std::string &topic, const std::string &payload, bool retain = false);
 
   /// Drive the link: connect, read, keep alive. Blocks inside
   /// Transport::connect() when a connect is due.
@@ -113,7 +113,12 @@ class CloudLink {
   MqttSession session_;
   TlsCredentials creds_;
   std::vector<std::string> topics_;
-  std::deque<std::pair<std::string, std::string>> queue_;
+  struct Pending {
+    std::string topic;
+    std::string payload;
+    bool retain;
+  };
+  std::deque<Pending> queue_;
 
   mqtt::Decoder decoder_;
   State state_{State::NO_SESSION};

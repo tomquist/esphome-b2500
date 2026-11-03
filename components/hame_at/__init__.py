@@ -21,6 +21,11 @@ CONF_MODULE_VERSION = "module_version"
 CONF_BLE_MAC = "ble_mac"
 CONF_CLOUD = "cloud"
 CONF_ALLOW_MCU_OTA = "allow_mcu_ota"
+CONF_CLOUD_ACCESS = "cloud_access"
+CONF_MQTT = "mqtt"
+CONF_TIME = "time"
+CONF_DEVICE_CONFIG = "device_config"
+CONF_REPORTS = "reports"
 CONF_BLE_SERVER_ID = "ble_server_id"
 CONF_ON_MCU_PUBLISH = "on_mcu_publish"
 CONF_ON_BLE_NOTIFY = "on_ble_notify"
@@ -31,6 +36,30 @@ SendToMcuAction = hame_at_ns.class_("SendToMcuAction", automation.Action)
 BleWriteAction = hame_at_ns.class_("BleWriteAction", automation.Action)
 
 uint8_vector = cg.std_vector.template(cg.uint8)
+
+CloudMode = hame_at_ns.enum("CloudMode", is_class=True)
+HameEndpoint = hame_at_ns.enum("HameEndpoint", is_class=True)
+CLOUD_MODES = {
+    "forward": CloudMode.FORWARD,  # to the real cloud
+    "local": CloudMode.LOCAL,  # answered on the module, as Marsrelay does
+    "auto": CloudMode.AUTO,  # to the real cloud, answered locally when that fails
+}
+
+# What reaches the Hame cloud while cloud access is on. With it off (the
+# `cloud` option or the switch), everything is answered on the module.
+CLOUD_ACCESS_SCHEMA = cv.Schema(
+    {
+        # The battery's MQTT session (app control, cloud data). "local" ends
+        # it on the module, which then also echoes like a broker would.
+        cv.Optional(CONF_MQTT, default="forward"): cv.one_of("forward", "local", lower=True),
+        # The battery's clock (getDateInfo).
+        cv.Optional(CONF_TIME, default="auto"): cv.enum(CLOUD_MODES, lower=True),
+        # Output limits (getDeviceFire), SOC, schedules, weather...
+        cv.Optional(CONF_DEVICE_CONFIG, default="auto"): cv.enum(CLOUD_MODES, lower=True),
+        # Statistics and error uploads.
+        cv.Optional(CONF_REPORTS, default="forward"): cv.enum(CLOUD_MODES, lower=True),
+    }
+)
 
 # Referenced by type only, so hame_at also works without the BLE server.
 BK72xxBLEServer = cg.esphome_ns.namespace("bk72xx_ble_server").class_(
@@ -60,9 +89,11 @@ CONFIG_SCHEMA = (
             cv.Optional(
                 CONF_MODULE_VERSION, default="FC41DAAR18A04M02_HM.bin_202409090159"
             ): cv.string_strict,
-            # Forward the MCU's MQTT session (and the Hame HTTP endpoints) to
-            # the real cloud, so the Marstek app keeps working.
+            # Cloud access master switch (also a runtime switch). On: what
+            # `cloud_access` allows reaches the real cloud, so the Marstek app
+            # keeps working. Off: everything is answered on the module.
             cv.Optional(CONF_CLOUD, default=True): cv.boolean,
+            cv.Optional(CONF_CLOUD_ACCESS, default={}): CLOUD_ACCESS_SCHEMA,
             # Let the MCU download its own firmware updates from the cloud.
             cv.Optional(CONF_ALLOW_MCU_OTA, default=False): cv.boolean,
             cv.Optional(CONF_TIME_ID): cv.use_id(time_.RealTimeClock),
@@ -101,6 +132,11 @@ async def to_code(config):
     if CONF_BLE_MAC in config:
         cg.add(var.set_ble_mac(config[CONF_BLE_MAC]))
     cg.add(var.set_cloud_enabled(config[CONF_CLOUD]))
+    access = config[CONF_CLOUD_ACCESS]
+    cg.add(var.set_mqtt_mode(CLOUD_MODES[access[CONF_MQTT]]))
+    cg.add(var.set_http_mode(HameEndpoint.TIME, access[CONF_TIME]))
+    cg.add(var.set_http_mode(HameEndpoint.DEVICE_CONFIG, access[CONF_DEVICE_CONFIG]))
+    cg.add(var.set_http_mode(HameEndpoint.REPORTS, access[CONF_REPORTS]))
     cg.add(var.set_allow_mcu_ota(config[CONF_ALLOW_MCU_OTA]))
     if CONF_TIME_ID in config:
         clock = await cg.get_variable(config[CONF_TIME_ID])

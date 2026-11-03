@@ -7,6 +7,7 @@
 // B2500 rejects the date and keeps asking; getDeviceFire carries its output
 // limits. Platform independent and host-tested.
 
+#include <cstdint>
 #include <string>
 
 namespace esphome::hame_at {
@@ -17,6 +18,25 @@ struct LocalTime {
 
 /// True if `url` points at a Hame cloud host (*.hamedata.com, marstekcloud.com).
 bool is_hame_cloud_url(const std::string &url);
+
+/// What a Hame cloud request is for; each kind can be forwarded or answered
+/// locally on its own.
+enum class HameEndpoint : uint8_t {
+  TIME,           // getDateInfo*.php: the battery's clock
+  DEVICE_CONFIG,  // getDeviceFire (output limits), getRealtimeSoc, schedules, weather, ...
+  REPORTS,        // statistics and error uploads (put_tenmins_v2, puterrinfo, set...Report[ing])
+  FIRMWARE,       // MCU firmware images
+};
+
+/// How requests of one kind are handled.
+enum class CloudMode : uint8_t {
+  FORWARD,  // to the real cloud
+  LOCAL,    // answered locally (Marsrelay-compatible)
+  AUTO,     // to the real cloud; answered locally when that fails
+};
+
+HameEndpoint classify_hame_url(const std::string &url);
+const char *hame_endpoint_name(HameEndpoint e);
 
 /// True if `url` downloads a firmware image for the MCU.
 bool is_mcu_firmware_url(const std::string &url);

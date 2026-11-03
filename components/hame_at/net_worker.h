@@ -30,6 +30,7 @@ struct HttpJob {
   std::string method;
   std::string url;
   std::string content_type;
+  std::vector<std::pair<std::string, std::string>> headers;
   std::vector<uint8_t> body;
 };
 
@@ -45,7 +46,7 @@ class NetWorker {
   void set_credentials(const TlsCredentials &creds);
   void clear_session();
   void subscribe(const std::string &topic);
-  void publish(const std::string &topic, const std::string &payload);
+  void publish(const std::string &topic, const std::string &payload, bool retain);
   void http(HttpJob job);
 
   // --- Worker -> main task (thread-safe) ---

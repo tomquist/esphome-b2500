@@ -93,11 +93,11 @@ void CloudLink::subscribe(const std::string &topic) {
     this->subscribe_now_(topic);
 }
 
-void CloudLink::publish(const std::string &topic, const std::string &payload) {
+void CloudLink::publish(const std::string &topic, const std::string &payload, bool retain) {
   if (!this->enabled_ || !this->have_session_)
     return;
   if (this->state_ == State::CONNECTED) {
-    this->send_(mqtt::encode_publish(topic, payload, 0));
+    this->send_(mqtt::encode_publish(topic, payload, 0, retain));
     return;
   }
   // Hold a few messages across a reconnect; status payloads are periodic, so
@@ -106,7 +106,7 @@ void CloudLink::publish(const std::string &topic, const std::string &payload) {
     this->queue_.pop_front();
     this->dropped_++;
   }
-  this->queue_.emplace_back(topic, payload);
+  this->queue_.push_back({topic, payload, retain});
 }
 
 void CloudLink::evaluate_(uint32_t now_ms) {
@@ -221,7 +221,7 @@ void CloudLink::service(uint32_t now_ms) {
           this->subscribe_now_(t);
         while (!this->queue_.empty()) {
           auto &m = this->queue_.front();
-          this->send_(mqtt::encode_publish(m.first, m.second, 0));
+          this->send_(mqtt::encode_publish(m.topic, m.payload, 0, m.retain));
           this->queue_.pop_front();
         }
         break;

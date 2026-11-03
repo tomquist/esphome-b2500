@@ -4,13 +4,16 @@
 # on the module's main UART and hame_at answers it:
 #   - Wi-Fi is ESPHome's (set it below; the app's Wi-Fi setup is ignored),
 #   - the battery's Bluetooth service stays available to the Marstek app,
-#   - the battery's MQTT session ends on the module; with `cloud: true`
+#   - the battery's MQTT session ends on the module; with cloud access on
 #     (default) it is also forwarded to the Hame cloud with the battery's own
-#     broker, credentials and certificates, so the app works remotely,
+#     broker, credentials and certificates, so the app works remotely;
+#     `cloud_access` picks per kind of traffic what is passed through and
+#     what the module answers itself (Marsrelay-style),
 #   - every status message the battery publishes fires on_mcu_publish.
 #
-# Status: untested on a real battery. Response formats follow the Quectel
-# manual until UART captures from a stock module confirm them.
+# Status: untested on a real battery. Formats and timing follow the hm2500
+# firmware emulator (the real MCU images run against a module model) until
+# UART captures from a stock module confirm them.
 #
 # Before flashing a battery's module, back it up and copy its BLE MAC into
 # `ble_mac` (the battery derives its device id from it):
@@ -92,8 +95,20 @@ hame_at:
   ble_server_id: ble_server
   time_id: sntp_time
   ble_mac: ${ble_mac}
+  # Cloud access (also the "Cloud access" switch). Off: the module answers
+  # everything itself, like Marsrelay; the Marstek app then only works over
+  # Bluetooth.
   cloud: true
-  allow_mcu_ota: false
+  # While cloud access is on, per kind of traffic:
+  #   forward - pass through to the Hame cloud
+  #   local   - answer on the module (Marsrelay-compatible)
+  #   auto    - pass through, answer locally when the cloud fails (HTTP only)
+  cloud_access:
+    mqtt: forward          # app control and cloud data (forward / local)
+    time: auto             # the battery's clock
+    device_config: auto    # output limits, SOC, schedules
+    reports: forward       # statistics and error uploads
+  allow_mcu_ota: false     # let the cloud update the battery's firmware
   on_mcu_publish:
     - lambda: |-
         // Device status replies ("p1=..,p2=..,w1=..") arrive on the device topic.
@@ -110,7 +125,7 @@ interval:
 switch:
   - platform: hame_at
     cloud:
-      name: Cloud forwarding
+      name: Cloud access
 
 text_sensor:
   - platform: hame_at

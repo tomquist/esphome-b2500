@@ -74,7 +74,7 @@ void HameAtComponent::setup() {
   }
 #endif
 
-  this->worker_started_ = this->worker_.start(this->cloud_enabled_);
+  this->worker_started_ = this->worker_.start(this->mqtt_forwarding_());
   if (!this->worker_started_)
     ESP_LOGE(TAG, "Could not start the network task; cloud forwarding and HTTP are unavailable");
 
@@ -147,9 +147,45 @@ void HameAtComponent::set_cloud_enabled(bool enabled) {
   if (enabled == this->cloud_enabled_)
     return;
   this->cloud_enabled_ = enabled;
-  ESP_LOGI(TAG, "Cloud forwarding %s", enabled ? "enabled" : "disabled");
+  ESP_LOGI(TAG, "Cloud access %s", enabled ? "enabled" : "disabled (everything answered locally)");
   if (this->worker_started_)
-    this->worker_.set_cloud_enabled(enabled);
+    this->worker_.set_cloud_enabled(this->mqtt_forwarding_());
+}
+
+void HameAtComponent::set_http_mode(HameEndpoint endpoint, CloudMode mode) {
+  switch (endpoint) {
+    case HameEndpoint::TIME:
+      this->time_mode_ = mode;
+      break;
+    case HameEndpoint::DEVICE_CONFIG:
+      this->config_mode_ = mode;
+      break;
+    case HameEndpoint::REPORTS:
+      this->reports_mode_ = mode;
+      break;
+    case HameEndpoint::FIRMWARE:
+      break;  // allow_mcu_ota
+  }
+}
+
+CloudMode HameAtComponent::http_mode_(HameEndpoint endpoint) const {
+  if (!this->cloud_enabled_)
+    return CloudMode::LOCAL;
+  switch (endpoint) {
+    case HameEndpoint::TIME:
+      return this->time_mode_;
+    case HameEndpoint::DEVICE_CONFIG:
+      return this->config_mode_;
+    case HameEndpoint::REPORTS:
+      return this->reports_mode_;
+    case HameEndpoint::FIRMWARE:
+      return CloudMode::FORWARD;
+  }
+  return CloudMode::LOCAL;
+}
+
+static const char *mode_name(CloudMode m) {
+  return m == CloudMode::FORWARD ? "forward" : m == CloudMode::LOCAL ? "local" : "auto";
 }
 
 void HameAtComponent::send_to_mcu(const std::string &payload, const std::string &topic) {
@@ -250,11 +286,17 @@ void HameAtComponent::mqtt_subscribed(const std::string &topic) {
     this->worker_.subscribe(topic);
 }
 
-void HameAtComponent::mqtt_publish(const std::string &topic, const std::string &payload) {
+void HameAtComponent::mqtt_publish(const std::string &topic, const std::string &payload, bool retain) {
   ESP_LOGD(TAG, "MCU -> %s: %s", topic.c_str(), payload.c_str());
   this->on_mcu_publish_.trigger(topic, payload);
-  if (this->worker_started_)
-    this->worker_.publish(topic, payload);  // dropped by the worker when the cloud is off
+  if (this->worker_started_ && this->mqtt_forwarding_())
+    this->worker_.publish(topic, payload, retain);
+}
+
+bool HameAtComponent::mqtt_broker_echoes() {
+  // A connected cloud session delivers the MCU's publishes back to it;
+  // otherwise the emulator echoes them itself.
+  return this->worker_started_ && this->mqtt_forwarding_() && this->worker_.cloud_state() == "connected";
 }
 
 bool HameAtComponent::local_time_(LocalTime &out) {
@@ -271,39 +313,24 @@ bool HameAtComponent::local_time_(LocalTime &out) {
 #endif
 }
 
-void HameAtComponent::http_request(const std::string &method, const std::string &url,
-                                   const std::string &content_type, const std::vector<uint8_t> &body,
-                                   std::function<void(HttpResult)> done) {
-  const bool hame = is_hame_cloud_url(url);
-
-  // MCU firmware images: the update is driven by the cloud/app and fetched by
-  // the MCU itself. Only let it through when explicitly allowed.
-  if (is_mcu_firmware_url(url) && !this->allow_mcu_ota_) {
-    ESP_LOGW(TAG, "Blocked an MCU firmware download (%s); set allow_mcu_ota to permit", url.c_str());
-    HttpResult r;
-    r.status = 404;
-    done(r);
-    return;
+void HameAtComponent::answer_locally_(const HttpRequest &request, std::function<void(HttpResult)> done) {
+  // Answer as Marsrelay does: the battery needs the clock reply and its
+  // output limits (getDeviceFire); reports are acknowledged.
+  LocalTime t;
+  bool have_time = this->local_time_(t);
+  HttpResult r;
+  std::string body(request.body.begin(), request.body.end());
+  if (!local_hame_answer(request.method, request.url, body, have_time ? &t : nullptr, r.status, r.body)) {
+    ESP_LOGW(TAG, "No valid time for the battery's clock request yet");
+    r.status = 0;
+    r.error = 702;
+  } else {
+    ESP_LOGD(TAG, "HTTP %s %s answered locally (%d)", request.method.c_str(), request.url.c_str(), r.status);
   }
+  done(r);
+}
 
-  if (hame && !this->cloud_enabled_) {
-    // Answer as Marsrelay does: the battery needs the clock reply and its
-    // output limits (getDeviceFire); reports are acknowledged.
-    LocalTime t;
-    bool have_time = this->local_time_(t);
-    HttpResult r;
-    std::string body_str(body.begin(), body.end());
-    if (!local_hame_answer(method, url, body_str, have_time ? &t : nullptr, r.status, r.body)) {
-      ESP_LOGW(TAG, "No valid time for the battery's clock request yet");
-      r.status = 0;
-      r.error = 702;
-    } else {
-      ESP_LOGD(TAG, "HTTP %s %s answered locally (%d)", method.c_str(), url.c_str(), r.status);
-    }
-    done(r);
-    return;
-  }
-
+void HameAtComponent::forward_http_(const HttpRequest &request, std::function<void(HttpResult)> done) {
   if (!this->worker_started_) {
     HttpResult r;
     r.error = 701;
@@ -312,12 +339,52 @@ void HameAtComponent::http_request(const std::string &method, const std::string 
   }
   HttpJob job;
   job.id = this->next_http_id_++;
-  job.method = method;
-  job.url = url;
-  job.content_type = content_type;
-  job.body = body;
+  job.method = request.method;
+  job.url = request.url;
+  job.content_type = request.content_type;
+  job.headers = request.headers;
+  job.body = request.body;
   this->http_pending_[job.id] = std::move(done);
   this->worker_.http(std::move(job));
+}
+
+void HameAtComponent::http_request(const HttpRequest &request, std::function<void(HttpResult)> done) {
+  // LAN requests (CT, P1 and Shelly meters) always go out.
+  if (!is_hame_cloud_url(request.url)) {
+    this->forward_http_(request, std::move(done));
+    return;
+  }
+  const HameEndpoint kind = classify_hame_url(request.url);
+  // MCU firmware images: the update is driven by the cloud/app and fetched by
+  // the MCU itself. Only let it through when explicitly allowed.
+  if (kind == HameEndpoint::FIRMWARE && !(this->allow_mcu_ota_ && this->cloud_enabled_)) {
+    ESP_LOGW(TAG, "Blocked an MCU firmware download (%s); set allow_mcu_ota to permit", request.url.c_str());
+    HttpResult r;
+    r.status = 404;
+    done(r);
+    return;
+  }
+  const CloudMode mode = this->http_mode_(kind);
+  ESP_LOGV(TAG, "HTTP %s (%s): %s", request.url.c_str(), hame_endpoint_name(kind), mode_name(mode));
+  if (mode == CloudMode::LOCAL) {
+    this->answer_locally_(request, std::move(done));
+    return;
+  }
+  if (mode == CloudMode::FORWARD) {
+    this->forward_http_(request, std::move(done));
+    return;
+  }
+  // AUTO: the real cloud, and the local answer when that fails.
+  HttpRequest copy = request;
+  this->forward_http_(request, [this, copy, done](HttpResult r) {
+    if (r.error == 0 && r.status >= 200 && r.status < 500) {
+      done(std::move(r));
+      return;
+    }
+    ESP_LOGI(TAG, "Cloud unavailable for %s (%s); answering locally", hame_endpoint_name(classify_hame_url(copy.url)),
+             r.error ? ("error " + std::to_string(r.error)).c_str() : ("HTTP " + std::to_string(r.status)).c_str());
+    this->answer_locally_(copy, done);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -498,9 +565,12 @@ void HameAtComponent::dump_config() {
   ESP_LOGCONFIG(TAG,
                 "Hame AT emulator:\n"
                 "  BLE MAC: %s\n"
-                "  Cloud forwarding: %s\n"
+                "  Cloud access: %s\n"
+                "    MQTT: %s, time: %s, device config: %s, reports: %s\n"
                 "  MCU OTA: %s",
-                this->ble_mac_.c_str(), YESNO(this->cloud_enabled_), this->allow_mcu_ota_ ? "allowed" : "blocked");
+                this->ble_mac_.c_str(), this->cloud_enabled_ ? "on" : "off (all local)", mode_name(this->mqtt_mode_),
+                mode_name(this->time_mode_), mode_name(this->config_mode_), mode_name(this->reports_mode_),
+                this->allow_mcu_ota_ ? "allowed" : "blocked");
 }
 
 }  // namespace esphome::hame_at
