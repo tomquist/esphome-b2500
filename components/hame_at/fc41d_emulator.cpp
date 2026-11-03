@@ -167,8 +167,10 @@ void Fc41dEmulator::announce_wifi_() {
 
 void Fc41dEmulator::wifi_lost_() {
   this->wifi_up_ = this->got_ip_ = false;
-  // URC spelling per the manual's URC table; the B2500 images do not search
-  // for it (they poll AT+QSTAST for "STATION_UP").
+  // The families disagree on the spelling: Venus and Jupiter match
+  // "WLAN DISCONNECTED", the CT002/CT003 "WLAN_DISCONNECTED", the B2500
+  // neither (it polls AT+QSTAST). Each ignores the other form, so send both.
+  this->engine_.send_line("+QSTASTAT:WLAN DISCONNECTED");
   this->engine_.send_line("+QSTASTAT:WLAN_DISCONNECTED");
   if (this->mqtt_conn_ || this->mqtt_open_) {
     // A real module loses its MQTT session with the station.

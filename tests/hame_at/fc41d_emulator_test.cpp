@@ -164,7 +164,7 @@ static void test_boot_and_wifi() {
   h.out.clear();
   h.backend.wifi.connected = false;
   h.tick(10);
-  EXPECT_STR(h.out, "\r\n+QSTASTAT:WLAN_DISCONNECTED\r\n");
+  EXPECT_STR(h.out, "\r\n+QSTASTAT:WLAN DISCONNECTED\r\n\r\n+QSTASTAT:WLAN_DISCONNECTED\r\n");
   EXPECT_STR(h.cmd("AT+QSTAST"), "\r\n+QSTAST:STATION_DOWN\r\n\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QGETWIFISTATE"), "\r\n+QGETWIFISTATE: 0\r\n\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QGETIP=station"), "\r\nERROR\r\n");
