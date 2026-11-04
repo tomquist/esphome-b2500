@@ -9,7 +9,11 @@ response formats and timing of hame_at's emulator (components/hame_at) can
 be checked against a real module.
 
     pip install pyserial
-    python3 tools/fc41d_probe.py /dev/ttyUSB1 --ssid MyWifi --password secret
+    python3 tools/fc41d_probe.py PORT --ssid MyWifi --password secret
+
+PORT is the serial device of the main UART: /dev/cu.usbserial-... or
+/dev/cu.SLAB_USBtoUART... on macOS, /dev/ttyUSB<n> on Linux, COM<n> on
+Windows. Run with --list to see the serial ports and their USB details.
 
 Optional steps:
   --ble-wait 60   advertise as HMA-1_TEST for 60 s: connect with nRF Connect,
@@ -33,6 +37,18 @@ try:
     import serial  # pyserial
 except ImportError:  # pragma: no cover
     sys.exit("pip install pyserial")
+
+
+def list_ports():
+    from serial.tools import list_ports as lp
+
+    ports = sorted(lp.comports(), key=lambda p: p.device)
+    if not ports:
+        print("No serial ports found. Check the USB cable (some only charge) and,")
+        print("on older macOS, the Silicon Labs CP210x driver.")
+    for p in ports:
+        print(f"{p.device:40} {p.description or ''}  {p.hwid or ''}")
+    print("The TE-B has two CP2102N ports: plug in only M_UART_USB to tell which one is the main UART.")
 
 
 class Probe:
@@ -110,16 +126,25 @@ class Probe:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("port", help="module main UART (FC41D-TE-B: M_UART_USB)")
+    ap.add_argument("port", nargs="?", help="module main UART (FC41D-TE-B: M_UART_USB)")
+    ap.add_argument("--list", action="store_true", help="list serial ports and exit")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--ssid", help="Wi-Fi to join (needed for the network steps)")
     ap.add_argument("--password", default="")
     ap.add_argument("--ble-wait", type=int, default=0, help="seconds to wait for a phone on BLE")
     ap.add_argument("--udp-port", type=int, default=0, help="open a UDP service on this port")
     args = ap.parse_args()
+    if args.list or not args.port:
+        list_ports()
+        return
 
     out = time.strftime("fc41d-probe-%Y%m%d-%H%M%S")
-    p = Probe(args.port, args.baud, out, args.password)
+    try:
+        p = Probe(args.port, args.baud, out, args.password)
+    except serial.SerialException as e:
+        print(f"Cannot open {args.port}: {e}\n")
+        list_ports()
+        sys.exit(1)
 
     p.note("press the module's RESET button now to record the boot banner (waiting 8 s)")
     p.wait_for(("ready",), 8)
