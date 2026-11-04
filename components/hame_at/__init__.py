@@ -124,6 +124,17 @@ FINAL_VALIDATE_SCHEMA = uart.final_validate_device_schema(
 
 
 async def to_code(config):
+    # The BK72xx SDK builds mbedTLS with a minimal config (beken378/func/
+    # mbedtls/mbedtls-port/inc/tls_config.h): static RSA key exchange with
+    # AES-CBC only and no SNI. Modern brokers (forward secrecy) and hosts with
+    # several certificates need more; these are compiled in the SDK, only off.
+    for flag in (
+        "MBEDTLS_ECDH_C",
+        "MBEDTLS_GCM_C",
+        "MBEDTLS_KEY_EXCHANGE_ECDHE_RSA_ENABLED",
+        "MBEDTLS_SSL_SERVER_NAME_INDICATION",
+    ):
+        cg.add_build_flag(f"-D{flag}")
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)
