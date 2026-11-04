@@ -19,8 +19,11 @@ Optional steps:
   --ble-wait 60   wait up to 60 s for a phone: connect to HMA-1_TEST with
                   nRF Connect, enable notifications on ff02, and write a few
                   bytes to ff01/ff06 when asked
-  --udp-port N    open a UDP service on port N and wait 20 s for a datagram
-                  (send one with: echo -n hello | nc -u <module-ip> N)
+  --udp-port N    open a UDP service on port N; when asked, send a line
+                  from another terminal: nc -u <module-ip> N, type hello,
+                  Enter (keep nc open: the module answers "pong")
+  --mqtt-host H   MQTT broker without TLS (default test.mosquitto.org), with
+                  --mqtt-port, --mqtt-user, --mqtt-password (masked)
 
 Output: fc41d-probe-<timestamp>.log (readable) and .jsonl (exact bytes).
 The Wi-Fi password is masked in both. The probe joins Wi-Fi with
@@ -54,13 +57,13 @@ def list_ports():
 
 
 class Probe:
-    def __init__(self, port, baud, out, secret):
+    def __init__(self, port, baud, out, secrets):
         self.ser = serial.Serial(port, baud, timeout=0.02)
         self.t0 = time.monotonic()
         self.rx = bytearray()
         self.lock = threading.Condition()
         self.stop = False
-        self.secret = secret
+        self.secrets = [x for x in secrets if x]
         self.log = open(out + ".log", "w", encoding="utf-8")
         self.jsonl = open(out + ".jsonl", "w", encoding="utf-8")
         threading.Thread(target=self._reader, daemon=True).start()
@@ -70,8 +73,8 @@ class Probe:
 
     def _record(self, direction, data):
         t = self.now()
-        if self.secret:
-            data = data.replace(self.secret.encode("latin1"), b"***")
+        for secret in self.secrets:
+            data = data.replace(secret.encode("latin1"), b"***")
         text = data.decode("latin1")
         self.jsonl.write(json.dumps({"t": round(t, 4), "dir": direction, "hex": data.hex(), "text": text}) + "\n")
         shown = text.replace("\r", "\\r").replace("\n", "\\n")
@@ -174,6 +177,10 @@ def main():
     ap.add_argument("--password", default="")
     ap.add_argument("--ble-wait", type=int, default=0, help="seconds to wait for a phone on BLE")
     ap.add_argument("--udp-port", type=int, default=0, help="open a UDP service on this port")
+    ap.add_argument("--mqtt-host", default="test.mosquitto.org", help="MQTT broker without TLS (e.g. Home Assistant's)")
+    ap.add_argument("--mqtt-port", type=int, default=1883)
+    ap.add_argument("--mqtt-user", default="")
+    ap.add_argument("--mqtt-password", default="")
     args = ap.parse_args()
     if args.list or not args.port:
         list_ports()
@@ -181,7 +188,7 @@ def main():
 
     out = time.strftime("fc41d-probe-%Y%m%d-%H%M%S")
     try:
-        p = Probe(args.port, args.baud, out, args.password)
+        p = Probe(args.port, args.baud, out, [args.password, args.mqtt_password])
     except serial.SerialException as e:
         print(f"Cannot open {args.port}: {e}\n")
         list_ports()
@@ -225,15 +232,17 @@ def main():
         p.cmd("AT+QHTTPGET=60", settle=0.1)
         p.wait_for(("+QHTTPGET",), 65)
         p.quiet(1)
-        p.cmd("AT+QHTTPREAD=60", timeout=65)
+        # The body runs straight into "OK" ("..._0_0_0OK"): wait for the URC.
+        p.cmd("AT+QHTTPREAD=60", wait=("+QHTTPREAD:",), timeout=65)
 
-        p.note("MQTT against a public test broker, no TLS")
+        p.note(f"MQTT against {args.mqtt_host}:{args.mqtt_port}, no TLS")
         p.cmd('AT+QMTCFG="version",0,4')
         p.cmd('AT+QMTCFG="keepalive",0,60')
-        p.cmd('AT+QMTOPEN=0,"test.mosquitto.org",1883', settle=0.1)
+        p.cmd(f'AT+QMTOPEN=0,"{args.mqtt_host}",{args.mqtt_port}', settle=0.1)
         p.wait_for(("+QMTOPEN",), 30)
         p.quiet(0.5)
-        p.cmd('AT+QMTCONN=0,"fc41d-probe"', settle=0.1)
+        login = f',"{args.mqtt_user}","{args.mqtt_password}"' if args.mqtt_user else ""
+        p.cmd(f'AT+QMTCONN=0,"fc41d-probe"{login}', settle=0.1)
         p.wait_for(("+QMTCONN",), 30)
         p.quiet(0.5)
         topic = "fc41d-probe/" + out
@@ -249,14 +258,32 @@ def main():
         p.cmd("AT+QMTCLOSE=0", settle=1)
 
         if args.udp_port:
-            p.note(f"UDP service on port {args.udp_port}: send a datagram to the module now (20 s)")
-            p.cmd(f'AT+QIOPEN=1,"UDP SERVICE","127.0.0.1",0,{args.udp_port},0', settle=0.1)
+            port = args.udp_port
+            p.note(f"UDP service on port {port}, buffer mode: send a line from nc now (30 s)")
+            p.cmd(f'AT+QIOPEN=1,"UDP SERVICE","127.0.0.1",0,{port},0', settle=0.1)
             p.wait_for(("+QIOPEN",), 10)
-            p.wait_for(('+QIURC: "recv"',), 20)
+            p.wait_for(('+QIURC: "recv"',), 30)
             p.quiet(1)
             p.cmd("AT+QIRD=1,0")
             p.cmd("AT+QIRD=1,1500")
-            p.cmd("AT+QICLOSE=1")
+            m = re.search(r'\+QIRD: \d+,"([\d.]+)",(\d+)', p.rx.decode("latin1"))
+            p.cmd("AT+QICLOSE=1", settle=1)
+
+            p.note(f"UDP service on port {port}, push mode as the B2500 opens it: send another line (30 s)")
+            p.cmd(f'AT+QIOPEN=1,"UDP SERVICE","127.0.0.1",0,{port},1', settle=0.1)
+            p.wait_for(("+QIOPEN",), 10)
+            p.wait_for(('+QIURC: "recv"',), 30)
+            p.quiet(1)
+            if m:
+                ip, rport = m.group(1), m.group(2)
+                p.note(f"reply to {ip}:{rport} as the B2500 sends: nc should print 'pong' twice")
+                p.cmd(f'AT+QISEND=1,4,"pong","{ip}",{rport}', settle=1)
+                p.cmd(f'AT+QISEND=1,5,"{ip}",{rport}', wait=(">",), settle=0.2)
+                p.send("pong\n")
+                p.wait_for((FINAL,), 5)
+                p.quiet(1)
+            p.cmd("AT+QISTATE?")
+            p.cmd("AT+QICLOSE=1", settle=1)
 
     p.note("BLE setup as the B2500 MCU does it")
     p.cmd("AT+QBLEINIT=2")
