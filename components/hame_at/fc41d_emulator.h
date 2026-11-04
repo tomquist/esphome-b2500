@@ -128,8 +128,8 @@ class Fc41dEmulator {
   static constexpr uint32_t BOOT_MS = 1000;            // "ready" after power-up / AT+QRST (stock: ~1.1 s)
   static constexpr uint32_t WIFI_IDLE_MS = 2500;       // announce Wi-Fi only once the MCU is quiet...
   static constexpr uint32_t WIFI_MAX_MS = 20000;       // ...but no later than this after boot
-  static constexpr uint32_t DHCP_MS = 300;             // GOT_IP after WLAN_CONNECTED
-  static constexpr uint32_t WIFI_JOIN_MS = 1500;       // after AT+QSTAAPINFO[DEF]
+  static constexpr uint32_t DHCP_MS = 100;             // GOT_IP after WLAN_CONNECTED (stock: 100 ms)
+  static constexpr uint32_t WIFI_JOIN_MS = 3000;       // after AT+QSTAAPINFO[DEF] (stock: 3.2 s)
   static constexpr uint32_t REANNOUNCE_MS = 8000;      // re-announce if the MCU ignored GOT_IP
   static constexpr uint8_t REANNOUNCE_MAX = 3;
   static constexpr size_t TRAN_CHUNK = 244;            // notification size in transparent mode (MTU 247)
@@ -191,6 +191,9 @@ class Fc41dEmulator {
   struct Socket {
     SocketSpec spec;
     std::string rx;
+    std::string rx_ip;  // sender of the buffered data (UDP SERVICE)
+    int rx_port{0};
+    bool closed{false};  // "+QIURC: closed" already sent
     uint32_t rx_total{0};
     uint32_t tx_total{0};
   };

@@ -139,7 +139,7 @@ static void test_boot_and_wifi() {
   }
   EXPECT(h.out.find("QSTASTAT") == std::string::npos);
   EXPECT(!h.emu.wifi_announced());
-  // Quiet for 2.5 s: WLAN_CONNECTED, then GOT_IP 300 ms later.
+  // Quiet for 2.5 s: WLAN_CONNECTED, then GOT_IP 100 ms later.
   h.out.clear();
   uint32_t quiet_since = h.now - 1000;  // the last AT was 1000 ms ago
   while (h.out.empty() && h.now - quiet_since < 5000)
@@ -147,7 +147,7 @@ static void test_boot_and_wifi() {
   EXPECT(h.now - quiet_since >= Fc41dEmulator::WIFI_IDLE_MS);
   EXPECT_STR(h.out, "\r\n+QSTASTAT:WLAN_CONNECTED\r\n");
   h.out.clear();
-  h.tick(290);
+  h.tick(Fc41dEmulator::DHCP_MS - 10);
   EXPECT_STR(h.out, "");
   h.tick(20);
   EXPECT_STR(h.out, "\r\n+QSTASTAT:GOT_IP\r\n");
@@ -155,7 +155,7 @@ static void test_boot_and_wifi() {
 
   EXPECT_STR(h.cmd("AT+QSTAST"), "\r\n+QSTAST:STATION_UP\r\n\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QGETWIFISTATE"),
-             "\r\n+QGETWIFISTATE: ssid=home,bssid=11:22:33:44:55:66,rssi=-61,channel=6\r\n\r\nOK\r\n");
+             "\r\n+QGETWIFISTATE:ssid=home,bssid=11:22:33:44:55:66,rssi=-61,channel=6,cipher_type=CCMP\r\n\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QGETIP=station"),
              "\r\n+QGETIP:ip:192.168.1.50,gate:192.168.1.1,mask:255.255.255.0,dns:192.168.1.1\r\n\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QWLMAC"), "\r\n+QWLMAC:c8:47:8c:00:00:01\r\n\r\nOK\r\n");
@@ -166,8 +166,9 @@ static void test_boot_and_wifi() {
   h.tick(10);
   EXPECT_STR(h.out, "\r\n+QSTASTAT:WLAN DISCONNECTED\r\n\r\n+QSTASTAT:WLAN_DISCONNECTED\r\n");
   EXPECT_STR(h.cmd("AT+QSTAST"), "\r\n+QSTAST:STATION_DOWN\r\n\r\nOK\r\n");
-  EXPECT_STR(h.cmd("AT+QGETWIFISTATE"), "\r\n+QGETWIFISTATE: 0\r\n\r\nOK\r\n");
-  EXPECT_STR(h.cmd("AT+QGETIP=station"), "\r\nERROR\r\n");
+  EXPECT_STR(h.cmd("AT+QGETWIFISTATE"), "\r\nERROR\r\n");
+  EXPECT_STR(h.cmd("AT+QGETIP=station"),
+             "\r\n+QGETIP:ip:0.0.0.0,gate:0.0.0.0,mask:0.0.0.0,dns:0.0.0.0\r\n\r\nOK\r\n");
   h.backend.wifi.connected = true;
   h.out.clear();
   h.tick(3000);
@@ -482,7 +483,8 @@ static void test_sockets() {
   h.emu.socket_received(1, "HME-4|1|2|3", "192.168.1.20", 12345);
   EXPECT_STR(h.out, "\r\n+QIURC: \"recv\",1\r\n");
   EXPECT_STR(h.cmd("AT+QIRD=1,0"), "\r\n+QIRD: 11,0,11\r\n\r\nOK\r\n");
-  EXPECT_STR(h.cmd("AT+QIRD=1,1500"), "\r\n+QIRD: 11\r\nHME-4|1|2|3\r\nOK\r\n");
+  // UDP SERVICE: with the sender, as the stock module.
+  EXPECT_STR(h.cmd("AT+QIRD=1,1500"), "\r\n+QIRD: 11,\"192.168.1.20\",12345\r\nHME-4|1|2|3\r\nOK\r\n");
   // Push mode (mode 1) delivers the data with the URC.
   h.cmd("AT+QIOPEN=2,\"UDP SERVICE\",\"127.0.0.1\",0,22222,1");
   h.out.clear();

@@ -274,13 +274,18 @@ void Fc41dEmulator::socket_received(int id, const std::string &data, const std::
     this->engine_.send_raw(data);
   } else {
     s.rx += data;
+    s.rx_ip = ip;
+    s.rx_port = port;
     this->engine_.send_line("+QIURC: \"recv\"," + std::to_string(id));
   }
 }
 
 void Fc41dEmulator::socket_closed(int id) {
-  if (this->sockets_.count(id))
+  auto it = this->sockets_.find(id);
+  if (it != this->sockets_.end() && !it->second.closed) {
+    it->second.closed = true;
     this->engine_.send_line("+QIURC: \"closed\"," + std::to_string(id));
+  }
 }
 
 void Fc41dEmulator::socket_sent_(Socket &s, const std::string &data, const std::string &ip, int port) {
@@ -374,25 +379,26 @@ void Fc41dEmulator::register_handlers_() {
   e.on("QGETWIFISTATE", [this](AtEngine &e, const AtCommand &) {
     this->wifi_asked_ = true;
     if (!this->wifi_up_) {
-      e.send_line("+QGETWIFISTATE: 0");
-      e.ok();
+      e.error();  // stock module, station down
       return;
     }
-    // key=value, not the manual's positional form: every family searches for
-    // "ssid=" (most also "rssi="); a B2500 that misses it polls every 80 ms
-    // from its 10-minute Wi-Fi check on and starves its CT polls (seen in the
-    // firmware emulator).
+    // key=value, not the manual's positional form (stock module:
+    // "+QGETWIFISTATE:ssid=x,bssid=44:4e:..,rssi=-79,channel=1,cipher_type=CCMP"):
+    // every family searches for "ssid=" (most also "rssi="); a B2500 that
+    // misses it polls every 80 ms from its 10-minute Wi-Fi check on and starves
+    // its CT polls (seen in the firmware emulator).
     WifiStatus st = this->backend_->wifi_status();
-    char buf[160];
-    snprintf(buf, sizeof(buf), "+QGETWIFISTATE: ssid=%s,bssid=%s,rssi=%d,channel=%d", st.ssid.c_str(),
-             st.bssid.c_str(), st.rssi, st.channel);
+    char buf[192];
+    snprintf(buf, sizeof(buf), "+QGETWIFISTATE:ssid=%s,bssid=%s,rssi=%d,channel=%d,cipher_type=CCMP", st.ssid.c_str(),
+             lower_mac(st.bssid).c_str(), st.rssi, st.channel);
     e.send_line(buf);
     e.ok();
   });
   e.on("QGETIP", [this](AtEngine &e, const AtCommand &) {
     this->wifi_asked_ = true;
     if (!this->got_ip_) {
-      e.error();
+      e.send_line("+QGETIP:ip:0.0.0.0,gate:0.0.0.0,mask:0.0.0.0,dns:0.0.0.0");  // stock module
+      e.ok();
       return;
     }
     WifiStatus st = this->backend_->wifi_status();
@@ -485,6 +491,10 @@ void Fc41dEmulator::register_handlers_() {
       data.assign(text.begin(), text.end());
     } else {
       e.error();
+      return;
+    }
+    if (!this->ble_session_) {
+      e.error();  // stock module: no central connected
       return;
     }
     e.ok();
@@ -889,13 +899,24 @@ void Fc41dEmulator::register_handlers_() {
     }
     std::string data = s.rx.substr(0, static_cast<size_t>(n));
     s.rx.erase(0, data.size());
-    e.send_raw("\r\n+QIRD: " + std::to_string(data.size()) + "\r\n" + data + "\r\nOK\r\n");
+    // Stock module, UDP SERVICE: '+QIRD: 5,"192.168.178.96",51494'.
+    std::string hdr = "+QIRD: " + std::to_string(data.size());
+    if (s.spec.kind == "UDP SERVICE" && !s.rx_ip.empty())
+      hdr += ",\"" + s.rx_ip + "\"," + std::to_string(s.rx_port);
+    e.send_raw("\r\n" + hdr + "\r\n" + data + "\r\nOK\r\n");
   });
   e.on("QICLOSE", [this](AtEngine &e, const AtCommand &cmd) {
     int id = static_cast<int>(cmd.arg_int(0, -1));
-    if (this->sockets_.erase(id))
+    auto it = this->sockets_.find(id);
+    bool open = it != this->sockets_.end();
+    bool announce = open && !it->second.closed;
+    if (open) {
+      this->sockets_.erase(it);
       this->backend_->socket_close(id);
+    }
     e.ok();
+    if (announce)  // stock module: right after OK
+      e.send_line("+QIURC: \"closed\"," + std::to_string(id));
   });
   e.on("QISTATE", [this](AtEngine &e, const AtCommand &) {
     for (auto &kv : this->sockets_) {
