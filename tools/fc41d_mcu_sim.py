@@ -149,7 +149,8 @@ class Sim:
 
     def notify(self, data):
         self.send(f"AT+QBLEGATTSNTFY=ff02,{len(data)},{data.hex()}")
-        self.send(f"AT+QBLEGATTSNTFY=ff02,{CELLS}")
+        if data[:1] == b"\x73":  # an app frame: the battery also sends its cell info
+            self.send(f"AT+QBLEGATTSNTFY=ff02,{CELLS}")
 
     def upload(self, kind, path):
         with open(path, "rb") as f:
@@ -173,7 +174,9 @@ class Sim:
             self.send(f"AT+QBLEGATTSCHAR={c}")
         self.send("AT+QBLEADVPARAM=150,150")
         self.send("AT+QBLEADVSTART")
-        self.send("AT+QBLETRANMODE=ff02")
+        # No AT+QBLETRANMODE here: it switches the module to transparent mode
+        # at once (no AT answers until "+++"). The B2500 sends it only for
+        # bulk transfers from the app, never during setup.
         self.send("AT+QSTAST", wait=("+QSTAST",))
         # Like the battery: no network use before the station has an address.
         if not self.wait_line("+QSTASTAT:GOT_IP", 30):
