@@ -51,13 +51,23 @@ class LtTransport : public Transport {
       std::string err;
       if (!this->tls_.start(this->tcp_->fd(), host, tls->ca, tls->client_cert, tls->client_key, CONNECT_TIMEOUT_MS,
                             err)) {
-        char heap[48];
-        snprintf(heap, sizeof(heap), "; heap %u B free before", static_cast<unsigned>(heap_before));
+        char heap[80];
+        snprintf(heap, sizeof(heap), "; heap %u B free before, %u B at the lowest", static_cast<unsigned>(heap_before),
+                 static_cast<unsigned>(this->tls_.handshake_stats().lowest_free));
         this->last_error_ = "TLS " + err + heap;
         this->close();
         return false;
       }
       this->secure_ = true;
+      const auto &st = this->tls_.handshake_stats();
+      char info[128];
+      snprintf(info, sizeof(info),
+               "TLS handshake %u ms; heap %u B free before, %u B at the lowest (largest block %u B), %u B after",
+               static_cast<unsigned>(st.ms), static_cast<unsigned>(heap_before), static_cast<unsigned>(st.lowest_free),
+               static_cast<unsigned>(st.largest_alloc), static_cast<unsigned>(lt_heap_get_free()));
+      this->info_ = info;
+    } else {
+      this->info_.clear();
     }
     this->last_error_.clear();
     return true;
@@ -116,12 +126,14 @@ class LtTransport : public Transport {
     this->tcp_ = nullptr;
   }
   std::string last_error() const override { return this->last_error_; }
+  std::string connect_info() const override { return this->info_; }
 
  protected:
   WiFiClient *tcp_{nullptr};
   TlsSession tls_;
   bool secure_{false};
   std::string last_error_;
+  std::string info_;
 };
 
 // ---------------------------------------------------------------------------

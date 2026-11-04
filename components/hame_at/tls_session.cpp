@@ -60,6 +60,41 @@ static constexpr size_t IN_BUF_KEEP = 4096;
 static constexpr size_t OUT_BUF_KEEP = 512;
 static constexpr size_t SEND_CHUNK = 480;  // + 5 header bytes must fit OUT_BUF_KEEP
 
+// Pass-through to the SDK allocator that notes how low the heap gets while
+// mbedTLS allocates (set only during start(); the net worker is the only
+// mbedTLS user, so plain counters will do).
+extern "C" void *tls_mbedtls_mem_calloc(size_t n, size_t size);
+extern "C" void tls_mbedtls_mem_free(void *ptr);
+static TlsSession::HandshakeStats *g_stats = nullptr;
+
+static void *counting_calloc(size_t n, size_t size) {
+  void *p = tls_mbedtls_mem_calloc(n, size);
+  if (g_stats != nullptr && p != nullptr) {
+    const uint32_t free_now = lt_heap_get_free();
+    if (g_stats->allocs == 0 || free_now < g_stats->lowest_free)
+      g_stats->lowest_free = free_now;
+    if (n * size > g_stats->largest_alloc)
+      g_stats->largest_alloc = n * size;
+    g_stats->allocs++;
+  }
+  return p;
+}
+
+namespace {
+struct CountAllocs {
+  explicit CountAllocs(TlsSession::HandshakeStats *s) {
+    *s = TlsSession::HandshakeStats{};
+    s->lowest_free = lt_heap_get_free();
+    g_stats = s;
+    mbedtls_platform_set_calloc_free(counting_calloc, tls_mbedtls_mem_free);
+  }
+  ~CountAllocs() {
+    mbedtls_platform_set_calloc_free(tls_mbedtls_mem_calloc, tls_mbedtls_mem_free);
+    g_stats = nullptr;
+  }
+};
+}  // namespace
+
 static std::string code(const char *where, int ret) {
   char buf[64];
   snprintf(buf, sizeof(buf), "%s: -0x%04X", where, static_cast<unsigned>(-ret));
@@ -76,6 +111,13 @@ TlsSession::~TlsSession() {
 bool TlsSession::start(int fd, const std::string &host, const std::string &ca, const std::string &cert,
                        const std::string &key, uint32_t timeout_ms, std::string &err) {
   this->finish();
+  const uint32_t t0 = millis();
+  CountAllocs counting(&this->stats_);
+  struct Elapsed {
+    TlsSession::HandshakeStats &st;
+    uint32_t t0;
+    ~Elapsed() { st.ms = millis() - t0; }
+  } elapsed{this->stats_, t0};
   Impl &s = *this->impl_;
   s.fd = fd;
   mbedtls_ssl_init(&s.ssl);

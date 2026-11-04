@@ -33,12 +33,23 @@ class TlsSession {
   void finish();
   const std::string &last_error() const { return this->error_; }
 
+  /// Memory seen during the last start(): free heap after each mbedTLS
+  /// allocation, lowest value, and the largest single allocation.
+  struct HandshakeStats {
+    uint32_t ms{0};
+    uint32_t lowest_free{0};
+    uint32_t largest_alloc{0};
+    uint32_t allocs{0};
+  };
+  const HandshakeStats &handshake_stats() const { return this->stats_; }
+
  protected:
   void trim_after_handshake_();
   void shrink_buffers_();
   struct Impl;
   Impl *impl_;
   std::string error_;
+  HandshakeStats stats_;
 };
 
 }  // namespace esphome::hame_at

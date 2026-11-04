@@ -218,7 +218,10 @@ void CloudLink::service(uint32_t now_ms) {
         this->state_ = State::CONNECTED;
         this->connect_count_++;
         this->backoff_ms_ = BACKOFF_MIN_MS;
-        this->log_line_("cloud: connected");
+        {
+          const std::string info = this->transport_->connect_info();
+          this->log_line_(info.empty() ? "cloud: connected" : "cloud: connected; " + info);
+        }
         for (auto &t : this->topics_)
           this->subscribe_now_(t);
         while (!this->queue_.empty()) {

@@ -46,6 +46,8 @@ class Transport {
   virtual void close() = 0;
   /// Why the last connect() failed, for the log.
   virtual std::string last_error() const { return ""; }
+  /// Details of the last successful connect() for the log (e.g. TLS memory).
+  virtual std::string connect_info() const { return ""; }
 };
 
 class CloudLink {
