@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include <lwip/sockets.h>
+#include <mbedtls/ctr_drbg.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/platform.h>
 #include <mbedtls/ssl.h>
@@ -30,10 +31,56 @@ struct TlsSession::Impl {
   mbedtls_pk_context key;
 };
 
-static int tls_random(void *, unsigned char *out, size_t len) {
-  lt_rand_bytes(out, len);
+// Randomness. Not lt_rand_bytes(): it is rand() (predictable keys), and it
+// stores 32-bit words through an int* cast, which on this ARMv5TE core lands
+// on the aligned-down address when `out` is unaligned. mbedTLS asks for the
+// RSA premaster's 46 random bytes at an unaligned address right after the 2
+// version bytes, so those got overwritten; the server then rejected our
+// Finished with bad_record_mac whenever it chose RSA key exchange.
+// Instead: mbedTLS's CTR-DRBG, seeded from the BK7231N's hardware TRNG
+// (registers of the SDK's irda driver; not on the original BK7231).
+static constexpr uintptr_t TRNG_CTRL = 0x00802480;
+static constexpr uintptr_t TRNG_DATA = 0x00802484;
+static constexpr uint32_t TRNG_EN = 1;
+
+static uint32_t trng_word() {
+  volatile uint32_t *ctrl = reinterpret_cast<volatile uint32_t *>(TRNG_CTRL);
+  volatile uint32_t *data = reinterpret_cast<volatile uint32_t *>(TRNG_DATA);
+  *ctrl = *ctrl | TRNG_EN;
+  const uint32_t v = *data;
+  *ctrl = *ctrl & ~TRNG_EN;
+  return v;
+}
+
+static int trng_entropy(void *, unsigned char *out, size_t len) {
+  while (len > 0) {
+    const uint32_t w = trng_word();
+    const size_t n = len < sizeof(w) ? len : sizeof(w);
+    memcpy(out, &w, n);  // byte-wise: `out` may be unaligned
+    out += n;
+    len -= n;
+  }
   return 0;
 }
+
+static mbedtls_ctr_drbg_context g_drbg;
+static bool g_drbg_ready = false;
+
+static bool drbg_seed() {
+  if (g_drbg_ready)
+    return true;
+  mbedtls_ctr_drbg_init(&g_drbg);
+  static const unsigned char PERS[] = "hame_at tls";
+  if (mbedtls_ctr_drbg_seed(&g_drbg, trng_entropy, nullptr, PERS, sizeof(PERS) - 1) != 0) {
+    mbedtls_ctr_drbg_free(&g_drbg);
+    return false;
+  }
+  g_drbg_ready = true;
+  return true;
+}
+
+// Only the net worker task runs TLS sessions, so the DRBG needs no lock.
+static int tls_random(void *, unsigned char *out, size_t len) { return mbedtls_ctr_drbg_random(&g_drbg, out, len); }
 
 static constexpr int ERR_NET_SEND_FAILED = -0x004E;
 static constexpr int ERR_NET_RECV_FAILED = -0x004C;
@@ -177,6 +224,10 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
   mbedtls_pk_init(&s.key);
   s.started = true;
 
+  if (!drbg_seed()) {
+    err = "random number generator: seeding failed";
+    return false;
+  }
   int ret = mbedtls_ssl_config_defaults(&s.conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM,
                                         MBEDTLS_SSL_PRESET_DEFAULT);
   if (ret != 0) {
