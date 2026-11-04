@@ -78,6 +78,8 @@ bk72xx_ble_server:
   # Replaced by the name the battery sets (AT+QBLENAME) before advertising.
   name: B2500
   service_uuid: 0xFF00
+  # Advertise with the stock module's BLE address, as the battery's app knows it.
+  mac_address: ${ble_mac}
   # As the stock module creates them (AT+QBLEGATTSCHAR): write + notify each.
   characteristics:
     - uuid: 0xFF01

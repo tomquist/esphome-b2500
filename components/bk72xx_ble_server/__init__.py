@@ -15,7 +15,14 @@ from esphome import automation
 import esphome.codegen as cg
 from esphome.components import bk72xx_ble
 import esphome.config_validation as cv
-from esphome.const import CONF_DATA, CONF_ID, CONF_NAME, CONF_TRIGGER_ID, CONF_UUID
+from esphome.const import (
+    CONF_DATA,
+    CONF_ID,
+    CONF_MAC_ADDRESS,
+    CONF_NAME,
+    CONF_TRIGGER_ID,
+    CONF_UUID,
+)
 import esphome.final_validate as fv
 
 CODEOWNERS = ["@tomquist"]
@@ -112,6 +119,10 @@ CONFIG_SCHEMA = cv.Schema(
         # Advertise as soon as the service exists. Off: only after
         # start_advertising() (hame_at lets the battery MCU decide).
         cv.Optional(CONF_AUTO_ADVERTISE, default=True): cv.boolean,
+        # Public BLE address. Default: the BDK's, the Wi-Fi MAC with the last
+        # byte + 1. A Quectel FC41D keeps its own in the config sector, which
+        # the battery app may know the module by.
+        cv.Optional(CONF_MAC_ADDRESS): cv.mac_address,
         cv.Required(CONF_CHARACTERISTICS): cv.All(
             cv.ensure_list(CHARACTERISTIC_SCHEMA), cv.Length(min=1, max=8), _unique_uuids
         ),
@@ -177,6 +188,15 @@ async def to_code(config):
         await automation.build_automation(var.get_on_disconnect_trigger(), [], conf)
 
     cg.add_define("USE_BK72XX_BLE_SERVER")
+    if CONF_MAC_ADDRESS in config:
+        # The BDK takes the BLE address from wifi_get_mac_address() in
+        # bdaddr_env_init(); bdaddr_override.c answers that one call.
+        mac = config[CONF_MAC_ADDRESS].parts
+        cg.add_define(
+            "USE_BK72XX_BLE_SERVER_MAC",
+            cg.RawExpression("{" + ",".join(f"0x{b:02X}" for b in mac) + "}"),
+        )
+        cg.add_build_flag("-Wl,--wrap=wifi_get_mac_address")
 
 
 DATA_ACTION_SCHEMA = cv.Schema(

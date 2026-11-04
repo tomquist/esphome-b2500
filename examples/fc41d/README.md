@@ -15,7 +15,9 @@ battery needs no external ESP32: it shows up in Home Assistant directly.
 Components (in `components/`):
 
 - `bk72xx_ble_server`: BLE GATT server (peripheral) for the BK7231N, on
-  top of esphome's `bk72xx_ble`.
+  top of esphome's `bk72xx_ble`. `mac_address:` sets the public BLE address
+  (the stock module's own one is in its config sector; ESPHome would
+  otherwise use the Wi-Fi MAC + 1).
 - `hame_at`: the AT firmware emulator. It covers system, Wi-Fi, BLE, MQTT,
   certificate upload, HTTP and TCP/UDP sockets (the CT and Shelly meter
   path). Optional cloud forwarding uses the broker, credentials and
