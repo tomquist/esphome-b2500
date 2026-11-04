@@ -291,6 +291,7 @@ void HameAtComponent::mqtt_subscribed(const std::string &topic) {
 void HameAtComponent::mqtt_publish(const std::string &topic, const std::string &payload, bool retain) {
   ESP_LOGD(TAG, "MCU -> %s: %s", topic.c_str(), payload.c_str());
   this->on_mcu_publish_.trigger(topic, payload);
+  this->publish_callbacks_.call(topic, payload);
   if (this->worker_started_ && this->mqtt_forwarding_())
     this->worker_.publish(topic, payload, retain);
 }

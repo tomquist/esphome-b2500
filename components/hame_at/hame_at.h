@@ -77,6 +77,12 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   void ble_write_to_mcu(const std::vector<uint8_t> &data, uint16_t uuid = 0xFF01);
 
   Trigger<std::string, std::string> *get_mcu_publish_trigger() { return &this->on_mcu_publish_; }
+  /// C++ consumers (e.g. hame_device) of the MCU's MQTT publishes.
+  void add_on_mcu_publish_callback(std::function<void(const std::string &, const std::string &)> &&cb) {
+    this->publish_callbacks_.add(std::move(cb));
+  }
+  /// The MCU has an MQTT session with a subscription, so send_to_mcu() works.
+  bool mcu_ready() { return !this->emulator_.mqtt_topics().empty(); }
   Trigger<std::vector<uint8_t>> *get_ble_notify_trigger() { return &this->on_ble_notify_; }
   /// C++ consumers (e.g. a B2500 decoder) of MCU notifications.
   void add_on_ble_notify_callback(std::function<void(uint16_t, const std::vector<uint8_t> &)> &&cb) {
@@ -150,6 +156,7 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   Trigger<std::string, std::string> on_mcu_publish_;
   Trigger<std::vector<uint8_t>> on_ble_notify_;
   CallbackManager<void(uint16_t, const std::vector<uint8_t> &)> notify_callbacks_;
+  CallbackManager<void(const std::string &, const std::string &)> publish_callbacks_;
 };
 
 #ifdef USE_SWITCH
