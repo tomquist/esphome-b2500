@@ -47,7 +47,12 @@ void HameAtComponent::setup() {
   this->emulator_.engine().set_output([this](const uint8_t *data, size_t len) { this->write_array(data, len); });
   this->emulator_.engine().set_line_logger([](bool from_mcu, const std::string &line) {
     // Payloads can carry credentials (QMTCONN) and keys (QSSLCERT data is
-    // never a line); keep the transcript at VERBOSE.
+    // never a line); keep the transcript at VERBOSE. Bytes that were not a
+    // command (lost on the UART) are worth a warning: the MCU gets no answer.
+    if (from_mcu && (line.rfind("<garbage>", 0) == 0 || line.rfind("<incomplete>", 0) == 0)) {
+      ESP_LOGW(TAG, "MCU sent %s", line.substr(0, 48).c_str());
+      return;
+    }
     ESP_LOGV(TAG, "%s %s", from_mcu ? "MCU>" : "<MOD", line.c_str());
   });
 

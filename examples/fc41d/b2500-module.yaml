@@ -30,9 +30,12 @@ substitutions:
 esphome:
   name: ${name}
   platformio_options:
-    # uart.rx_buffer_size is ignored on bk72xx; the MCU sends long AT lines.
+    # uart.rx_buffer_size is ignored on bk72xx; the MCU sends long AT lines
+    # (status ~550 bytes, certificates ~1.7 KB). LibreTiny allocates this
+    # buffer on the heap for every UART it opens (the logger's too), so it is
+    # 4 KB, not more: about 350 ms of uninterrupted MCU traffic.
     build_flags:
-      - -DLT_SERIAL_BUFFER_SIZE=8192
+      - -DLT_SERIAL_BUFFER_SIZE=4096
 
 bk72xx:
   board: generic-bk7231n-qfn32

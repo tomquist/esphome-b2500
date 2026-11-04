@@ -88,9 +88,12 @@ class HameDeviceSensor : public sensor::Sensor, public HameDeviceListener {
       return;
     }
     this->dropped_once_ = false;
+    const bool changed = !this->has_last_ || v != this->last_;
     this->has_last_ = true;
     this->last_ = v;
-    this->publish_state(static_cast<float>(v));
+    // Only changes: a status message updates dozens of entities at once.
+    if (changed)
+      this->publish_state(static_cast<float>(v));
   }
 
  protected:
@@ -108,7 +111,7 @@ class HameDeviceBinarySensor : public binary_sensor::BinarySensor, public HameDe
   BoolField &field() { return this->field_; }
   void on_message(const KvMap &msg) override {
     bool v;
-    if (this->field_.extract(msg, v))
+    if (this->field_.extract(msg, v) && (!this->has_state() || v != this->state))
       this->publish_state(v);
   }
 
@@ -131,19 +134,28 @@ class HameDeviceTextSensor : public text_sensor::TextSensor, public HameDeviceLi
     auto it = msg.find(this->key_);
     if (it == msg.end())
       return;
+    std::string out;
+    bool mapped = false;
     for (const auto &m : this->map_) {
       if (m.first == it->second) {
-        this->publish_state(m.second);
-        return;
+        out = m.second;
+        mapped = true;
+        break;
       }
     }
-    std::string padded;
-    if (this->time_ && pad_time(it->second, padded)) {
-      this->publish_state(padded);
-    } else if (this->default_ != nullptr) {
-      this->publish_state(this->default_);
-    } else {
-      this->publish_state(this->map_.empty() ? it->second : "unknown (" + it->second + ")");
+    if (!mapped) {
+      std::string padded;
+      if (this->time_ && pad_time(it->second, padded)) {
+        out = padded;
+      } else if (this->default_ != nullptr) {
+        out = this->default_;
+      } else {
+        out = this->map_.empty() ? it->second : "unknown (" + it->second + ")";
+      }
+    }
+    if (!this->published_ || out != this->state) {
+      this->published_ = true;
+      this->publish_state(out);
     }
   }
 
@@ -152,6 +164,7 @@ class HameDeviceTextSensor : public text_sensor::TextSensor, public HameDeviceLi
   std::vector<std::pair<const char *, const char *>> map_;
   const char *default_{nullptr};
   bool time_{false};
+  bool published_{false};
 };
 #endif
 
@@ -164,15 +177,23 @@ class HameDeviceNumber : public number::Number, public HameDeviceListener, publi
   void set_command(const char *c) { this->command_ = c; }
   void on_message(const KvMap &msg) override {
     double v;
-    if (this->field_.touches(msg) && this->field_.extract(msg, v))
+    if (this->field_.touches(msg) && this->field_.extract(msg, v) && (!this->published_ || v != this->last_)) {
+      this->published_ = true;
+      this->last_ = v;
       this->publish_state(static_cast<float>(v));
+    }
   }
 
  protected:
+  bool published_{false};
+  double last_{0};
   void control(float value) override {
     const double raw = value / (this->field_.multiply != 0 ? this->field_.multiply : 1.0);
-    if (this->parent_->send_command(this->command_, format_number(raw), this->message_))
+    if (this->parent_->send_command(this->command_, format_number(raw), this->message_)) {
+      this->published_ = true;
+      this->last_ = value;
       this->publish_state(value);
+    }
   }
   NumberField field_;
   const char *command_{""};
@@ -193,7 +214,10 @@ class HameDeviceSelect : public select::Select, public HameDeviceListener, publi
       return;
     for (const auto &c : this->codes_) {
       if (c.first == it->second) {
-        this->publish_state(c.second);
+        if (c.second != this->last_) {
+          this->last_ = c.second;
+          this->publish_state(c.second);
+        }
         return;
       }
     }
@@ -203,14 +227,17 @@ class HameDeviceSelect : public select::Select, public HameDeviceListener, publi
   void control(const std::string &label) override {
     for (const auto &c : this->codes_) {
       if (c.second == label) {
-        if (this->parent_->send_command(this->command_, c.first, this->message_))
+        if (this->parent_->send_command(this->command_, c.first, this->message_)) {
+          this->last_ = c.second;
           this->publish_state(label);
+        }
         return;
       }
     }
   }
   const char *key_{""};
   const char *command_{""};
+  const char *last_{nullptr};  ///< last published label
   std::vector<std::pair<const char *, const char *>> codes_;
 };
 #endif
@@ -225,11 +252,14 @@ class HameDeviceSwitch : public switch_::Switch, public HameDeviceListener, publ
   }
   void on_message(const KvMap &msg) override {
     bool v;
-    if (this->field_.extract(msg, v))
+    if (this->field_.extract(msg, v) && (!this->published_ || v != this->state)) {
+      this->published_ = true;
       this->publish_state(v);
+    }
   }
 
  protected:
+  bool published_{false};
   void write_state(bool state) override {
     if (this->parent_->send_command(state ? this->command_on_ : this->command_off_, state ? "1" : "0", this->message_))
       this->publish_state(state);
@@ -266,7 +296,11 @@ class HameDeviceText : public text::Text, public HameDeviceListener, public Pare
     if (it == msg.end())
       return;
     std::string padded;
-    this->publish_state(this->time_ && pad_time(it->second, padded) ? padded : it->second);
+    std::string out = this->time_ && pad_time(it->second, padded) ? padded : it->second;
+    if (!this->published_ || out != this->state) {
+      this->published_ = true;
+      this->publish_state(out);
+    }
   }
 
  protected:
@@ -280,6 +314,7 @@ class HameDeviceText : public text::Text, public HameDeviceListener, public Pare
   const char *key_{""};
   const char *command_{""};
   bool time_{false};
+  bool published_{false};
 };
 #endif
 
