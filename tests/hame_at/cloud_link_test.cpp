@@ -158,6 +158,14 @@ static void test_link_flow() {
   EXPECT_EQ(t.connects, 0);
   EXPECT(link.state() == CloudLink::State::NO_SESSION);
 
+  // A client certificate without its key (upload in progress): still waiting.
+  TlsCredentials half;
+  half.ca = "CA";
+  half.client_cert = "CERT";
+  link.set_credentials(half, now);
+  link.service(now);
+  EXPECT_EQ(t.connects, 0);
+
   link.set_credentials(creds(), now);
   link.publish("hame_energy/HMA-1/device/aabbccddeeff/ctrl", "queued");
   link.service(now);

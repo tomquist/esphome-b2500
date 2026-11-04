@@ -20,6 +20,13 @@ these certificates, as it would with the battery's:
 
 Then publish "cd=1" to hame_energy/HMA-1/App/<id>/ctrl on that broker and watch
 the simulated battery answer on .../device/<id>/ctrl.
+
+TLS without client authentication needs only the CA, e.g. the public test
+broker:
+
+    curl -O https://test.mosquitto.org/ssl/mosquitto.org.crt
+    python3 tools/fc41d_mcu_sim.py /dev/ttyUSB0 --broker test.mosquitto.org:8883 \
+        --ca mosquitto.org.crt
 """
 
 import argparse
@@ -274,10 +281,10 @@ class Sim:
         if a.broker:
             host, _, p = a.broker.partition(":")
             port = int(p or 8883)
-            tls = bool(a.cert)
-        if tls and a.cert:
-            if a.ca:
-                self.upload("CA", a.ca)
+            tls = bool(a.ca or a.cert)  # a CA alone: TLS without client authentication
+        if tls and a.ca:
+            self.upload("CA", a.ca)
+        if tls and a.cert and a.key:
             self.upload("User Cert", a.cert)
             self.upload("User Key", a.key)
         self.send('AT+QMTCFG="version",0,4')

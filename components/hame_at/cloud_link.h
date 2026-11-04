@@ -28,7 +28,10 @@ struct TlsCredentials {
   std::string ca;
   std::string client_cert;
   std::string client_key;
-  bool complete() const { return !this->client_cert.empty() && !this->client_key.empty(); }
+  /// Enough for TLS: a CA (LibreTiny's client verifies the server, it has no
+  /// insecure mode here), and a client certificate only together with its key.
+  /// The battery uploads all three; brokers without client auth need the CA only.
+  bool complete() const { return !this->ca.empty() && this->client_cert.empty() == this->client_key.empty(); }
 };
 
 class Transport {
