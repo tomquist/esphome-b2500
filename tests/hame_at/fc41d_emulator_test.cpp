@@ -255,7 +255,7 @@ static void test_ble() {
   h.emu.ble_write(0xFF01, {0x73, 0x06, 0x23, 0x03, 0x01, 0x54});
   EXPECT_STR(h.out, std::string("+QBLESTAT:CONNECTED\r\n\x73\x06\x23\x03\x01\x54", 27));
   h.out.clear();
-  h.emu.ble_mtu(512);
+  h.emu.ble_mtu(527);  // ESPHome's stack with a Mac; the stock module reports 512
   EXPECT_STR(h.out, "+QBLEMTU:<512>\r\n");
   EXPECT(h.emu.ble_session());
 

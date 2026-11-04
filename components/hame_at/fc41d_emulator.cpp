@@ -248,6 +248,9 @@ void Fc41dEmulator::ble_connected(bool connected) {
 }
 
 void Fc41dEmulator::ble_mtu(uint16_t mtu) {
+  // The stock module never reports more than 512 (the largest attribute
+  // value); the BDK 3.0.78 stack negotiates up to 527 with the same central.
+  mtu = std::min<uint16_t>(mtu, 512);
   this->ble_mtu_ = mtu;
   if (this->ble_session_)
     this->engine_.send_bare_line("+QBLEMTU:<" + std::to_string(mtu) + ">");  // brackets and all
