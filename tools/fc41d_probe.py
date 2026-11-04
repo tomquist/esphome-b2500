@@ -8,17 +8,21 @@ time and records every byte the module sends back, with timestamps, so the
 response formats and timing of hame_at's emulator (components/hame_at) can
 be checked against a real module.
 
-    pip install pyserial
-    python3 tools/fc41d_probe.py PORT --ssid MyWifi --password secret
+    pip install pyserial bleak
+    python3 tools/fc41d_probe.py PORT --ssid MyWifi --password secret --ble
 
 PORT is the serial device of the main UART: /dev/cu.usbserial-... or
 /dev/cu.SLAB_USBtoUART... on macOS, /dev/ttyUSB<n> on Linux, COM<n> on
 Windows. Run with --list to see the serial ports and their USB details.
 
 Optional steps:
-  --ble-wait 60   wait up to 60 s for a phone: connect to HMA-1_TEST with
-                  nRF Connect, enable notifications on ff02, and write a few
-                  bytes to ff01/ff06 when asked
+  --ble           this computer plays the phone (bleak): connects to the
+                  module's BLE service, writes to ff01/ff06, listens on ff02,
+                  and goes through transparent mode while connected. macOS
+                  asks once to allow Bluetooth for the terminal app.
+  --ble-only      skip the system, Wi-Fi, HTTP, MQTT and UDP steps
+  --ble-wait 60   instead of --ble: wait up to 60 s for a phone running
+                  nRF Connect, and write to ff01/ff06 by hand when asked
   --udp-port N    open a UDP service on port N; when asked, send a line
                   from another terminal: nc -u <module-ip> N, type hello,
                   Enter (keep nc open: the module answers "pong")
@@ -32,6 +36,7 @@ in the module's flash.
 """
 
 import argparse
+import asyncio
 import json
 import re
 import sys
@@ -64,6 +69,7 @@ class Probe:
         self.lock = threading.Condition()
         self.stop = False
         self.secrets = [x for x in secrets if x]
+        self.rec_lock = threading.Lock()
         self.log = open(out + ".log", "w", encoding="utf-8")
         self.jsonl = open(out + ".jsonl", "w", encoding="utf-8")
         threading.Thread(target=self._reader, daemon=True).start()
@@ -72,12 +78,18 @@ class Probe:
         return time.monotonic() - self.t0
 
     def _record(self, direction, data):
+        with self.rec_lock:
+            self._record_locked(direction, data)
+
+    def _record_locked(self, direction, data):
         t = self.now()
         for secret in self.secrets:
             data = data.replace(secret.encode("latin1"), b"***")
         text = data.decode("latin1")
         self.jsonl.write(json.dumps({"t": round(t, 4), "dir": direction, "hex": data.hex(), "text": text}) + "\n")
         shown = text.replace("\r", "\\r").replace("\n", "\\n")
+        if direction.startswith("ble"):
+            shown = data.hex(" ")
         self.log.write(f"{t:9.3f} {direction} {shown}\n")
         self.log.flush()
         self.jsonl.flush()
@@ -93,7 +105,9 @@ class Probe:
                     self.lock.notify_all()
 
     def note(self, text):
-        self.log.write(f"# {text}\n")
+        with self.rec_lock:
+            self.log.write(f"# {text}\n")
+            self.log.flush()
         print(f"# {text}")
 
     def send(self, data):
@@ -164,6 +178,147 @@ class Probe:
         time.sleep(seconds)
 
 
+class BleCentral:
+    """This computer as the phone: a bleak client on its own event loop.
+    Writes are logged as "ble>ff01", notifications as "ble<"."""
+
+    UUID = "0000{:04x}-0000-1000-8000-00805f9b34fb"
+
+    def __init__(self, probe):
+        try:
+            import bleak  # noqa: F401
+        except ImportError:
+            sys.exit("pip install bleak")
+        self.p = probe
+        self.client = None
+        self.received = []
+        self.loop = asyncio.new_event_loop()
+        threading.Thread(target=self.loop.run_forever, daemon=True).start()
+
+    def _run(self, coro, timeout=20):
+        return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
+
+    def connect(self, name, timeout=30):
+        async def go():
+            from bleak import BleakClient, BleakScanner
+
+            dev = await BleakScanner.find_device_by_name(name, timeout=timeout)
+            if dev is None:
+                return False
+            self.client = BleakClient(dev, disconnected_callback=lambda _c: self.p.note("central: link closed"))
+            await self.client.connect()
+            return True
+
+        try:
+            return self._run(go(), timeout + 30)
+        except Exception as e:  # noqa: BLE001 - report whatever bleak raises
+            self.p.note(f"central: connect failed: {e!r}")
+            return False
+
+    def describe(self):
+        for service in self.client.services:
+            for ch in service.characteristics:
+                self.p.note(f"central: {service.uuid[4:8]}/{ch.uuid[4:8]} {','.join(ch.properties)}")
+        try:
+            self.p.note(f"central: MTU {self.client.mtu_size}")
+        except Exception:  # noqa: BLE001
+            pass
+
+    def props(self, uuid16):
+        ch = self.client.services.get_characteristic(self.UUID.format(uuid16))
+        return ch.properties if ch else []
+
+    def subscribe(self, uuid16):
+        def on_notify(_ch, data):
+            self.received.append(bytes(data))
+            self.p._record("ble<", bytes(data))
+
+        try:
+            self._run(self.client.start_notify(self.UUID.format(uuid16), on_notify))
+            return True
+        except Exception as e:  # noqa: BLE001
+            self.p.note(f"central: subscribe {uuid16:04x} failed: {e!r}")
+            return False
+
+    def write(self, uuid16, data, response=True):
+        self.p._record(f"ble>{uuid16:04x}" + ("" if response else "/nr"), data)
+        try:
+            self._run(self.client.write_gatt_char(self.UUID.format(uuid16), data, response=response))
+        except Exception as e:  # noqa: BLE001
+            self.p.note(f"central: write {uuid16:04x} failed: {e!r}")
+
+    def disconnect(self):
+        try:
+            self._run(self.client.disconnect())
+        except Exception as e:  # noqa: BLE001
+            self.p.note(f"central: disconnect failed: {e!r}")
+
+
+def ble_session(p, c, name):
+    """Connect as the phone and find out how the data travels both ways."""
+    p.note(f"BLE: this computer connects to {name}")
+    p.send("")
+    if not c.connect(name):
+        p.note("central: module not found or connection refused (Bluetooth permission for the terminal?)")
+        return False
+    got = p.wait_for(("CONNECTED",), 5)
+    p.note(f"connect URC: {got}")
+    p.quiet(1.5)  # +QBLEMTU follows the connection
+    c.describe()
+    c.subscribe(0xFF02)
+    p.quiet(1)
+    p.cmd("AT+QBLESTAT")
+
+    p.note("phone writes in AT mode: do they reach the UART, raw or as a URC?")
+    p.send("")
+    c.write(0xFF01, bytes([0x01, 0x02, 0x03]))
+    p.quiet(2)
+    if "write-without-response" in c.props(0xFF01):
+        c.write(0xFF01, bytes([0x11, 0x12]), response=False)
+        p.quiet(2)
+    c.write(0xFF01, bytes.fromhex("730623030154"))  # the app's runtime-info request
+    p.quiet(2)
+    c.write(0xFF06, bytes([0x04, 0x05]))
+    p.quiet(2)
+    p.cmd("AT")  # still in AT mode?
+
+    p.note("MCU-side notifications on ff02: hex, then text")
+    c.received.clear()
+    p.cmd("AT+QBLEGATTSNTFY=ff02,6,730623030154")
+    p.quiet(1)
+    p.cmd("AT+QBLEGATTSNTFY=ff02,10_24_25_3162_3160_3161")
+    p.quiet(1)
+    p.cmd("AT+QBLEGATTSNTFY=ff02,3,abc")  # raw bytes, not hex?
+    p.quiet(1)
+    p.note(f"central received: {[d.hex() for d in c.received]}")
+
+    p.note("QBLETRANMODE=ff02 while connected")
+    p.cmd("AT+QBLETRANMODE=ff02")
+    p.note(f"answers AT: {p.alive()}")
+    c.received.clear()
+    p.send("hello-from-uart")
+    p.quiet(2)
+    p.note(f"central received: {[d.hex() for d in c.received]}")
+    p.send("")
+    c.write(0xFF01, bytes([0x0A, 0x0B, 0x0C]))
+    p.quiet(2)
+    c.write(0xFF06, bytes([0x0D, 0x0E]))
+    p.quiet(2)
+    p.escape()
+    p.note(f"answers AT after +++: {p.alive()}")
+    p.cmd("AT+QBLESTAT")
+    p.send("")
+    c.write(0xFF01, bytes([0x21, 0x22]))  # and after leaving it again
+    p.quiet(2)
+
+    p.note("central disconnects")
+    p.send("")
+    c.disconnect()
+    p.note(f"disconnect URC: {p.wait_for(('DISCONNECTED',), 5)}")
+    p.cmd("AT+QBLESTAT")
+    return True
+
+
 FINAL = object()
 FINAL_RE = re.compile(r"(?:^|\n)(OK|ERROR|\+CME ERROR[^\r\n]*)\r\n")
 
@@ -175,7 +330,10 @@ def main():
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--ssid", help="Wi-Fi to join (needed for the network steps)")
     ap.add_argument("--password", default="")
-    ap.add_argument("--ble-wait", type=int, default=0, help="seconds to wait for a phone on BLE")
+    ap.add_argument("--ble", action="store_true", help="this computer connects as the phone (needs bleak)")
+    ap.add_argument("--ble-only", action="store_true", help="only the BLE steps")
+    ap.add_argument("--ble-name", default="HMA-1_TEST", help="BLE name the module advertises")
+    ap.add_argument("--ble-wait", type=int, default=0, help="seconds to wait for a phone on BLE (manual)")
     ap.add_argument("--udp-port", type=int, default=0, help="open a UDP service on this port")
     ap.add_argument("--mqtt-host", default="test.mosquitto.org", help="MQTT broker without TLS (e.g. Home Assistant's)")
     ap.add_argument("--mqtt-port", type=int, default=1883)
@@ -200,94 +358,95 @@ def main():
     else:
         p.note("no ready banner; carrying on")
 
-    p.note("system")
-    p.cmd("AT")
-    p.cmd("ATE0")
-    p.cmd("ATE1")
-    p.cmd("AT", settle=0.2)  # does ATE1 echo?
-    p.cmd("ATE0")
-    p.cmd("AT+QECHO=0")
-    p.cmd("AT+QVERSION")
-    p.cmd("AT+QWLMAC")
-    p.cmd("AT+QBLEADDR?")
-    p.cmd("AT+QSSLCERT?")
-    p.cmd("AT+QSTAST")
-    p.cmd("AT+QGETWIFISTATE")
-    p.cmd("AT+QGETIP=station")
-    p.cmd("AT+QBLESTAT")
-    p.cmd("AT+NOSUCHCMD")
-
-    if args.ssid:
-        p.note("Wi-Fi join (not saved)")
-        p.send(f"AT+QSTAAPINFO={args.ssid},{args.password}\r\n")
-        got = p.wait_for(("GOT_IP",), 40)
-        p.note(f"join result: {got}")
-        p.quiet(3)
+    if not args.ble_only:
+        p.note("system")
+        p.cmd("AT")
+        p.cmd("ATE0")
+        p.cmd("ATE1")
+        p.cmd("AT", settle=0.2)  # does ATE1 echo?
+        p.cmd("ATE0")
+        p.cmd("AT+QECHO=0")
+        p.cmd("AT+QVERSION")
+        p.cmd("AT+QWLMAC")
+        p.cmd("AT+QBLEADDR?")
+        p.cmd("AT+QSSLCERT?")
         p.cmd("AT+QSTAST")
         p.cmd("AT+QGETWIFISTATE")
         p.cmd("AT+QGETIP=station")
+        p.cmd("AT+QBLESTAT")
+        p.cmd("AT+NOSUCHCMD")
 
-        p.note("HTTP: time request (measures the +QHTTPGET delay after OK)")
-        p.cmd('AT+QHTTPCFG="url","http://eu.hamedata.com/app/neng/getDateInfoeu.php?uid=000000000000&fcv=0&aid=HMA-1&sv=0"')
-        p.cmd("AT+QHTTPGET=60", settle=0.1)
-        p.wait_for(("+QHTTPGET",), 65)
-        p.quiet(1)
-        # The body runs straight into "OK" ("..._0_0_0OK"): wait for the URC.
-        p.cmd("AT+QHTTPREAD=60", wait=("+QHTTPREAD:",), timeout=65)
+        if args.ssid:
+            p.note("Wi-Fi join (not saved)")
+            p.send(f"AT+QSTAAPINFO={args.ssid},{args.password}\r\n")
+            got = p.wait_for(("GOT_IP",), 40)
+            p.note(f"join result: {got}")
+            p.quiet(3)
+            p.cmd("AT+QSTAST")
+            p.cmd("AT+QGETWIFISTATE")
+            p.cmd("AT+QGETIP=station")
 
-        p.note(f"MQTT against {args.mqtt_host}:{args.mqtt_port}, no TLS")
-        p.cmd('AT+QMTCFG="version",0,4')
-        p.cmd('AT+QMTCFG="keepalive",0,60')
-        p.cmd(f'AT+QMTOPEN=0,"{args.mqtt_host}",{args.mqtt_port}', settle=0.1)
-        p.wait_for(("+QMTOPEN",), 30)
-        p.quiet(0.5)
-        login = f',"{args.mqtt_user}","{args.mqtt_password}"' if args.mqtt_user else ""
-        p.cmd(f'AT+QMTCONN=0,"fc41d-probe"{login}', settle=0.1)
-        p.wait_for(("+QMTCONN",), 30)
-        p.quiet(0.5)
-        topic = "fc41d-probe/" + out
-        p.cmd(f'AT+QMTSUB=0,1,"{topic}/#",0', settle=0.1)
-        p.wait_for(("+QMTSUB",), 30)
-        p.quiet(0.5)
-        payload = "p1=1,p2=0,w1=24"
-        p.note("publish to a topic we subscribed to: does the broker's echo arrive as +QMTRECV?")
-        p.cmd(f'AT+QMTPUB=0,0,0,0,"{topic}/ctrl",{len(payload)},"{payload}"', settle=0.1)
-        p.wait_for(("+QMTRECV",), 10)
-        p.quiet(2)
-        p.cmd("AT+QMTDISC=0", settle=1)
-        p.cmd("AT+QMTCLOSE=0", settle=1)
-
-        if args.udp_port:
-            port = args.udp_port
-            p.note(f"UDP service on port {port}, buffer mode: send a line from nc now (30 s)")
-            p.cmd(f'AT+QIOPEN=1,"UDP SERVICE","127.0.0.1",0,{port},0', settle=0.1)
-            p.wait_for(("+QIOPEN",), 10)
-            p.wait_for(('+QIURC: "recv"',), 30)
+            p.note("HTTP: time request (measures the +QHTTPGET delay after OK)")
+            p.cmd('AT+QHTTPCFG="url","http://eu.hamedata.com/app/neng/getDateInfoeu.php?uid=000000000000&fcv=0&aid=HMA-1&sv=0"')
+            p.cmd("AT+QHTTPGET=60", settle=0.1)
+            p.wait_for(("+QHTTPGET",), 65)
             p.quiet(1)
-            p.cmd("AT+QIRD=1,0")
-            p.cmd("AT+QIRD=1,1500")
-            m = re.search(r'\+QIRD: \d+,"([\d.]+)",(\d+)', p.rx.decode("latin1"))
-            p.cmd("AT+QICLOSE=1", settle=1)
+            # The body runs straight into "OK" ("..._0_0_0OK"): wait for the URC.
+            p.cmd("AT+QHTTPREAD=60", wait=("+QHTTPREAD:",), timeout=65)
 
-            p.note(f"UDP service on port {port}, push mode as the B2500 opens it: send another line (30 s)")
-            p.cmd(f'AT+QIOPEN=1,"UDP SERVICE","127.0.0.1",0,{port},1', settle=0.1)
-            p.wait_for(("+QIOPEN",), 10)
-            p.wait_for(('+QIURC: "recv"',), 30)
-            p.quiet(1)
-            if m:
-                ip, rport = m.group(1), m.group(2)
-                p.note(f"reply to {ip}:{rport} as the B2500 sends: nc should print 'pong' twice")
-                p.cmd(f'AT+QISEND=1,4,"pong","{ip}",{rport}', settle=1)
-                p.cmd(f'AT+QISEND=1,5,"{ip}",{rport}', wait=(">",), settle=0.2)
-                p.send("pong\n")
-                p.wait_for((FINAL,), 5)
+            p.note(f"MQTT against {args.mqtt_host}:{args.mqtt_port}, no TLS")
+            p.cmd('AT+QMTCFG="version",0,4')
+            p.cmd('AT+QMTCFG="keepalive",0,60')
+            p.cmd(f'AT+QMTOPEN=0,"{args.mqtt_host}",{args.mqtt_port}', settle=0.1)
+            p.wait_for(("+QMTOPEN",), 30)
+            p.quiet(0.5)
+            login = f',"{args.mqtt_user}","{args.mqtt_password}"' if args.mqtt_user else ""
+            p.cmd(f'AT+QMTCONN=0,"fc41d-probe"{login}', settle=0.1)
+            p.wait_for(("+QMTCONN",), 30)
+            p.quiet(0.5)
+            topic = "fc41d-probe/" + out
+            p.cmd(f'AT+QMTSUB=0,1,"{topic}/#",0', settle=0.1)
+            p.wait_for(("+QMTSUB",), 30)
+            p.quiet(0.5)
+            payload = "p1=1,p2=0,w1=24"
+            p.note("publish to a topic we subscribed to: does the broker's echo arrive as +QMTRECV?")
+            p.cmd(f'AT+QMTPUB=0,0,0,0,"{topic}/ctrl",{len(payload)},"{payload}"', settle=0.1)
+            p.wait_for(("+QMTRECV",), 10)
+            p.quiet(2)
+            p.cmd("AT+QMTDISC=0", settle=1)
+            p.cmd("AT+QMTCLOSE=0", settle=1)
+
+            if args.udp_port:
+                port = args.udp_port
+                p.note(f"UDP service on port {port}, buffer mode: send a line from nc now (30 s)")
+                p.cmd(f'AT+QIOPEN=1,"UDP SERVICE","127.0.0.1",0,{port},0', settle=0.1)
+                p.wait_for(("+QIOPEN",), 10)
+                p.wait_for(('+QIURC: "recv"',), 30)
                 p.quiet(1)
-            p.cmd("AT+QISTATE?")
-            p.cmd("AT+QICLOSE=1", settle=1)
+                p.cmd("AT+QIRD=1,0")
+                p.cmd("AT+QIRD=1,1500")
+                m = re.search(r'\+QIRD: \d+,"([\d.]+)",(\d+)', p.rx.decode("latin1"))
+                p.cmd("AT+QICLOSE=1", settle=1)
+
+                p.note(f"UDP service on port {port}, push mode as the B2500 opens it: send another line (30 s)")
+                p.cmd(f'AT+QIOPEN=1,"UDP SERVICE","127.0.0.1",0,{port},1', settle=0.1)
+                p.wait_for(("+QIOPEN",), 10)
+                p.wait_for(('+QIURC: "recv"',), 30)
+                p.quiet(1)
+                if m:
+                    ip, rport = m.group(1), m.group(2)
+                    p.note(f"reply to {ip}:{rport} as the B2500 sends: nc should print 'pong' twice")
+                    p.cmd(f'AT+QISEND=1,4,"pong","{ip}",{rport}', settle=1)
+                    p.cmd(f'AT+QISEND=1,5,"{ip}",{rport}', wait=(">",), settle=0.2)
+                    p.send("pong\n")
+                    p.wait_for((FINAL,), 5)
+                    p.quiet(1)
+                p.cmd("AT+QISTATE?")
+                p.cmd("AT+QICLOSE=1", settle=1)
 
     p.note("BLE setup as the B2500 MCU does it")
     p.cmd("AT+QBLEINIT=2")
-    p.cmd("AT+QBLENAME=HMA-1_TEST")
+    p.cmd(f"AT+QBLENAME={args.ble_name}")
     p.cmd("AT+QBLEGATTSSRV=FF00")
     for c in ("ff01", "ff02", "ff06"):
         p.cmd(f"AT+QBLEGATTSCHAR={c}")
@@ -295,8 +454,11 @@ def main():
     p.cmd("AT+QBLEADVSTART")
     p.cmd("AT+QBLESTAT")
 
-    if args.ble_wait:
-        p.note(f"BLE: in nRF Connect connect to HMA-1_TEST, enable notifications on ff02 ({args.ble_wait} s)")
+    central = BleCentral(p) if args.ble else None
+    if central:
+        ble_session(p, central, args.ble_name)
+    elif args.ble_wait:
+        p.note(f"BLE: in nRF Connect connect to {args.ble_name}, enable notifications on ff02 ({args.ble_wait} s)")
         p.send("")
         got = p.wait_for(("CONNECTED",), args.ble_wait)
         p.note(f"connect URC: {got}")
@@ -309,14 +471,14 @@ def main():
         p.cmd("AT+QBLEGATTSNTFY=ff02,10_24_25_3162_3160_3161")
         p.quiet(3)
 
-    p.note("QBLETRANMODE=ff02 as the B2500 MCU sends it; does the module keep answering AT?")
+    p.note("QBLETRANMODE=ff02 without a central; does the module keep answering AT?")
     p.cmd("AT+QBLETRANMODE=ff02")
     if p.alive():
         p.note("still in AT mode after QBLETRANMODE")
         p.cmd("AT+QBLESTAT")
     else:
         p.note("no AT answers after QBLETRANMODE: transparent mode")
-        if args.ble_wait:
+        if args.ble_wait and not central:
             p.note("UART bytes now go to the phone? watch ff02 for 'hello-from-uart'")
             p.send("hello-from-uart")
             p.note("write a few bytes to ff01 again (20 s): do they arrive raw?")
