@@ -745,7 +745,7 @@ void Fc41dEmulator::register_handlers_() {
     } else if (op == 2) {  // upload: CONNECT, <len> raw bytes, OK
       long len = cmd.arg_int(2, 0);
       e.send_line("CONNECT");
-      e.expect_data(static_cast<size_t>(len), [this, kind](AtEngine &e, std::vector<uint8_t> data) {
+      e.expect_text_data(static_cast<size_t>(len), [this, kind](AtEngine &e, std::vector<uint8_t> data) {
         this->certs_[kind] = std::string(data.begin(), data.end());
         this->backend_->ssl_cert(kind, data);
         e.ok();

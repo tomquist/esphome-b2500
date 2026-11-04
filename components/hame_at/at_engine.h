@@ -104,6 +104,13 @@ class AtEngine {
   /// Switch to DATA mode: the next `len` bytes go to `callback`. Typically
   /// called by a handler right after sending its prompt ("CONNECT" or "> ").
   void expect_data(size_t len, DataCallback callback);
+  /// Like expect_data(), for data that never starts with "AT" (a PEM
+  /// certificate): command lines before it are the MCU repeating the command
+  /// because CONNECT came late, and are dropped instead of counted as data.
+  void expect_text_data(size_t len, DataCallback callback) {
+    this->expect_data(len, std::move(callback));
+    this->skip_repeats_ = this->mode_ == Mode::DATA;
+  }
   /// Switch to UNTIL mode: bytes up to `terminator` (excluded) go to `callback`.
   void expect_until(uint8_t terminator, DataCallback callback);
   /// Switch to TRANSPARENT mode until "+++" (or exit_transparent()).
@@ -146,6 +153,7 @@ class AtEngine {
   size_t data_remaining_{0};
   std::vector<uint8_t> data_buf_;
   DataCallback data_cb_;
+  bool skip_repeats_{false};
   uint32_t data_deadline_{0};
   uint8_t until_{0};
 

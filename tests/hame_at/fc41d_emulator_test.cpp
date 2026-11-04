@@ -430,6 +430,19 @@ static void test_ssl() {
   EXPECT_STR(h.cmd("AT+QSSLCERT=\"User Key\",1"), "\r\nCONNECT\r\n" + pem + "\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QSSLCERT=\"User Key\",0"), "\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QSSLCERT=\"User Key\",1"), "\r\nERROR\r\n");
+  // The MCU re-sends the command when CONNECT is late (seen with the HMA
+  // V232 firmware): the repeat is not certificate data.
+  std::string cmd = "AT+QSSLCERT=\"CA\",2," + std::to_string(pem.size());
+  EXPECT_STR(h.cmd(cmd), "\r\nCONNECT\r\n");
+  h.out.clear();
+  h.send(cmd + "\r\n" + cmd + "\r\n");
+  h.send(pem);
+  EXPECT_STR(h.out, "\r\nOK\r\n");
+  EXPECT_STR(h.backend.certs.back().first, "CA");
+  EXPECT_EQ(h.backend.certs.back().second, pem.size());
+  EXPECT_STR(h.cmd("AT+QSSLCERT=\"CA\",1"), "\r\nCONNECT\r\n" + pem + "\r\nOK\r\n");
+  EXPECT_STR(h.cmd("AT"), "\r\nOK\r\n");  // back in command mode, nothing left over
+
   // CRC-16/CCITT-FALSE check value.
   EXPECT_EQ(Fc41dEmulator::cert_checksum("123456789"), 0x29B1);
 }

@@ -160,6 +160,7 @@ void AtEngine::on_inline(const std::string &name, size_t fields, bool hex, Handl
 }
 
 void AtEngine::expect_data(size_t len, DataCallback callback) {
+  this->skip_repeats_ = false;
   this->data_cb_ = std::move(callback);
   this->data_buf_.clear();
   this->data_buf_.reserve(len);
@@ -267,6 +268,21 @@ void AtEngine::process_() {
     }
     switch (this->mode_) {
       case Mode::DATA: {
+        if (this->skip_repeats_ && this->data_buf_.empty()) {
+          if (this->rx_.size() < 2)
+            return;
+          if (starts_with_ci(this->rx_, "AT")) {
+            size_t end = this->rx_.find_first_of("\r\n");
+            if (end == std::string::npos)
+              return;  // wait for the whole line
+            if (this->logger_)
+              this->logger_(true, "<repeated> " + this->rx_.substr(0, end));
+            this->skip_lf_ = this->rx_[end] == '\r';
+            this->rx_.erase(0, end + 1);
+            continue;
+          }
+          this->skip_repeats_ = false;
+        }
         size_t n = std::min(this->data_remaining_, this->rx_.size());
         this->data_buf_.insert(this->data_buf_.end(), this->rx_.begin(), this->rx_.begin() + n);
         this->rx_.erase(0, n);

@@ -49,7 +49,8 @@ void HameAtComponent::setup() {
     // Payloads can carry credentials (QMTCONN) and keys (QSSLCERT data is
     // never a line); keep the transcript at VERBOSE. Bytes that were not a
     // command (lost on the UART) are worth a warning: the MCU gets no answer.
-    if (from_mcu && (line.rfind("<garbage>", 0) == 0 || line.rfind("<incomplete>", 0) == 0)) {
+    if (from_mcu && (line.rfind("<garbage>", 0) == 0 || line.rfind("<incomplete>", 0) == 0 ||
+                     line.rfind("<repeated>", 0) == 0)) {
       ESP_LOGW(TAG, "MCU sent %s", line.substr(0, 48).c_str());
       return;
     }
