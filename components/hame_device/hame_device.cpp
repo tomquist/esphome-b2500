@@ -101,8 +101,10 @@ void HameDevice::feed(const std::string &payload, const std::string &topic) {
     return;
   }
   this->messages_++;
-  for (const auto &kv : msg)
-    type->values[kv.first] = kv.second;
+  for (const auto &kv : msg) {
+    if (this->kept_(kv.first))
+      type->values[kv.first] = kv.second;
+  }
   ESP_LOGV(TAG, "'%s' message, %u keys", type->name.c_str(), static_cast<unsigned>(msg.size()));
   for (auto *l : this->listeners_) {
     if (this->type_(l->get_message()) == type)
@@ -158,6 +160,11 @@ void HameDevice::dump_config() {
   if (!this->topic_filter_.empty())
     ESP_LOGCONFIG(TAG, "  Status topic contains: '%s'", this->topic_filter_.c_str());
   ESP_LOGCONFIG(TAG, "  Entities: %u", static_cast<unsigned>(this->listeners_.size()));
+  if (this->keep_all_keys_) {
+    ESP_LOGCONFIG(TAG, "  Keeps the values of all keys");
+  } else {
+    ESP_LOGCONFIG(TAG, "  Keeps the values of %u keys (for commands)", static_cast<unsigned>(this->kept_keys_.size()));
+  }
 }
 
 }  // namespace esphome::hame_device

@@ -2,7 +2,16 @@ import esphome.codegen as cg
 from esphome.components import text
 import esphome.config_validation as cv
 
-from . import CONF_COMMAND, CONF_KEY, ENTITY_SCHEMA, HameDevice, hame_device_ns, register_listener
+from . import (
+    CONF_COMMAND,
+    CONF_HAME_DEVICE_ID,
+    CONF_KEY,
+    ENTITY_SCHEMA,
+    HameDevice,
+    hame_device_ns,
+    keep_template_keys,
+    register_listener,
+)
 
 DEPENDENCIES = ["hame_device"]
 
@@ -30,6 +39,7 @@ async def to_code(config):
     var = await text.new_text(config, min_length=0, max_length=32, pattern=pattern)
     cg.add(var.set_key(config[CONF_KEY]))
     cg.add(var.set_command(config[CONF_COMMAND]))
+    await keep_template_keys(config[CONF_HAME_DEVICE_ID], config[CONF_COMMAND])
     if config[CONF_TIME]:
         cg.add(var.set_time(True))
     hub = await register_listener(var, config)

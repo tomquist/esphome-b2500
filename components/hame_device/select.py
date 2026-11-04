@@ -3,7 +3,16 @@ from esphome.components import select
 import esphome.config_validation as cv
 from esphome.const import CONF_OPTIONS
 
-from . import CONF_COMMAND, CONF_KEY, ENTITY_SCHEMA, HameDevice, hame_device_ns, register_listener
+from . import (
+    CONF_COMMAND,
+    CONF_HAME_DEVICE_ID,
+    CONF_KEY,
+    ENTITY_SCHEMA,
+    HameDevice,
+    hame_device_ns,
+    keep_template_keys,
+    register_listener,
+)
 
 DEPENDENCIES = ["hame_device"]
 
@@ -29,6 +38,7 @@ async def to_code(config):
     var = await select.new_select(config, options=list(options.values()))
     cg.add(var.set_key(config[CONF_KEY]))
     cg.add(var.set_command(config[CONF_COMMAND]))
+    await keep_template_keys(config[CONF_HAME_DEVICE_ID], config[CONF_COMMAND])
     for code, label in options.items():
         cg.add(var.add_option_code(str(code), label))
     hub = await register_listener(var, config)

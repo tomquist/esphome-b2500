@@ -5,10 +5,12 @@ from esphome.const import CONF_MAX_VALUE, CONF_MIN_VALUE, CONF_STEP
 
 from . import (
     CONF_COMMAND,
+    CONF_HAME_DEVICE_ID,
     ENTITY_SCHEMA,
     HameDevice,
     NUMBER_FIELD_SCHEMA,
     hame_device_ns,
+    keep_template_keys,
     number_field_to_code,
     register_listener,
 )
@@ -39,5 +41,6 @@ async def to_code(config):
     )
     number_field_to_code(var, config)
     cg.add(var.set_command(config[CONF_COMMAND]))
+    await keep_template_keys(config[CONF_HAME_DEVICE_ID], config[CONF_COMMAND])
     hub = await register_listener(var, config)
     cg.add(var.set_parent(hub))

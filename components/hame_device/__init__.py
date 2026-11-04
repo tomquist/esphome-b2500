@@ -10,6 +10,7 @@ from esphome import automation
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_INTERVAL, CONF_VALUE
+from esphome.core import CORE
 
 CODEOWNERS = ["@tomquist"]
 MULTI_CONF = True
@@ -28,6 +29,8 @@ CONF_POLL_AFTER_COMMAND = "poll_after_command"
 CONF_TOPIC_FILTER = "topic_filter"
 CONF_ON_MESSAGE = "on_message"
 CONF_ON_COMMAND = "on_command"
+CONF_KEEP_KEYS = "keep_keys"
+CONF_KEEP_ALL_KEYS = "keep_all_keys"
 
 hame_device_ns = cg.esphome_ns.namespace("hame_device")
 HameDevice = hame_device_ns.class_("HameDevice", cg.Component)
@@ -69,6 +72,10 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_POLL_AFTER_COMMAND, default="1500ms"): cv.positive_time_period_milliseconds,
         # Only status from topics containing this (hame_at default: "/device/").
         cv.Optional(CONF_TOPIC_FILTER): cv.string,
+        # The hub remembers only the keys its command templates use; list
+        # more for lambdas (get(), commands built at runtime), or keep all.
+        cv.Optional(CONF_KEEP_KEYS, default=[]): cv.ensure_list(cv.string_strict),
+        cv.Optional(CONF_KEEP_ALL_KEYS, default=False): cv.boolean,
         # Every status message (`payload`), and every command sent.
         cv.Optional(CONF_ON_MESSAGE): automation.validate_automation({}),
         cv.Optional(CONF_ON_COMMAND): automation.validate_automation({}),
@@ -84,6 +91,40 @@ ENTITY_SCHEMA = cv.Schema(
         cv.Optional(CONF_MESSAGE): cv.string_strict,
     }
 )
+
+
+def template_keys(tpl):
+    """The device keys a command template reads (mirrors render_template)."""
+    keys = []
+    i = 0
+    while i < len(tpl):
+        c = tpl[i]
+        if c in "{}[]" and i + 1 < len(tpl) and tpl[i + 1] == c:
+            i += 2
+            continue
+        if c == "{":
+            close = tpl.find("}", i + 1)
+            if close < 0:
+                break
+            name = tpl[i + 1 : close].split("|", 1)[0]
+            if name != "value" and name not in keys:
+                keys.append(name)
+            i = close
+        i += 1
+    return keys
+
+
+async def keep_template_keys(hub_id, *templates):
+    """Have the hub remember the keys these templates read (once per key)."""
+    hub = await cg.get_variable(hub_id)
+    kept = CORE.data.setdefault("hame_device_kept_keys", {}).setdefault(str(hub_id), set())
+    for tpl in templates:
+        if not isinstance(tpl, str):
+            continue
+        for key in template_keys(tpl):
+            if key not in kept:
+                kept.add(key)
+                cg.add(hub.keep_key(key))
 
 
 async def register_listener(var, config):
@@ -114,6 +155,9 @@ async def to_code(config):
             )
         )
     cg.add(var.set_poll_after_command(config[CONF_POLL_AFTER_COMMAND]))
+    if config[CONF_KEEP_ALL_KEYS]:
+        cg.add(var.set_keep_all_keys(True))
+    await keep_template_keys(config[CONF_ID], *("{" + k + "}" for k in config[CONF_KEEP_KEYS]))
     for conf in config.get(CONF_ON_MESSAGE, []):
         await automation.build_automation(var.get_message_trigger(), [(cg.std_string, "payload")], conf)
     for conf in config.get(CONF_ON_COMMAND, []):
@@ -136,6 +180,7 @@ async def to_code(config):
 async def send_command_to_code(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
+    await keep_template_keys(config[CONF_ID], config[CONF_COMMAND])
     cmd = await cg.templatable(config[CONF_COMMAND], args, cg.std_string)
     cg.add(var.set_command(cmd))
     if CONF_VALUE in config:

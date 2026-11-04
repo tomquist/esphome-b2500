@@ -107,6 +107,10 @@ out when a key in it is unknown. `hame_device.send_command` and
 `hame_device.poll` are available as actions, `on_message`/`on_command` as
 triggers.
 
+To save RAM the hub remembers only the keys that command templates read.
+A command built in a lambda, or a lambda calling `get()`, needs its keys in
+`keep_keys:` (or `keep_all_keys: true`).
+
 ## Cloud access
 
 The battery's traffic to the Hame cloud can be passed through or answered on

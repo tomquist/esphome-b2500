@@ -2,7 +2,7 @@ import esphome.codegen as cg
 from esphome.components import button
 import esphome.config_validation as cv
 
-from . import CONF_COMMAND, CONF_HAME_DEVICE_ID, CONF_MESSAGE, HameDevice, hame_device_ns
+from . import CONF_COMMAND, CONF_HAME_DEVICE_ID, CONF_MESSAGE, HameDevice, hame_device_ns, keep_template_keys
 
 DEPENDENCIES = ["hame_device"]
 
@@ -21,6 +21,7 @@ CONFIG_SCHEMA = button.button_schema(HameDeviceButton).extend(
 async def to_code(config):
     var = await button.new_button(config)
     cg.add(var.set_command(config[CONF_COMMAND]))
+    await keep_template_keys(config[CONF_HAME_DEVICE_ID], config[CONF_COMMAND])
     if CONF_MESSAGE in config:
         cg.add(var.set_message(config[CONF_MESSAGE]))
     hub = await cg.get_variable(config[CONF_HAME_DEVICE_ID])

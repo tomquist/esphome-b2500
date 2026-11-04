@@ -5,10 +5,12 @@ import esphome.config_validation as cv
 from . import (
     BOOL_FIELD_SCHEMA,
     CONF_COMMAND,
+    CONF_HAME_DEVICE_ID,
     ENTITY_SCHEMA,
     HameDevice,
     bool_field_to_code,
     hame_device_ns,
+    keep_template_keys,
     register_listener,
 )
 
@@ -51,5 +53,6 @@ async def to_code(config):
     on = config.get(CONF_COMMAND_ON, config.get(CONF_COMMAND))
     off = config.get(CONF_COMMAND_OFF, config.get(CONF_COMMAND))
     cg.add(var.set_commands(on, off))
+    await keep_template_keys(config[CONF_HAME_DEVICE_ID], on, off)
     hub = await register_listener(var, config)
     cg.add(var.set_parent(hub))

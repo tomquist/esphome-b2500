@@ -15,6 +15,7 @@
 
 #include "esphome/core/defines.h"
 
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
@@ -68,6 +69,18 @@ class HameDevice : public Component {
     this->add_message(name, rule, poll, interval_ms);
   }
   void set_poll_after_command(uint32_t ms) { this->poll_after_command_ms_ = ms; }
+  /// Remember the latest value of `key` (for command templates and get()).
+  /// Only these are kept, to save RAM; codegen adds every {key} of the
+  /// configured commands. Literals, kept in flash.
+  void keep_key(const char *key) {
+    for (const char *k : this->kept_keys_) {
+      if (strcmp(k, key) == 0)
+        return;
+    }
+    this->kept_keys_.push_back(key);
+  }
+  /// Keep every key instead.
+  void set_keep_all_keys(bool all) { this->keep_all_keys_ = all; }
 #ifdef USE_HAME_AT
   void set_hame_at(hame_at::HameAtComponent *at);
 #endif
@@ -82,7 +95,8 @@ class HameDevice : public Component {
   /// Send a command built from `tpl` ({value}, {key}, {key|default}, [...]).
   /// Keys are looked up in `message` first (default: the first type).
   bool send_command(const std::string &tpl, const std::string &value = "", const std::string &message = "");
-  /// Latest value of a key (of `message` first, then of any type).
+  /// Latest value of a key (of `message` first, then of any type). Only
+  /// kept keys (see keep_key()) are remembered.
   const std::string *get(const std::string &key, const std::string &message = "") const;
   /// Request every message type (one after another, spaced out).
   void poll();
@@ -99,7 +113,7 @@ class HameDevice : public Component {
     uint32_t interval_ms;
     uint32_t last_ms;
     bool due;      ///< request it at the next chance
-    KvMap values;  ///< latest value of every key of this type
+    KvMap values;  ///< latest value of each kept key of this type
   };
 
   MessageType *type_(const std::string &name);
@@ -114,6 +128,17 @@ class HameDevice : public Component {
   uint32_t poll_after_command_ms_{1500};
   uint32_t next_send_ms_{0};
   uint32_t messages_{0};
+  bool kept_(const std::string &key) const {
+    if (this->keep_all_keys_)
+      return true;
+    for (const char *k : this->kept_keys_) {
+      if (key == k)
+        return true;
+    }
+    return false;
+  }
+  std::vector<const char *> kept_keys_;
+  bool keep_all_keys_{false};
   std::vector<HameDeviceListener *> listeners_;
   Trigger<std::string> on_message_;
   Trigger<std::string> on_command_;
