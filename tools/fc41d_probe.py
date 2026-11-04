@@ -16,8 +16,9 @@ PORT is the serial device of the main UART: /dev/cu.usbserial-... or
 Windows. Run with --list to see the serial ports and their USB details.
 
 Optional steps:
-  --ble-wait 60   advertise as HMA-1_TEST for 60 s: connect with nRF Connect,
-                  enable notifications on ff02, write a few bytes to ff01
+  --ble-wait 60   wait up to 60 s for a phone: connect to HMA-1_TEST with
+                  nRF Connect, enable notifications on ff02, and write a few
+                  bytes to ff01/ff06 when asked
   --udp-port N    open a UDP service on port N and wait 20 s for a datagram
                   (send one with: echo -n hello | nc -u <module-ip> N)
 
@@ -29,6 +30,7 @@ in the module's flash.
 
 import argparse
 import json
+import re
 import sys
 import threading
 import time
@@ -96,32 +98,71 @@ class Probe:
             data = data.encode("latin1")
         with self.lock:
             self.rx.clear()
-        self._record(">", data)
-        self.ser.write(data)
+        if data:
+            self._record(">", data)
+            self.ser.write(data)
 
     def wait_for(self, tokens, timeout):
+        """Wait until one of tokens is in what the module sent since the last
+        send. FINAL matches a final result line (OK / ERROR / +CME ERROR); the
+        module sends a bare "OK\\r\\n", not "\\r\\nOK\\r\\n"."""
         deadline = time.monotonic() + timeout
         with self.lock:
             while time.monotonic() < deadline:
                 text = self.rx.decode("latin1")
                 for tok in tokens:
-                    if tok in text:
+                    if tok is FINAL:
+                        m = FINAL_RE.search(text)
+                        if m:
+                            return m.group(1)
+                    elif tok in text:
                         return tok
                 self.lock.wait(0.05)
         return None
 
-    def cmd(self, line, wait=("\r\nOK\r\n", "ERROR"), timeout=5.0, settle=0.5):
+    def cmd(self, line, wait=None, timeout=5.0, settle=0.5):
         """Send a command, wait for its final result, then keep listening a bit
         for URCs that follow (their delay after OK is part of what we measure)."""
+        wait = wait or (FINAL,)
         self.send(line + "\r\n")
         result = self.wait_for(wait, timeout)
         if result is None:
-            self.note(f"no {wait} within {timeout}s")
+            self.note(f"no answer within {timeout}s")
+            if not self.alive():
+                self.note("module stopped answering AT; trying to recover")
+                self.recover()
         time.sleep(settle)
         return result
 
+    def alive(self, timeout=2.0):
+        self.send("AT\r\n")
+        return self.wait_for((FINAL,), timeout) is not None
+
+    def escape(self):
+        """Leave a transparent mode: 1 s of silence, "+++", 1 s of silence."""
+        time.sleep(1.2)
+        self.send("+++")
+        self.wait_for((FINAL,), 1.5)
+        time.sleep(0.5)
+
+    def recover(self):
+        self.escape()
+        if self.alive():
+            self.note("+++ brought the AT interface back")
+            return True
+        self.note("press the module's RESET button (waiting 30 s)")
+        if self.wait_for(("ready",), 30):
+            time.sleep(1)
+            return True
+        self.note("module did not recover; the remaining steps will fail")
+        return False
+
     def quiet(self, seconds):
         time.sleep(seconds)
+
+
+FINAL = object()
+FINAL_RE = re.compile(r"(?:^|\n)(OK|ERROR|\+CME ERROR[^\r\n]*)\r\n")
 
 
 def main():
@@ -146,13 +187,19 @@ def main():
         list_ports()
         sys.exit(1)
 
-    p.note("press the module's RESET button now to record the boot banner (waiting 8 s)")
-    p.wait_for(("ready",), 8)
-    p.quiet(2)
+    p.note("press the module's RESET button now to record the boot banner (waiting 10 s)")
+    if p.wait_for(("ready",), 10):
+        p.quiet(2)
+    else:
+        p.note("no ready banner; carrying on")
 
     p.note("system")
     p.cmd("AT")
     p.cmd("ATE0")
+    p.cmd("ATE1")
+    p.cmd("AT", settle=0.2)  # does ATE1 echo?
+    p.cmd("ATE0")
+    p.cmd("AT+QECHO=0")
     p.cmd("AT+QVERSION")
     p.cmd("AT+QWLMAC")
     p.cmd("AT+QBLEADDR?")
@@ -160,31 +207,13 @@ def main():
     p.cmd("AT+QSTAST")
     p.cmd("AT+QGETWIFISTATE")
     p.cmd("AT+QGETIP=station")
-
-    p.note("BLE setup as the B2500 MCU does it")
-    p.cmd("AT+QBLEINIT=2")
-    p.cmd("AT+QBLENAME=HMA-1_TEST")
-    p.cmd("AT+QBLEGATTSSRV=FF00")
-    for c in ("ff01", "ff02", "ff06"):
-        p.cmd(f"AT+QBLEGATTSCHAR={c}")
-    p.cmd("AT+QBLEADVPARAM=150,150")
-    p.cmd("AT+QBLEADVSTART")
-    p.cmd("AT+QBLETRANMODE=ff02")
     p.cmd("AT+QBLESTAT")
-
-    if args.ble_wait:
-        p.note(f"BLE: connect to HMA-1_TEST with nRF Connect, enable notifications on ff02, write a few bytes to ff01 ({args.ble_wait} s)")
-        p.wait_for(("CONNECTED",), args.ble_wait)
-        p.quiet(max(5, args.ble_wait // 2))
-        p.note("notifications from the MCU side: hex, then text")
-        p.cmd("AT+QBLEGATTSNTFY=ff02,6,730623030154")
-        p.cmd("AT+QBLEGATTSNTFY=ff02,10_24_25_3162_3160_3161")
-        p.quiet(5)
+    p.cmd("AT+NOSUCHCMD")
 
     if args.ssid:
         p.note("Wi-Fi join (not saved)")
-        p.cmd(f"AT+QSTAAPINFO={args.ssid},{args.password}", timeout=20, settle=0.2)
-        got = p.wait_for(("GOT_IP",), 30)
+        p.send(f"AT+QSTAAPINFO={args.ssid},{args.password}\r\n")
+        got = p.wait_for(("GOT_IP",), 40)
         p.note(f"join result: {got}")
         p.quiet(3)
         p.cmd("AT+QSTAST")
@@ -196,18 +225,21 @@ def main():
         p.cmd("AT+QHTTPGET=60", settle=0.1)
         p.wait_for(("+QHTTPGET",), 65)
         p.quiet(1)
-        p.cmd("AT+QHTTPREAD=60", wait=("+QHTTPREAD",), timeout=65)
+        p.cmd("AT+QHTTPREAD=60", timeout=65)
 
         p.note("MQTT against a public test broker, no TLS")
         p.cmd('AT+QMTCFG="version",0,4')
         p.cmd('AT+QMTCFG="keepalive",0,60')
         p.cmd('AT+QMTOPEN=0,"test.mosquitto.org",1883', settle=0.1)
         p.wait_for(("+QMTOPEN",), 30)
+        p.quiet(0.5)
         p.cmd('AT+QMTCONN=0,"fc41d-probe"', settle=0.1)
         p.wait_for(("+QMTCONN",), 30)
+        p.quiet(0.5)
         topic = "fc41d-probe/" + out
         p.cmd(f'AT+QMTSUB=0,1,"{topic}/#",0', settle=0.1)
         p.wait_for(("+QMTSUB",), 30)
+        p.quiet(0.5)
         payload = "p1=1,p2=0,w1=24"
         p.note("publish to a topic we subscribed to: does the broker's echo arrive as +QMTRECV?")
         p.cmd(f'AT+QMTPUB=0,0,0,0,"{topic}/ctrl",{len(payload)},"{payload}"', settle=0.1)
@@ -225,6 +257,49 @@ def main():
             p.cmd("AT+QIRD=1,0")
             p.cmd("AT+QIRD=1,1500")
             p.cmd("AT+QICLOSE=1")
+
+    p.note("BLE setup as the B2500 MCU does it")
+    p.cmd("AT+QBLEINIT=2")
+    p.cmd("AT+QBLENAME=HMA-1_TEST")
+    p.cmd("AT+QBLEGATTSSRV=FF00")
+    for c in ("ff01", "ff02", "ff06"):
+        p.cmd(f"AT+QBLEGATTSCHAR={c}")
+    p.cmd("AT+QBLEADVPARAM=150,150")
+    p.cmd("AT+QBLEADVSTART")
+    p.cmd("AT+QBLESTAT")
+
+    if args.ble_wait:
+        p.note(f"BLE: in nRF Connect connect to HMA-1_TEST, enable notifications on ff02 ({args.ble_wait} s)")
+        p.send("")
+        got = p.wait_for(("CONNECTED",), args.ble_wait)
+        p.note(f"connect URC: {got}")
+        p.cmd("AT+QBLESTAT")
+        p.note("now write a few bytes to ff01, then to ff06 (30 s): how do writes reach the UART?")
+        p.send("")
+        p.quiet(30)
+        p.note("notifications from the MCU side: hex, then text (watch ff02 on the phone)")
+        p.cmd("AT+QBLEGATTSNTFY=ff02,6,730623030154")
+        p.cmd("AT+QBLEGATTSNTFY=ff02,10_24_25_3162_3160_3161")
+        p.quiet(3)
+
+    p.note("QBLETRANMODE=ff02 as the B2500 MCU sends it; does the module keep answering AT?")
+    p.cmd("AT+QBLETRANMODE=ff02")
+    if p.alive():
+        p.note("still in AT mode after QBLETRANMODE")
+        p.cmd("AT+QBLESTAT")
+    else:
+        p.note("no AT answers after QBLETRANMODE: transparent mode")
+        if args.ble_wait:
+            p.note("UART bytes now go to the phone? watch ff02 for 'hello-from-uart'")
+            p.send("hello-from-uart")
+            p.note("write a few bytes to ff01 again (20 s): do they arrive raw?")
+            p.quiet(20)
+        p.escape()
+        if p.alive():
+            p.note("+++ left transparent mode")
+            p.cmd("AT+QBLESTAT")
+        else:
+            p.recover()
 
     p.note("done")
     p.stop = True
