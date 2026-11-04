@@ -78,16 +78,17 @@ bk72xx_ble_server:
   # Replaced by the name the battery sets (AT+QBLENAME) before advertising.
   name: B2500
   service_uuid: 0xFF00
+  # As the stock module creates them (AT+QBLEGATTSCHAR): write + notify each.
   characteristics:
     - uuid: 0xFF01
       write: true
-      write_no_response: true
+      notify: true
     - uuid: 0xFF02
-      read: true
+      write: true
       notify: true
     - uuid: 0xFF06
       write: true
-      write_no_response: true
+      notify: true
 
 hame_at:
   id: battery

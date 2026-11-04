@@ -64,8 +64,9 @@ void HameAtComponent::setup() {
 
 #ifdef USE_BK72XX_BLE_SERVER
   if (this->ble_ != nullptr) {
-    // Phone writes go to the MCU; connection state is reported as +QBLESTAT.
-    for (uint16_t uuid : {0xFF01, 0xFF06}) {
+    // Phone writes go to the MCU (the stock module makes all three
+    // characteristics writable); connection state is reported as +QBLESTAT.
+    for (uint16_t uuid : {0xFF01, 0xFF02, 0xFF06}) {
       auto *chr = this->ble_->get_characteristic(uuid);
       if (chr != nullptr)
         chr->add_on_write_callback([this, uuid](const std::vector<uint8_t> &v) { this->emulator_.ble_write(uuid, v); });

@@ -218,8 +218,10 @@ void Fc41dEmulator::wifi_lost_() {
 // ---------------------------------------------------------------------------
 
 void Fc41dEmulator::ble_write(uint16_t uuid, const std::vector<uint8_t> &data) {
-  // The module forwards peer writes as raw bytes (no URC) once the MCU set
-  // AT+QBLETRANMODE. Writes to other characteristics (ff06) arrive the same way.
+  // The stock module forwards every peer write as raw bytes, no URC, ~45 ms
+  // later, in AT mode and in transparent mode alike, whatever the
+  // characteristic (ff01, ff06). (It also forwards the CCCD write that enables
+  // notifications, "01 00"; the B2500 ignores it, so that is not emulated.)
   (void) uuid;
   if (!this->ble_session_)
     this->ble_connected(true);
