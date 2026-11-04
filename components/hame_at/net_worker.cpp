@@ -1,4 +1,5 @@
 #include "net_worker.h"
+#include "tls_session.h"
 
 #ifdef USE_LIBRETINY
 
@@ -38,47 +39,36 @@ class LtTransport : public Transport {
  public:
   bool connect(const std::string &host, uint16_t port, const TlsCredentials *tls) override {
     this->close();
+    this->tcp_ = new WiFiClient();  // NOLINT: owned here, freed in close()
+    if (this->tcp_->connect(host.c_str(), port, CONNECT_TIMEOUT_MS) != 1) {
+      this->last_error_ = "TCP connect failed";
+      this->close();
+      return false;
+    }
     if (tls != nullptr) {
+      // TLS on the same socket, straight on mbedTLS (see tls_session.h).
       const uint32_t heap_before = lt_heap_get_free();
-      this->tls_ = new MbedTLSClient();  // NOLINT: owned here, freed in close()
-      this->tls_->setHandshakeTimeout(CONNECT_TIMEOUT_MS);
-      // MbedTLSClient only presents a client certificate together with a CA
-      // (it ignores them in insecure mode); the MCU uploads all three. A
-      // missing one must be nullptr: it would parse "" and fail.
-      const bool with_cert = !tls->client_cert.empty() && !tls->client_key.empty();
-      int ok = this->tls_->connect(host.c_str(), port, tls->ca.empty() ? nullptr : tls->ca.c_str(),
-                                   with_cert ? tls->client_cert.c_str() : nullptr,
-                                   with_cert ? tls->client_key.c_str() : nullptr);
-      if (ok != 1) {
-        // MbedTLSClient::lastError() is a stub on LibreTiny: no reason to
-        // report, but the heap tells whether the handshake ran out of memory.
-        char err[64];
-        snprintf(err, sizeof(err), "TLS handshake failed; heap %u B free before, %u B after",
-                 static_cast<unsigned>(heap_before), static_cast<unsigned>(lt_heap_get_free()));
-        this->last_error_ = err;
+      std::string err;
+      if (!this->tls_.start(this->tcp_->fd(), host, tls->ca, tls->client_cert, tls->client_key, CONNECT_TIMEOUT_MS,
+                            err)) {
+        char heap[48];
+        snprintf(heap, sizeof(heap), "; heap %u B free before", static_cast<unsigned>(heap_before));
+        this->last_error_ = "TLS " + err + heap;
         this->close();
         return false;
       }
-      this->client_ = this->tls_;
-    } else {
-      this->tcp_ = new WiFiClient();  // NOLINT
-      if (this->tcp_->connect(host.c_str(), port, CONNECT_TIMEOUT_MS) != 1) {
-        this->last_error_ = "TCP connect failed";
-        this->close();
-        return false;
-      }
-      this->client_ = this->tcp_;
+      this->secure_ = true;
     }
     this->last_error_.clear();
     return true;
   }
   bool connected() override {
-    if (this->client_ == nullptr)
+    if (this->tcp_ == nullptr)
       return false;
     // Not LwIPClient::connected(): it does a zero-length recv, which sets no
     // errno, and then decides on whatever errno some other socket call left.
     // Peek one byte instead: 0 = closed by the peer, EWOULDBLOCK = alive.
-    const int fd = this->client_->fd();
+    const int fd = this->tcp_->fd();
     if (fd < 0) {
       this->last_error_ = "no socket";
       return false;
@@ -90,38 +80,47 @@ class LtTransport : public Transport {
     return false;
   }
   int read(uint8_t *buf, size_t len) override {
-    if (this->client_ == nullptr)
+    if (this->tcp_ == nullptr)
       return -1;
-    int avail = this->client_->available();
-    if (avail < 0) {  // TLS: mbedtls error; the client has stopped itself
-      this->last_error_ = "TLS error " + std::to_string(avail);
-      return -1;
+    if (this->secure_) {
+      const int n = this->tls_.recv_some(buf, len);
+      if (n < 0)
+        this->last_error_ = this->tls_.last_error();
+      return n;
     }
-    if (avail == 0)
+    int avail = this->tcp_->available();
+    if (avail <= 0)
       return this->connected() ? 0 : -1;
-    int n = this->client_->read(buf, std::min<size_t>(len, avail));
+    int n = this->tcp_->read(buf, std::min<size_t>(len, avail));
     return n < 0 ? 0 : n;
   }
   bool write(const uint8_t *data, size_t len) override {
-    if (this->client_ == nullptr)
+    if (this->tcp_ == nullptr)
       return false;
-    return this->client_->write(data, len) == len;
+    if (this->secure_) {
+      if (!this->tls_.send_all(data, len, CONNECT_TIMEOUT_MS)) {
+        this->last_error_ = this->tls_.last_error();
+        return false;
+      }
+      return true;
+    }
+    return this->tcp_->write(data, len) == len;
   }
   void close() override {
-    if (this->client_ != nullptr)
-      this->client_->stop();
-    delete this->tls_;  // NOLINT
+    if (this->secure_)
+      this->tls_.finish();
+    this->secure_ = false;
+    if (this->tcp_ != nullptr)
+      this->tcp_->stop();
     delete this->tcp_;  // NOLINT
-    this->tls_ = nullptr;
     this->tcp_ = nullptr;
-    this->client_ = nullptr;
   }
   std::string last_error() const override { return this->last_error_; }
 
  protected:
-  WiFiClient *client_{nullptr};
-  MbedTLSClient *tls_{nullptr};
   WiFiClient *tcp_{nullptr};
+  TlsSession tls_;
+  bool secure_{false};
   std::string last_error_;
 };
 
