@@ -40,6 +40,8 @@ class TlsSession {
     uint32_t lowest_free{0};
     uint32_t largest_alloc{0};
     uint32_t allocs{0};
+    bool default_suites{false};  ///< the SDK's suite list was offered
+    const char *suite{""};       ///< negotiated (static string)
   };
   const HandshakeStats &handshake_stats() const { return this->stats_; }
 
@@ -48,6 +50,8 @@ class TlsSession {
  protected:
   void trim_after_handshake_();
   void shrink_buffers_();
+  const char *suite_name_() const;
+  bool fallback_next_{false};
   Impl *impl_;
   std::string error_;
   HandshakeStats stats_;

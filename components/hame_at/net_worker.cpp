@@ -60,10 +60,12 @@ class LtTransport : public Transport {
       }
       this->secure_ = true;
       const auto &st = this->tls_.handshake_stats();
-      char info[128];
+      char info[224];
       snprintf(info, sizeof(info),
-               "TLS handshake %u ms; heap %u B free before, %u B at the lowest (largest block %u B), %u B after",
-               static_cast<unsigned>(st.ms), static_cast<unsigned>(heap_before), static_cast<unsigned>(st.lowest_free),
+               "%s (%s suites), handshake %u ms; heap %u B free before, %u B at the lowest (largest block %u B), "
+               "%u B after",
+               st.suite, st.default_suites ? "SDK default" : "our", static_cast<unsigned>(st.ms),
+               static_cast<unsigned>(heap_before), static_cast<unsigned>(st.lowest_free),
                static_cast<unsigned>(st.largest_alloc), static_cast<unsigned>(lt_heap_get_free()));
       this->info_ = info;
     } else {

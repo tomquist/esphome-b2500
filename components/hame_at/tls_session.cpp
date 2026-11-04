@@ -210,7 +210,12 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
     s.have_cert = true;
   }
   mbedtls_ssl_conf_rng(&s.conf, tls_random, nullptr);
-  mbedtls_ssl_conf_ciphersuites(&s.conf, CIPHERSUITES);
+  // After a handshake the server aborted, try the SDK's default suite list
+  // (and its usual ClientHello) once, to tell the two apart in the log.
+  this->stats_.default_suites = this->fallback_next_;
+  if (!this->fallback_next_)
+    mbedtls_ssl_conf_ciphersuites(&s.conf, CIPHERSUITES);
+  this->fallback_next_ = false;
 #if defined(MBEDTLS_ECP_C)
   // Offer only P-256 for ECDHE: servers would otherwise pick P-384, which
   // takes longer and more memory on this chip.
@@ -240,7 +245,12 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
         char alert[32];
         snprintf(alert, sizeof(alert), " (server sent alert %u)", static_cast<unsigned>(s.ssl.in_msg[1]));
         err += alert;
+        this->fallback_next_ = !this->stats_.default_suites;
       }
+      char where[96];
+      snprintf(where, sizeof(where), " at step %d, %s, %s suites", s.ssl.state, this->suite_name_(),
+               this->stats_.default_suites ? "SDK default" : "our");
+      err += where;
       if (flags_v != 0 && flags_v != static_cast<uint32_t>(-1)) {
         char extra[32];
         snprintf(extra, sizeof(extra), ", verify flags 0x%X", static_cast<unsigned>(flags_v));
@@ -254,9 +264,21 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
     }
     delay(5);
   }
+  this->stats_.suite = this->suite_name_();
   this->trim_after_handshake_();
   this->error_.clear();
   return true;
+}
+
+const char *TlsSession::suite_name_() const {
+  const mbedtls_ssl_context &ssl = this->impl_->ssl;
+  int id = 0;
+  if (ssl.session_negotiate != nullptr)
+    id = ssl.session_negotiate->ciphersuite;
+  else if (ssl.session != nullptr)
+    id = ssl.session->ciphersuite;
+  const char *name = id != 0 ? mbedtls_ssl_get_ciphersuite_name(id) : nullptr;
+  return name != nullptr ? name : "no suite yet";
 }
 
 void TlsSession::trim_after_handshake_() {
