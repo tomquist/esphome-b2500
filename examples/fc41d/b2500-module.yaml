@@ -41,7 +41,7 @@ external_components:
   - source:
       type: local
       path: ../../components
-    components: [bk72xx_ble_server, hame_at]
+    components: [bk72xx_ble_server, hame_at, hame_device]
 
 logger:
   level: DEBUG
@@ -93,7 +93,7 @@ bk72xx_ble_server:
       notify: true
 
 hame_at:
-  id: battery
+  id: module
   uart_id: mcu_uart
   ble_server_id: ble_server
   time_id: sntp_time
@@ -118,12 +118,19 @@ hame_at:
         if (topic.find("/device/") != std::string::npos)
           id(battery_status).publish_state(payload);
 
-interval:
-  # Ask the battery for its status, as the app and hm2mqtt do.
-  - interval: 60s
-    then:
-      - hame_at.send_to_mcu:
-          payload: "cd=1"
+# The battery as Home Assistant entities: a hame_device hub on the MCU's MQTT
+# session, plus the device profile for the B2500 v2 (it adds the message
+# types, sensors and controls to this hub). Keep the list form ("- id:"): the
+# profiles extend this entry.
+hame_device:
+  - id: battery
+    hame_at_id: module
+
+packages:
+  b2500: !include {file: devices/b2500-v2.yaml, vars: {device: battery}}
+  # Optional add-ons (one more request each per minute):
+  # b2500_electrical: !include {file: devices/b2500-v2-electrical.yaml, vars: {device: battery}}
+  # b2500_cells: !include {file: devices/b2500-v2-cells.yaml, vars: {device: battery}}
 
 switch:
   - platform: hame_at
@@ -138,6 +145,7 @@ text_sensor:
     id: battery_status
     name: Battery status (raw)
     entity_category: diagnostic
+    disabled_by_default: true
 
 sensor:
   - platform: debug

@@ -33,12 +33,36 @@ except ImportError:  # pragma: no cover
     sys.exit("pip install pyserial")
 
 DEVICE_TYPE = "HMA-1"
-STATUS = (
-    "p1=1,p2=1,w1=124,w2=118,pe=63,vv=226,cs=0,cd=0,am=0,o1=1,o2=1,do=90,lv=800,"
-    "cj=2,kn=1180,g1=110,g2=105,b1=0,b2=0,md=0,d1=1,e1=0:0,f1=23:59,h1=200,"
-    "d2=0,e2=0:0,f2=23:59,h2=80,d3=0,e3=0:0,f3=23:59,h3=80,sg=0,sp=80,st=0,"
-    "tl=17,th=21,tc=0,tf=0,fc=202310231502"
-)
+# The battery's state, as its runtime-info reply (cd=1) reports it. Commands
+# from the module (cd=17 charging mode, ...) change it, like on a battery.
+STATE = {
+    "p1": "1", "p2": "1", "w1": "124", "w2": "118", "pe": "63", "vv": "226", "sv": "3", "cs": "0",
+    "cd": "0", "am": "0", "o1": "1", "o2": "1", "do": "90", "lv": "240", "cj": "2", "kn": "1180",
+    "g1": "110", "g2": "105", "b1": "0", "b2": "0", "md": "0",
+    "d1": "1", "e1": "0:0", "f1": "23:59", "h1": "200",
+    "d2": "0", "e2": "0:0", "f2": "23:59", "h2": "80",
+    "d3": "0", "e3": "0:0", "f3": "23:59", "h3": "80",
+    "d4": "0", "e4": "0:0", "f4": "23:59", "h4": "80",
+    "d5": "0", "e5": "0:0", "f5": "23:59", "h5": "80",
+    "sg": "1", "sp": "80", "st": "65535", "tl": "17", "th": "21", "tc": "0", "tf": "0",
+    "fc": "202310231502", "id": "5", "a0": "63", "a1": "0", "a2": "0", "l0": "1", "l1": "0",
+    "bc": "540", "bs": "380", "pt": "910", "it": "350", "c0": "255", "c1": "0", "m0": "-120",
+    "m1": "65535", "m2": "65535", "m3": "215", "lmo": "800", "lmi": "1000", "lmf": "0", "ct_t": "3",
+    "tc_dis": "1", "ws": "-61",
+}
+CT_DIAG = {"ct_t": "3", "phase_t": "4", "dchrg_t": "1", "seq_s": "0", "c0": "10", "c1": "20", "c2": "30",
+           "cp": "60", "op": "200"}
+ELECTRICAL = {"p1": "1", "p2": "1", "m1": "32100", "m2": "31800", "c1": "3860", "c2": "3710", "w1": "124",
+              "w2": "118", "e1": "0", "e2": "0", "o1": "1", "o2": "1", "i1": "29400", "i2": "29300",
+              "c3": "3740", "c4": "3580", "g1": "110", "g2": "105", "bb": "9", "bv": "50120", "bc": "180",
+              "sb": "0", "sv": "0", "sc": "0", "lb": "0", "lv": "0", "lc": "0"}
+CELL_MV = {f"a{h}": str(3290 + i) for i, h in enumerate("0123456789abcd")} | {"ae": "0", "af": "0"}
+
+
+def kv(d):
+    return ",".join(f"{k}={v}" for k, v in d.items())
+
+
 # Cell info as the MCU sends it: soc_t1_t2_mv1.._mv14, as text.
 CELLS = "63_17_21_" + "_".join(["3301"] * 14)
 
@@ -133,19 +157,65 @@ class Sim:
             self.lines.append(line)
             self.lock.notify_all()
         if line.startswith("+QMTRECV:"):
-            # +QMTRECV: 0,0,"topic",len,"payload"
-            payload = line.rsplit(",", 1)[-1].strip('"')
-            if payload.startswith("cd=1") or payload.startswith("cd=01"):
-                threading.Thread(target=self.publish_status, daemon=True).start()
+            # +QMTRECV: 0,0,"topic",len,"payload" (the payload may contain commas)
+            parts = line.split('"', 3)  # quotes 1-2 hold the topic, 3 opens the payload
+            payload = parts[3].rstrip().rstrip('"') if len(parts) == 4 else ""
+            threading.Thread(target=self.on_command, args=(payload,), daemon=True).start()
 
     def on_ble_write(self, data):
         # Echo app frames back, as a stand-in for the battery's reply.
         threading.Thread(target=self.notify, args=(data,), daemon=True).start()
 
     # -- battery behaviour ---------------------------------------------------
-    def publish_status(self):
+    def publish(self, payload):
         topic = f"hame_energy/{DEVICE_TYPE}/device/{self.dev_id}/ctrl"
-        self.send(f'AT+QMTPUB=0,0,0,0,"{topic}",{len(STATUS)},"{STATUS}"', wait=("+QMTPUB",))
+        self.send(f'AT+QMTPUB=0,0,0,0,"{topic}",{len(payload)},"{payload}"', wait=("+QMTPUB",))
+
+    def publish_status(self):
+        self.publish(kv(STATE))
+
+    def on_command(self, payload):
+        """Apply a command the way the B2500 v2 does (hm2mqtt's command map)."""
+        args = {}
+        for item in payload.split(","):
+            k, _, v = item.partition("=")
+            args[k.strip()] = v.strip()
+        cd = args.get("cd", "")
+        md = args.get("md")
+        if cd in ("1", "01"):
+            self.publish_status()
+        elif cd == "28":
+            self.publish(kv(CT_DIAG))
+        elif cd == "16":
+            self.publish(kv(ELECTRICAL))
+        elif cd == "13":
+            self.publish(kv(CELL_MV))
+        elif cd in ("17", "3") and md is not None:
+            STATE["cs"] = md
+        elif cd in ("18", "4") and md is not None:
+            STATE["md"] = md
+        elif cd in ("19", "5") and md is not None:
+            STATE["do"] = md
+        elif cd in ("20", "7"):
+            STATE["md"] = "0"  # applying a schedule ends adaptive mode
+            for n in range(1, 6):
+                if f"a{n}" in args:
+                    STATE[f"d{n}"], STATE[f"e{n}"] = args[f"a{n}"], args.get(f"b{n}", "0:0")
+                    STATE[f"f{n}"], STATE[f"h{n}"] = args.get(f"e{n}", "0:0"), args.get(f"v{n}", "0")
+        elif cd == "22" and md is not None:
+            STATE["c0"] = md
+        elif cd == "31" and "touchuan_disa" in args:
+            STATE["tc_dis"] = args["touchuan_disa"]
+        elif cd == "27" and "dchrg" in args:
+            CT_DIAG["dchrg_t"] = args["dchrg"]
+        elif cd == "27" and "seq_check" in args:
+            CT_DIAG["seq_s"] = "3"
+        elif cd in ("10", "11"):
+            print(f"== battery {'restart' if cd == '10' else 'factory reset'} requested (ignored)")
+        else:
+            print(f"== unhandled command: {payload}")
+            return
+        print(f"== applied {payload}")
 
     def notify(self, data):
         self.send(f"AT+QBLEGATTSNTFY=ff02,{len(data)},{data.hex()}")
