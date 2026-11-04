@@ -14,6 +14,8 @@
 #   ltchiptool flash write .esphome/build/fc41d-ble-spike/.pioenvs/fc41d-ble-spike/firmware.uf2
 # (the UF2 holds the app only; the Quectel bootloader stays in place)
 # Logs come out on the debug UART (TE-B: J202, 115200).
+# Test it from a computer with Bluetooth (echo check, optional soak test):
+#   python3 tools/ble_spike_check.py [--duration 3600]
 
 substitutions:
   name: fc41d-ble-spike

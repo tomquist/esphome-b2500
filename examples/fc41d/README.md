@@ -78,6 +78,13 @@ backup.
    ltchiptool flash write .esphome/build/b2500-module/.pioenvs/b2500-module/firmware.uf2
    ```
 
+   For `ble-spike.yaml`, check the BLE link from a computer with Bluetooth
+   (`pip install bleak`); `--duration 3600` keeps reconnecting for an hour:
+
+   ```bash
+   python3 ../../tools/ble_spike_check.py
+   ```
+
 3. Play the battery on J201:
 
    ```bash
