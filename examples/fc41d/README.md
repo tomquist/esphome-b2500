@@ -207,11 +207,11 @@ See the plan in the hm2500 research repository.
   firmware-version checks for surplus feed-in and the CT phase.
 - **TLS to the cloud.** `hame_at` runs mbedTLS itself (the SDK's 2.6) and
   enables ECDHE-RSA, AES-GCM and SNI, which the SDK leaves off. The SDK's
-  config still limits it to RSA keys up to 3072 bits and SHA-1/SHA-256
-  signatures (no ECDSA, no SHA-384): enough for Hame's AWS endpoint (Amazon
-  Root CA 1, RSA 2048), not for chains such as Let's Encrypt's ISRG Root X1
-  (RSA 4096). Tested against broker.emqx.io:8883. The handshake briefly
-  takes the free heap down to about 10 KB.
+  config still limits it to RSA keys up to 3072 bits (no ECDSA): enough for
+  Hame's AWS endpoint (Amazon Root CA 1, RSA 2048), not for chains such as
+  Let's Encrypt's ISRG Root X1 (RSA 4096). Tested against
+  broker.emqx.io:8883. The handshake briefly takes the free heap down to
+  about 10 KB.
 - **Battery firmware updates.** These are blocked unless `allow_mcu_ota: true`.
 - **Wi-Fi provisioning.** Setting Wi-Fi from the Marstek app is ignored.
   ESPHome manages Wi-Fi instead.
