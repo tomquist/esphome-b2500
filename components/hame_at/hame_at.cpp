@@ -89,11 +89,52 @@ void HameAtComponent::setup() {
   this->emulator_.power_on(millis());
 }
 
+#ifdef USE_BK72XX
+// BK7231 UART1 (P10/P11, the MCU's side), registers from the BDK's
+// driver/uart/uart.h. The RX interrupt fires at 16 bytes in the FIFO or when
+// the line has been idle; on the eval kit the last bytes of long MCU lines
+// were seen arriving only with the next line, i.e. the idle interrupt did not
+// come. When bytes sit in the FIFO with nothing arriving, lower the threshold
+// to 1 for a moment: the interrupt fires and LibreTiny's handler drains them.
+static volatile uint32_t *const BK_UART1_FIFO_CONFIG = reinterpret_cast<volatile uint32_t *>(0x802100 + 4 * 1);
+static volatile uint32_t *const BK_UART1_FIFO_STATUS = reinterpret_cast<volatile uint32_t *>(0x802100 + 4 * 2);
+static volatile uint32_t *const BK_UART1_INTR_ENABLE = reinterpret_cast<volatile uint32_t *>(0x802100 + 4 * 4);
+
+void HameAtComponent::kick_uart_fifo_(uint32_t now) {
+  const uint32_t pending = (*BK_UART1_FIFO_STATUS >> 8) & 0xFF;
+  if (pending == 0) {
+    this->fifo_pending_since_ = 0;
+    return;
+  }
+  if (this->fifo_pending_since_ == 0) {
+    this->fifo_pending_since_ = now == 0 ? 1 : now;
+    return;
+  }
+  if (now - this->fifo_pending_since_ < 5)
+    return;
+  this->fifo_kicks_++;
+  if (this->fifo_kicks_ <= 5 || this->fifo_kicks_ % 100 == 0) {
+    ESP_LOGW(TAG, "%u bytes stuck in the UART FIFO, draining (interrupts 0x%02X, %u times so far)",
+             static_cast<unsigned>(pending), static_cast<unsigned>(*BK_UART1_INTR_ENABLE & 0xFF),
+             static_cast<unsigned>(this->fifo_kicks_));
+  }
+  const uint32_t cfg = *BK_UART1_FIFO_CONFIG;
+  *BK_UART1_FIFO_CONFIG = (cfg & ~(0xFFu << 8)) | (1u << 8);  // RX threshold 1
+  delayMicroseconds(20);                                       // the interrupt runs now
+  *BK_UART1_FIFO_CONFIG = cfg;
+  this->fifo_pending_since_ = 0;
+}
+#endif
+
 void HameAtComponent::loop() {
   const uint32_t now = millis();
 
   // UART from the MCU.
   int avail = this->available();
+#ifdef USE_BK72XX
+  if (avail <= 0)
+    this->kick_uart_fifo_(now);
+#endif
   while (avail > 0) {
     size_t n = std::min<size_t>(avail, sizeof(this->rx_buf_));
     if (!this->read_array(this->rx_buf_, n))

@@ -123,6 +123,11 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   void forward_http_(const HttpRequest &request, std::function<void(HttpResult)> done);
   void service_sockets_();
   void publish_cloud_status_();
+#ifdef USE_BK72XX
+  void kick_uart_fifo_(uint32_t now);
+  uint32_t fifo_pending_since_{0};
+  uint32_t fifo_kicks_{0};
+#endif
 
   Fc41dEmulator emulator_{this};
   NetWorker worker_;
