@@ -20,6 +20,7 @@ namespace esphome::hame_at {
 
 struct TlsSession::Impl {
   int fd{-1};
+  int sock_errno{0};  ///< errno of the last failed send/recv
   bool started{false};
   bool have_cert{false};
   mbedtls_ssl_context ssl;
@@ -34,22 +35,33 @@ static int tls_random(void *, unsigned char *out, size_t len) {
   return 0;
 }
 
+static constexpr int ERR_NET_SEND_FAILED = -0x004E;
+static constexpr int ERR_NET_RECV_FAILED = -0x004C;
+
 static int sock_send(void *ctx, const unsigned char *buf, size_t len) {
-  const int fd = *static_cast<int *>(ctx);
-  const int r = lwip_send(fd, buf, len, MSG_DONTWAIT);
+  auto *s = static_cast<TlsSession::Impl *>(ctx);
+  const int r = lwip_send(s->fd, buf, len, MSG_DONTWAIT);
   if (r >= 0)
     return r;
-  return (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR) ? MBEDTLS_ERR_SSL_WANT_WRITE : -0x004E;
+  const int e = errno;
+  if (e == EWOULDBLOCK || e == EAGAIN || e == EINTR)
+    return MBEDTLS_ERR_SSL_WANT_WRITE;
+  s->sock_errno = e;
+  return ERR_NET_SEND_FAILED;
 }
 
 static int sock_recv(void *ctx, unsigned char *buf, size_t len) {
-  const int fd = *static_cast<int *>(ctx);
-  const int r = lwip_recv(fd, buf, len, MSG_DONTWAIT);
+  auto *s = static_cast<TlsSession::Impl *>(ctx);
+  const int r = lwip_recv(s->fd, buf, len, MSG_DONTWAIT);
   if (r > 0)
     return r;
   if (r == 0)
     return MBEDTLS_ERR_SSL_CONN_EOF;
-  return (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR) ? MBEDTLS_ERR_SSL_WANT_READ : -0x004C;
+  const int e = errno;
+  if (e == EWOULDBLOCK || e == EAGAIN || e == EINTR)
+    return MBEDTLS_ERR_SSL_WANT_READ;
+  s->sock_errno = e;
+  return ERR_NET_RECV_FAILED;
 }
 
 // The BDK's mbedTLS sizes its record buffers on demand (Beken's
@@ -71,7 +83,7 @@ static void *counting_calloc(size_t n, size_t size) {
   void *p = tls_mbedtls_mem_calloc(n, size);
   if (g_stats != nullptr && p != nullptr) {
     const uint32_t free_now = lt_heap_get_free();
-    if (g_stats->allocs == 0 || free_now < g_stats->lowest_free)
+    if (free_now < g_stats->lowest_free)
       g_stats->lowest_free = free_now;
     if (n * size > g_stats->largest_alloc)
       g_stats->largest_alloc = n * size;
@@ -95,9 +107,16 @@ struct CountAllocs {
 };
 }  // namespace
 
-static std::string code(const char *where, int ret) {
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%s: -0x%04X", where, static_cast<unsigned>(-ret));
+static std::string code(const char *where, int ret, int sock_errno = 0) {
+  char buf[80];
+  if (ret == MBEDTLS_ERR_SSL_ALLOC_FAILED) {
+    snprintf(buf, sizeof(buf), "%s: out of memory (-0x%04X)", where, static_cast<unsigned>(-ret));
+  } else if ((ret == ERR_NET_SEND_FAILED || ret == ERR_NET_RECV_FAILED) && sock_errno != 0) {
+    snprintf(buf, sizeof(buf), "%s: socket %s failed, errno %d%s", where, ret == ERR_NET_SEND_FAILED ? "send" : "recv",
+             sock_errno, sock_errno == ENOMEM ? " (out of memory)" : "");
+  } else {
+    snprintf(buf, sizeof(buf), "%s: -0x%04X", where, static_cast<unsigned>(-ret));
+  }
   return buf;
 }
 
@@ -120,6 +139,7 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
   } elapsed{this->stats_, t0};
   Impl &s = *this->impl_;
   s.fd = fd;
+  s.sock_errno = 0;
   mbedtls_ssl_init(&s.ssl);
   mbedtls_ssl_config_init(&s.conf);
   mbedtls_x509_crt_init(&s.ca);
@@ -160,6 +180,12 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
     s.have_cert = true;
   }
   mbedtls_ssl_conf_rng(&s.conf, tls_random, nullptr);
+#if defined(MBEDTLS_ECP_C)
+  // Offer only P-256 for ECDHE: servers would otherwise pick P-384, which
+  // takes longer and more memory on this chip.
+  static const mbedtls_ecp_group_id CURVES[] = {MBEDTLS_ECP_DP_SECP256R1, MBEDTLS_ECP_DP_NONE};
+  mbedtls_ssl_conf_curves(&s.conf, CURVES);
+#endif
   ret = mbedtls_ssl_setup(&s.ssl, &s.conf);
   if (ret != 0) {
     err = code("setup", ret);
@@ -172,13 +198,18 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
   }
   int flags = lwip_fcntl(fd, F_GETFL, 0);
   lwip_fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-  mbedtls_ssl_set_bio(&s.ssl, &s.fd, sock_send, sock_recv, nullptr);
+  mbedtls_ssl_set_bio(&s.ssl, &s, sock_send, sock_recv, nullptr);
 
   const uint32_t start = millis();
   while ((ret = mbedtls_ssl_handshake(&s.ssl)) != 0) {
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
       const uint32_t flags_v = mbedtls_ssl_get_verify_result(&s.ssl);
-      err = code("handshake", ret);
+      err = code("handshake", ret, s.sock_errno);
+      if (ret == MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE && s.ssl.in_msg != nullptr) {
+        char alert[32];
+        snprintf(alert, sizeof(alert), " (server sent alert %u)", static_cast<unsigned>(s.ssl.in_msg[1]));
+        err += alert;
+      }
       if (flags_v != 0 && flags_v != static_cast<uint32_t>(-1)) {
         char extra[32];
         snprintf(extra, sizeof(extra), ", verify flags 0x%X", static_cast<unsigned>(flags_v));
@@ -245,7 +276,7 @@ int TlsSession::recv_some(uint8_t *buf, size_t len) {
     snprintf(buf, sizeof(buf), "server sent TLS alert %u", static_cast<unsigned>(s.ssl.in_msg[1]));
     this->error_ = buf;
   } else {
-    this->error_ = code("read", ret);
+    this->error_ = code("read", ret, s.sock_errno);
   }
   return -1;
 }
@@ -263,7 +294,7 @@ bool TlsSession::send_all(const uint8_t *data, size_t len, uint32_t timeout_ms) 
       continue;
     }
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-      this->error_ = code("write", ret);
+      this->error_ = code("write", ret, s.sock_errno);
       return false;
     }
     if (millis() - start > timeout_ms) {
@@ -279,7 +310,8 @@ void TlsSession::finish() {
   Impl &s = *this->impl_;
   if (!s.started)
     return;
-  mbedtls_ssl_close_notify(&s.ssl);
+  if (s.ssl.state == MBEDTLS_SSL_HANDSHAKE_OVER)
+    mbedtls_ssl_close_notify(&s.ssl);
   mbedtls_ssl_free(&s.ssl);
   mbedtls_ssl_config_free(&s.conf);
   mbedtls_x509_crt_free(&s.ca);

@@ -43,10 +43,11 @@ class TlsSession {
   };
   const HandshakeStats &handshake_stats() const { return this->stats_; }
 
+  struct Impl;  // public only for the socket callbacks in the .cpp
+
  protected:
   void trim_after_handshake_();
   void shrink_buffers_();
-  struct Impl;
   Impl *impl_;
   std::string error_;
   HandshakeStats stats_;

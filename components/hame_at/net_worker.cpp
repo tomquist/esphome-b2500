@@ -117,8 +117,8 @@ class LtTransport : public Transport {
     return this->tcp_->write(data, len) == len;
   }
   void close() override {
-    if (this->secure_)
-      this->tls_.finish();
+    // Also after a failed handshake: start() leaves its state for finish().
+    this->tls_.finish();
     this->secure_ = false;
     if (this->tcp_ != nullptr)
       this->tcp_->stop();
