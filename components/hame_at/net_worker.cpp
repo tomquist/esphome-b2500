@@ -8,6 +8,7 @@
 #include <WiFiClientSecure.h>
 #include <task.h>
 
+#include <cstdio>
 #include <cstring>
 
 namespace esphome::hame_at {
@@ -38,6 +39,7 @@ class LtTransport : public Transport {
   bool connect(const std::string &host, uint16_t port, const TlsCredentials *tls) override {
     this->close();
     if (tls != nullptr) {
+      const uint32_t heap_before = lt_heap_get_free();
       this->tls_ = new MbedTLSClient();  // NOLINT: owned here, freed in close()
       this->tls_->setHandshakeTimeout(CONNECT_TIMEOUT_MS);
       // MbedTLSClient only presents a client certificate together with a CA
@@ -48,8 +50,11 @@ class LtTransport : public Transport {
                                    with_cert ? tls->client_cert.c_str() : nullptr,
                                    with_cert ? tls->client_key.c_str() : nullptr);
       if (ok != 1) {
-        char err[96];
-        this->tls_->lastError(err, sizeof(err));
+        // MbedTLSClient::lastError() is a stub on LibreTiny: no reason to
+        // report, but the heap tells whether the handshake ran out of memory.
+        char err[64];
+        snprintf(err, sizeof(err), "TLS handshake failed; heap %u B free before, %u B after",
+                 static_cast<unsigned>(heap_before), static_cast<unsigned>(lt_heap_get_free()));
         this->last_error_ = err;
         this->close();
         return false;

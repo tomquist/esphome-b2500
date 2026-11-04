@@ -50,6 +50,10 @@ logger:
   level: DEBUG
   # UART1 (P10/P11, the module's main UART) belongs to the battery MCU.
   hardware_uart: UART2
+  # Logs over the API only: an open serial port costs 4 KB of heap for its
+  # receive buffer, which the TLS connection to the cloud needs. Set 115200
+  # to get the logs on the debug UART (FC41D-TE-B: DEBUG_USB) as well.
+  baud_rate: 0
 
 api:
 
