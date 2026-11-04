@@ -8,10 +8,7 @@
 #include <WiFiClientSecure.h>
 #include <task.h>
 
-#include <cerrno>
 #include <cstring>
-
-#include <lwip/sockets.h>
 
 namespace esphome::hame_at {
 
@@ -31,6 +28,10 @@ static constexpr int HTTP_ERR_CONNECT = 713;
 // ---------------------------------------------------------------------------
 // Transport over LibreTiny's LwIP / mbedTLS clients
 // ---------------------------------------------------------------------------
+
+// 1 alive, 0 closed by the peer, -errno on a socket error. Defined at the end
+// of the file: lwip/sockets.h defines connect/read/... as macros.
+static int socket_alive(int fd);
 
 class LtTransport : public Transport {
  public:
@@ -77,19 +78,10 @@ class LtTransport : public Transport {
       this->last_error_ = "no socket";
       return false;
     }
-    uint8_t b;
-    errno = 0;
-    const int r = lwip_recv(fd, &b, 1, MSG_PEEK | MSG_DONTWAIT);
+    const int r = socket_alive(fd);
     if (r > 0)
       return true;
-    if (r == 0) {
-      this->last_error_ = "closed by the server";
-      return false;
-    }
-    const int e = errno;
-    if (e == EWOULDBLOCK || e == EAGAIN || e == EINTR || e == 0)
-      return true;
-    this->last_error_ = "socket error " + std::to_string(e);
+    this->last_error_ = r == 0 ? "closed by the server" : "socket error " + std::to_string(-r);
     return false;
   }
   int read(uint8_t *buf, size_t len) override {
@@ -407,6 +399,26 @@ HttpResult NetWorker::do_http_(const HttpJob &job) {
     body.resize(HTTP_MAX_BODY);
   res.body = std::move(body);
   return res;
+}
+
+}  // namespace esphome::hame_at
+
+#include <cerrno>
+
+#include <lwip/sockets.h>
+
+namespace esphome::hame_at {
+
+static int socket_alive(int fd) {
+  uint8_t b;
+  errno = 0;
+  const int r = lwip_recv(fd, &b, 1, MSG_PEEK | MSG_DONTWAIT);
+  if (r > 0)
+    return 1;
+  if (r == 0)
+    return 0;
+  const int e = errno;
+  return (e == EWOULDBLOCK || e == EAGAIN || e == EINTR || e == 0) ? 1 : -e;
 }
 
 }  // namespace esphome::hame_at
