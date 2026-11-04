@@ -8,7 +8,10 @@
 #include <WiFiClientSecure.h>
 #include <task.h>
 
+#include <cerrno>
 #include <cstring>
+
+#include <lwip/sockets.h>
 
 namespace esphome::hame_at {
 
@@ -37,9 +40,12 @@ class LtTransport : public Transport {
       this->tls_ = new MbedTLSClient();  // NOLINT: owned here, freed in close()
       this->tls_->setHandshakeTimeout(CONNECT_TIMEOUT_MS);
       // MbedTLSClient only presents a client certificate together with a CA
-      // (it ignores them in insecure mode); the MCU uploads all three.
+      // (it ignores them in insecure mode); the MCU uploads all three. A
+      // missing one must be nullptr: it would parse "" and fail.
+      const bool with_cert = !tls->client_cert.empty() && !tls->client_key.empty();
       int ok = this->tls_->connect(host.c_str(), port, tls->ca.empty() ? nullptr : tls->ca.c_str(),
-                                   tls->client_cert.c_str(), tls->client_key.c_str());
+                                   with_cert ? tls->client_cert.c_str() : nullptr,
+                                   with_cert ? tls->client_key.c_str() : nullptr);
       if (ok != 1) {
         char err[96];
         this->tls_->lastError(err, sizeof(err));
@@ -57,15 +63,45 @@ class LtTransport : public Transport {
       }
       this->client_ = this->tcp_;
     }
+    this->last_error_.clear();
     return true;
   }
-  bool connected() override { return this->client_ != nullptr && this->client_->connected(); }
+  bool connected() override {
+    if (this->client_ == nullptr)
+      return false;
+    // Not LwIPClient::connected(): it does a zero-length recv, which sets no
+    // errno, and then decides on whatever errno some other socket call left.
+    // Peek one byte instead: 0 = closed by the peer, EWOULDBLOCK = alive.
+    const int fd = this->client_->fd();
+    if (fd < 0) {
+      this->last_error_ = "no socket";
+      return false;
+    }
+    uint8_t b;
+    errno = 0;
+    const int r = lwip_recv(fd, &b, 1, MSG_PEEK | MSG_DONTWAIT);
+    if (r > 0)
+      return true;
+    if (r == 0) {
+      this->last_error_ = "closed by the server";
+      return false;
+    }
+    const int e = errno;
+    if (e == EWOULDBLOCK || e == EAGAIN || e == EINTR || e == 0)
+      return true;
+    this->last_error_ = "socket error " + std::to_string(e);
+    return false;
+  }
   int read(uint8_t *buf, size_t len) override {
     if (this->client_ == nullptr)
       return -1;
     int avail = this->client_->available();
-    if (avail <= 0)
-      return this->client_->connected() ? 0 : -1;
+    if (avail < 0) {  // TLS: mbedtls error; the client has stopped itself
+      this->last_error_ = "TLS error " + std::to_string(avail);
+      return -1;
+    }
+    if (avail == 0)
+      return this->connected() ? 0 : -1;
     int n = this->client_->read(buf, std::min<size_t>(len, avail));
     return n < 0 ? 0 : n;
   }

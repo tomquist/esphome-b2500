@@ -186,7 +186,8 @@ void CloudLink::service(uint32_t now_ms) {
   }
 
   if (!this->transport_->connected()) {
-    this->fail_("connection lost", now_ms);
+    std::string err = this->transport_->last_error();
+    this->fail_(err.empty() ? "connection lost" : "connection lost (" + err + ")", now_ms);
     return;
   }
 
@@ -194,7 +195,8 @@ void CloudLink::service(uint32_t now_ms) {
   for (;;) {
     int n = this->transport_->read(buf, sizeof(buf));
     if (n < 0) {
-      this->fail_("connection closed", now_ms);
+      std::string err = this->transport_->last_error();
+      this->fail_(err.empty() ? "connection closed" : "connection closed (" + err + ")", now_ms);
       return;
     }
     if (n == 0)
