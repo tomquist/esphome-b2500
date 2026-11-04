@@ -135,6 +135,10 @@ async def to_code(config):
         "MBEDTLS_SSL_SERVER_NAME_INDICATION",
     ):
         cg.add_build_flag(f"-D{flag}")
+    # The SDK's ClientHello reserves a 4 KB send buffer for ~300 bytes; the
+    # wrapper in tls_session.cpp lets our sessions start at 512 B.
+    cg.add_build_flag("-DHAME_AT_WRAP_CONFIRM_CONTENT_LEN")
+    cg.add_build_flag("-Wl,--wrap=mbedtls_ssl_confirm_content_len")
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)

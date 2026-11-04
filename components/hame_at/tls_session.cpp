@@ -107,6 +107,36 @@ struct CountAllocs {
 };
 }  // namespace
 
+// Offered cipher suites: ECDHE first, AES-128 before AES-256. Short, so the
+// ClientHello stays far below 512 bytes (see the wrapper below); suites this
+// SDK build lacks are skipped by mbedTLS.
+static const int CIPHERSUITES[] = {
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+    MBEDTLS_TLS_RSA_WITH_AES_128_GCM_SHA256,       MBEDTLS_TLS_RSA_WITH_AES_128_CBC_SHA256,
+    MBEDTLS_TLS_RSA_WITH_AES_128_CBC_SHA,          MBEDTLS_TLS_RSA_WITH_AES_256_CBC_SHA256,
+    MBEDTLS_TLS_RSA_WITH_AES_256_CBC_SHA,          0,
+};
+
+#if defined(HAME_AT_WRAP_CONFIRM_CONTENT_LEN)
+#if !defined(MBEDTLS_SSL_DYNAMIC_CONTENT_LEN)
+#error "HAME_AT_WRAP_CONFIRM_CONTENT_LEN needs the BDK's MBEDTLS_SSL_DYNAMIC_CONTENT_LEN"
+#endif
+// ssl_write_client_hello() first makes room for 512 + 1024 bytes, which the
+// SDK rounds up to a 4 KB send buffer, kept through the whole handshake (the
+// peak) for a message of ~150 bytes plus the host name. The SNI and session
+// ticket extensions confirm their real size themselves, and with the short
+// suite list above the rest fits 512 bytes. Only for our sessions (our RNG);
+// other mbedTLS users (LibreTiny's MbedTLSClient) are left alone.
+extern "C" int __real_mbedtls_ssl_confirm_content_len(mbedtls_ssl_context *ssl, int in_record, size_t content_len);
+extern "C" int __wrap_mbedtls_ssl_confirm_content_len(mbedtls_ssl_context *ssl, int in_record, size_t content_len) {
+  if (!in_record && ssl->state == MBEDTLS_SSL_CLIENT_HELLO && content_len == MBEDTLS_SSL_BUFFER_MIN + 1024 &&
+      ssl->conf != nullptr && ssl->conf->f_rng == tls_random && ssl->conf->ciphersuite_list[0] == CIPHERSUITES)
+    content_len = MBEDTLS_SSL_BUFFER_MIN;
+  return __real_mbedtls_ssl_confirm_content_len(ssl, in_record, content_len);
+}
+#endif
+
 static std::string code(const char *where, int ret, int sock_errno = 0) {
   char buf[80];
   if (ret == MBEDTLS_ERR_SSL_ALLOC_FAILED) {
@@ -180,6 +210,7 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
     s.have_cert = true;
   }
   mbedtls_ssl_conf_rng(&s.conf, tls_random, nullptr);
+  mbedtls_ssl_conf_ciphersuites(&s.conf, CIPHERSUITES);
 #if defined(MBEDTLS_ECP_C)
   // Offer only P-256 for ECDHE: servers would otherwise pick P-384, which
   // takes longer and more memory on this chip.
