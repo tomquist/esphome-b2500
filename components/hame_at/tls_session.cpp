@@ -154,15 +154,19 @@ struct CountAllocs {
 };
 }  // namespace
 
-// Offered cipher suites: ECDHE first, AES-128 before AES-256. Short, so the
-// ClientHello stays far below 512 bytes (see the wrapper below); suites this
-// SDK build lacks are skipped by mbedTLS.
+// Offered cipher suites: forward-secret ECDHE first, static RSA only as a
+// fallback. Both AES sizes, since servers that pick by their own order
+// (EMQX) often rank AES-256 first and would otherwise fall to static RSA.
+// Short, so the ClientHello stays far below 512 bytes (see the wrapper
+// below); suites this SDK build lacks are skipped by mbedTLS.
 static const int CIPHERSUITES[] = {
-    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
-    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-    MBEDTLS_TLS_RSA_WITH_AES_128_GCM_SHA256,       MBEDTLS_TLS_RSA_WITH_AES_128_CBC_SHA256,
-    MBEDTLS_TLS_RSA_WITH_AES_128_CBC_SHA,          MBEDTLS_TLS_RSA_WITH_AES_256_CBC_SHA256,
-    MBEDTLS_TLS_RSA_WITH_AES_256_CBC_SHA,          0,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,       MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+    MBEDTLS_TLS_RSA_WITH_AES_128_GCM_SHA256,          MBEDTLS_TLS_RSA_WITH_AES_256_GCM_SHA384,
+    MBEDTLS_TLS_RSA_WITH_AES_128_CBC_SHA256,          MBEDTLS_TLS_RSA_WITH_AES_256_CBC_SHA256,
+    MBEDTLS_TLS_RSA_WITH_AES_128_CBC_SHA,             MBEDTLS_TLS_RSA_WITH_AES_256_CBC_SHA,
+    0,
 };
 
 #if defined(HAME_AT_WRAP_CONFIRM_CONTENT_LEN)
