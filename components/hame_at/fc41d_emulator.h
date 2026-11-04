@@ -132,7 +132,6 @@ class Fc41dEmulator {
   static constexpr uint32_t WIFI_JOIN_MS = 3000;       // after AT+QSTAAPINFO[DEF] (stock: 3.2 s)
   static constexpr uint32_t REANNOUNCE_MS = 8000;      // re-announce if the MCU ignored GOT_IP
   static constexpr uint8_t REANNOUNCE_MAX = 3;
-  static constexpr size_t TRAN_CHUNK = 244;            // notification size in transparent mode (MTU 247)
   static constexpr uint32_t TRAN_GAP_MS = 20;          // send a partial chunk after this pause
   static constexpr uint32_t HTTP_RESULT_MIN_MS = 300;  // +QHTTPGET/POST at least this long after OK
 
@@ -158,6 +157,9 @@ class Fc41dEmulator {
   /// Without a BLE session one is opened first (+QBLESTAT:CONNECTED).
   void ble_write(uint16_t uuid, const std::vector<uint8_t> &data);
   void ble_connected(bool connected);
+  /// The central negotiated an MTU: "+QBLEMTU:<mtu>", and transparent mode
+  /// sends MTU - 3 bytes per notification.
+  void ble_mtu(uint16_t mtu);
   /// A message from the broker; delivered if the MCU subscribed to a matching
   /// filter. Returns whether it was delivered.
   bool mqtt_receive(const std::string &topic, const std::string &payload);
@@ -239,6 +241,7 @@ class Fc41dEmulator {
   std::vector<uint16_t> ble_chars_;
   uint16_t ble_tran_uuid_{0};
   bool ble_tran_auto_{false};
+  uint16_t ble_mtu_{23};
   std::vector<uint8_t> tran_buf_;  // MCU bytes in BLE transparent mode, not yet notified
   uint32_t tran_last_ms_{0};
   bool ble_init_{false};
@@ -250,7 +253,6 @@ class Fc41dEmulator {
   bool mqtt_open_{false};
   bool mqtt_conn_{false};
   std::vector<std::string> mqtt_topics_;
-  uint16_t mqtt_msgid_{0};
 
   // HTTP
   std::string http_url_;

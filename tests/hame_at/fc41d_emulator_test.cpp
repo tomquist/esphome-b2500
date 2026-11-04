@@ -145,12 +145,12 @@ static void test_boot_and_wifi() {
   while (h.out.empty() && h.now - quiet_since < 5000)
     h.tick(10);
   EXPECT(h.now - quiet_since >= Fc41dEmulator::WIFI_IDLE_MS);
-  EXPECT_STR(h.out, "\r\n+QSTASTAT:WLAN_CONNECTED\r\n");
+  EXPECT_STR(h.out, "+QSTASTAT:WLAN_CONNECTED\r\n");  // no leading CRLF (stock)
   h.out.clear();
   h.tick(Fc41dEmulator::DHCP_MS - 10);
   EXPECT_STR(h.out, "");
   h.tick(20);
-  EXPECT_STR(h.out, "\r\n+QSTASTAT:GOT_IP\r\n");
+  EXPECT_STR(h.out, "+QSTASTAT:GOT_IP\r\n");
   EXPECT(h.emu.wifi_announced());
 
   EXPECT_STR(h.cmd("AT+QSTAST"), "\r\n+QSTAST:STATION_UP\r\n\r\nOK\r\n");
@@ -164,7 +164,7 @@ static void test_boot_and_wifi() {
   h.out.clear();
   h.backend.wifi.connected = false;
   h.tick(10);
-  EXPECT_STR(h.out, "\r\n+QSTASTAT:WLAN DISCONNECTED\r\n\r\n+QSTASTAT:WLAN_DISCONNECTED\r\n");
+  EXPECT_STR(h.out, "+QSTASTAT:WLAN DISCONNECTED\r\n+QSTASTAT:WLAN_DISCONNECTED\r\n");
   EXPECT_STR(h.cmd("AT+QSTAST"), "\r\n+QSTAST:STATION_DOWN\r\n\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QGETWIFISTATE"), "\r\nERROR\r\n");
   EXPECT_STR(h.cmd("AT+QGETIP=station"),
@@ -253,7 +253,10 @@ static void test_ble() {
   // A write without a session opens one first.
   h.out.clear();
   h.emu.ble_write(0xFF01, {0x73, 0x06, 0x23, 0x03, 0x01, 0x54});
-  EXPECT_STR(h.out, std::string("\r\n+QBLESTAT:CONNECTED\r\n\x73\x06\x23\x03\x01\x54", 29));
+  EXPECT_STR(h.out, std::string("+QBLESTAT:CONNECTED\r\n\x73\x06\x23\x03\x01\x54", 27));
+  h.out.clear();
+  h.emu.ble_mtu(512);
+  EXPECT_STR(h.out, "+QBLEMTU:<512>\r\n");
   EXPECT(h.emu.ble_session());
 
   // Hex payload.
@@ -307,12 +310,19 @@ static void test_ble() {
 
   h.out.clear();
   h.emu.ble_connected(false);
-  EXPECT_STR(h.out, "\r\n+QBLESTAT:DISCONNECTED\r\n");
+  EXPECT_STR(h.out, "+QBLESTAT:DISCONNECTED\r\n");
+  // Stock module: no central, no notification.
+  EXPECT_STR(h.cmd("AT+QBLEGATTSNTFY=ff02,6,730623030154"), "\r\nERROR\r\n");
 }
 
 static void test_mqtt() {
   Harness h;
-  EXPECT_STR(h.cmd("AT+QMTPUB=0,0,0,0,\"t\",1,\"x\""), "\r\nOK\r\n\r\n+QMTPUB: 0,0,2\r\n");
+  // Without a session the stock module answers ERROR.
+  EXPECT_STR(h.cmd("AT+QMTPUB=0,0,0,0,\"t\",1,\"x\""), "\r\nERROR\r\n");
+  EXPECT_STR(h.cmd("AT+QMTCONN=0,\"x\""), "\r\nERROR\r\n");
+  EXPECT_STR(h.cmd("AT+QMTSUB=0,1,\"t\",0"), "\r\nERROR\r\n");
+  EXPECT_STR(h.cmd("AT+QMTDISC=0"), "\r\nERROR\r\n");
+  EXPECT_STR(h.cmd("AT+QMTCLOSE=0"), "\r\nERROR\r\n");
   h.cmd("AT+QMTCFG=\"version\",0,4");
   h.cmd("AT+QMTCFG=\"keepalive\",0,60");
   h.cmd("AT+QMTCFG=\"ssl\",0,1,2");
@@ -349,8 +359,8 @@ static void test_mqtt() {
   h.out.clear();
   EXPECT(h.emu.mqtt_receive("hame_energy/HMA-1/App/aabbccddeeff/ctrl", "cd=01"));
   EXPECT(h.emu.mqtt_receive("hame_energy/HMA-1/App/aabbccddeeff/ctrl", "cd=01"));
-  EXPECT_STR(h.out, "\r\n+QMTRECV: 0,1,\"hame_energy/HMA-1/App/aabbccddeeff/ctrl\",5,\"cd=01\"\r\n"
-                    "\r\n+QMTRECV: 0,2,\"hame_energy/HMA-1/App/aabbccddeeff/ctrl\",5,\"cd=01\"\r\n");
+  EXPECT_STR(h.out, "\r\n+QMTRECV: 0,0,\"hame_energy/HMA-1/App/aabbccddeeff/ctrl\",5,\"cd=01\"\r\n"
+                    "\r\n+QMTRECV: 0,0,\"hame_energy/HMA-1/App/aabbccddeeff/ctrl\",5,\"cd=01\"\r\n");
   EXPECT(!h.emu.mqtt_receive("other/topic", "cd=01"));
   h.cmd("AT+QMTSUB=0,2,\"marstek_energy/+/App/#\",0");
   EXPECT(h.emu.mqtt_receive("marstek_energy/HMA-1/App/x/ctrl", "cd=1"));
@@ -489,7 +499,7 @@ static void test_sockets() {
   h.cmd("AT+QIOPEN=2,\"UDP SERVICE\",\"127.0.0.1\",0,22222,1");
   h.out.clear();
   h.emu.socket_received(2, "abc", "192.168.1.30", 22222);
-  EXPECT_STR(h.out, "\r\n+QIURC: \"recv\",2,3,\"192.168.1.30\",22222\r\nabc\r\n");
+  EXPECT_STR(h.out, "\r\n+QIURC: \"recv\",2,3,\"192.168.1.30\",22222,\r\nabc\r\n");  // stock: trailing comma
   h.out.clear();
   h.emu.socket_closed(2);
   EXPECT_STR(h.out, "\r\n+QIURC: \"closed\",2\r\n");

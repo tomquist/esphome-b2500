@@ -92,6 +92,9 @@ class AtEngine {
 
   // --- Output helpers. Responses are framed "\r\n<text>\r\n". ---
   void send_line(const std::string &text);
+  /// "<text>\r\n" without the leading CRLF: how the stock module sends
+  /// +QSTASTAT, +QBLESTAT and +QBLEMTU.
+  void send_bare_line(const std::string &text);
   void ok() { this->send_line("OK"); }
   void error() { this->send_line("ERROR"); }
   /// Unframed bytes, e.g. a "> " prompt or a raw read body.

@@ -257,6 +257,7 @@ void BK72xxBLEServer::handle_event_(const GattsEvent &ev) {
     case BdkNotice::MTU_CHANGE:
       this->mtu_ = ev.value16;
       ESP_LOGD(TAG, "MTU %u", this->mtu_);
+      this->mtu_callbacks_.call(this->mtu_);
       return;
     case BdkNotice::WRITE: {
       for (auto *chr : this->characteristics_) {

@@ -64,8 +64,19 @@ class Sim:
                 continue
             buf += chunk
             while True:
-                # Lines are framed "\r\n<text>\r\n"; anything else is a raw BLE write.
-                if buf.startswith(b"\r\n"):
+                # Lines are framed "\r\n<text>\r\n", except the Wi-Fi/BLE state
+                # URCs (no leading CRLF, as on a stock module); anything else is
+                # a raw BLE write.
+                bare = buf.startswith((b"+QSTASTAT:", b"+QBLESTAT:", b"+QBLEMTU:"))
+                if bare:
+                    end = buf.find(b"\r\n")
+                    if end < 0:
+                        break
+                    line = buf[:end].decode(errors="replace")
+                    buf = buf[end + 2 :]
+                    print(f"<MOD {line}")
+                    self.on_line(line)
+                elif buf.startswith(b"\r\n"):
                     end = buf.find(b"\r\n", 2)
                     if end < 0:
                         break

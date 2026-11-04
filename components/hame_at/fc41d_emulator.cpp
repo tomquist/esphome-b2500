@@ -138,10 +138,12 @@ void Fc41dEmulator::flush_tran_(bool all) {
   // Bytes written in transparent mode go out in notification-sized chunks,
   // once the MCU pauses (or a chunk is full).
   while (!this->tran_buf_.empty()) {
-    bool full = this->tran_buf_.size() >= TRAN_CHUNK;
+    // One notification carries MTU - 3 bytes.
+    const size_t per_ntf = this->ble_mtu_ > 23 ? this->ble_mtu_ - 3u : 20u;
+    bool full = this->tran_buf_.size() >= per_ntf;
     if (!all && !full && this->now_ - this->tran_last_ms_ < TRAN_GAP_MS)
       return;
-    size_t n = std::min(this->tran_buf_.size(), TRAN_CHUNK);
+    size_t n = std::min(this->tran_buf_.size(), per_ntf);
     std::vector<uint8_t> chunk(this->tran_buf_.begin(), this->tran_buf_.begin() + n);
     this->tran_buf_.erase(this->tran_buf_.begin(), this->tran_buf_.begin() + n);
     if (this->ble_session_)
@@ -172,24 +174,24 @@ void Fc41dEmulator::wifi_tick_() {
       this->now_ - this->ip_ms_ >= REANNOUNCE_MS && quiet && idle >= WIFI_IDLE_MS) {
     this->reannounced_++;
     this->got_ip_ = false;
-    this->engine_.send_line("+QSTASTAT:WLAN_CONNECTED");
+    this->engine_.send_bare_line("+QSTASTAT:WLAN_CONNECTED");
     this->later_(DHCP_MS, [this]() {
       this->got_ip_ = true;
       this->ip_ms_ = this->now_;
-      this->engine_.send_line("+QSTASTAT:GOT_IP");
+      this->engine_.send_bare_line("+QSTASTAT:GOT_IP");
     });
   }
 }
 
 void Fc41dEmulator::announce_wifi_() {
   this->wifi_up_ = true;
-  this->engine_.send_line("+QSTASTAT:WLAN_CONNECTED");
+  this->engine_.send_bare_line("+QSTASTAT:WLAN_CONNECTED");
   this->later_(DHCP_MS, [this]() {
     if (!this->wifi_up_)
       return;
     this->got_ip_ = true;
     this->ip_ms_ = this->now_;
-    this->engine_.send_line("+QSTASTAT:GOT_IP");
+    this->engine_.send_bare_line("+QSTASTAT:GOT_IP");
   });
 }
 
@@ -198,8 +200,8 @@ void Fc41dEmulator::wifi_lost_() {
   // The families disagree on the spelling: Venus and Jupiter match
   // "WLAN DISCONNECTED", the CT002/CT003 "WLAN_DISCONNECTED", the B2500
   // neither (it polls AT+QSTAST). Each ignores the other form, so send both.
-  this->engine_.send_line("+QSTASTAT:WLAN DISCONNECTED");
-  this->engine_.send_line("+QSTASTAT:WLAN_DISCONNECTED");
+  this->engine_.send_bare_line("+QSTASTAT:WLAN DISCONNECTED");
+  this->engine_.send_bare_line("+QSTASTAT:WLAN_DISCONNECTED");
   if (this->mqtt_conn_ || this->mqtt_open_) {
     // A real module loses its MQTT session with the station.
     bool was = this->mqtt_conn_;
@@ -230,14 +232,23 @@ void Fc41dEmulator::ble_connected(bool connected) {
   this->ble_session_ = connected;
   if (connected) {
     this->ble_advertising_ = false;
-    this->engine_.send_line("+QBLESTAT:CONNECTED");
+    this->ble_mtu_ = 23;
+    // Stock module: no leading CRLF; "+QBLEMTU:<512>" follows once the
+    // central has negotiated (see ble_mtu()).
+    this->engine_.send_bare_line("+QBLESTAT:CONNECTED");
     // The MCU sends notifications as AT+QBLEGATTSNTFY commands (every image),
     // so the UART stays in command mode while a central is connected.
   } else {
-    this->engine_.send_line("+QBLESTAT:DISCONNECTED");
+    this->engine_.send_bare_line("+QBLESTAT:DISCONNECTED");
     if (this->engine_.get_mode() == AtEngine::Mode::TRANSPARENT)
       this->engine_.exit_transparent();
   }
+}
+
+void Fc41dEmulator::ble_mtu(uint16_t mtu) {
+  this->ble_mtu_ = mtu;
+  if (this->ble_session_)
+    this->engine_.send_bare_line("+QBLEMTU:<" + std::to_string(mtu) + ">");  // brackets and all
 }
 
 bool Fc41dEmulator::mqtt_receive(const std::string &topic, const std::string &payload) {
@@ -252,9 +263,9 @@ bool Fc41dEmulator::mqtt_receive(const std::string &topic, const std::string &pa
   }
   if (!subscribed)
     return false;
-  this->mqtt_msgid_++;
+  // QoS 0 deliveries carry message id 0 (stock module).
   char hdr[48];
-  snprintf(hdr, sizeof(hdr), "+QMTRECV: 0,%u,\"", static_cast<unsigned>(this->mqtt_msgid_));
+  snprintf(hdr, sizeof(hdr), "+QMTRECV: 0,%u,\"", 0u);
   this->engine_.send_line(std::string(hdr) + topic + "\"," + std::to_string(payload.size()) + ",\"" + payload + "\"");
   return true;
 }
@@ -268,7 +279,7 @@ void Fc41dEmulator::socket_received(int id, const std::string &data, const std::
   if (s.spec.mode == 1) {
     std::string hdr = "+QIURC: \"recv\"," + std::to_string(id) + "," + std::to_string(data.size());
     if (s.spec.kind == "UDP SERVICE" && !ip.empty())
-      hdr += ",\"" + ip + "\"," + std::to_string(port);
+      hdr += ",\"" + ip + "\"," + std::to_string(port) + ",";  // stock: trailing comma
     this->engine_.send_raw("\r\n" + hdr + "\r\n" + data + "\r\n");
   } else if (s.spec.mode == 2) {
     this->engine_.send_raw(data);
@@ -561,12 +572,12 @@ void Fc41dEmulator::register_handlers_() {
       e.ok();
       return;
     }
-    e.ok();
-    std::string idx = cmd.arg(0, "0");
     if (!this->mqtt_open_) {
-      this->later_(20, [this, idx]() { this->engine_.send_line("+QMTCONN: " + idx + ",2"); });
+      e.error();  // stock module: no network connection open
       return;
     }
+    e.ok();
+    std::string idx = cmd.arg(0, "0");
     this->mqtt_conn_ = true;
     this->mqtt_session_.client_id = cmd.arg(1);
     this->mqtt_session_.username = cmd.arg(2);
@@ -576,6 +587,10 @@ void Fc41dEmulator::register_handlers_() {
   });
   e.on("QMTSUB", [this](AtEngine &e, const AtCommand &cmd) {
     // AT+QMTSUB=<id>,<msgid>,"topic",<qos>[,"topic",<qos>...]
+    if (!this->mqtt_conn_) {
+      e.error();  // stock module
+      return;
+    }
     e.ok();
     for (size_t i = 2; i < cmd.args.size(); i += 2) {
       const std::string &topic = cmd.arg(i);
@@ -607,11 +622,11 @@ void Fc41dEmulator::register_handlers_() {
   });
   auto publish = [this](AtEngine &e, const std::string &idx, long msgid, bool retain, const std::string &topic,
                         const std::string &payload) {
-    e.ok();
     if (!this->mqtt_conn_) {
-      this->engine_.send_line("+QMTPUB: " + idx + "," + std::to_string(msgid) + ",2");
+      e.error();  // stock module
       return;
     }
+    e.ok();
     this->backend_->mqtt_publish(topic, payload, retain);
     std::string urc = "+QMTPUB: " + idx + "," + std::to_string(msgid) + ",0";
     this->later_(10, [this, urc]() { this->engine_.send_line(urc); });
@@ -647,6 +662,10 @@ void Fc41dEmulator::register_handlers_() {
     e.error();
   });
   e.on("QMTCLOSE", [this](AtEngine &e, const AtCommand &cmd) {
+    if (!this->mqtt_open_) {
+      e.error();  // stock module: also after QMTDISC, which closes the connection
+      return;
+    }
     e.ok();
     bool was = this->mqtt_conn_;
     this->mqtt_open_ = this->mqtt_conn_ = false;
@@ -657,9 +676,13 @@ void Fc41dEmulator::register_handlers_() {
       this->backend_->mqtt_closed();
   });
   e.on("QMTDISC", [this](AtEngine &e, const AtCommand &cmd) {
+    if (!this->mqtt_open_) {
+      e.error();  // stock module
+      return;
+    }
     e.ok();
     bool was = this->mqtt_conn_;
-    this->mqtt_conn_ = false;
+    this->mqtt_conn_ = this->mqtt_open_ = false;
     this->mqtt_topics_.clear();
     std::string urc = "+QMTDISC: " + cmd.arg(0, "0") + ",0";
     this->later_(10, [this, urc]() { this->engine_.send_line(urc); });
@@ -921,8 +944,10 @@ void Fc41dEmulator::register_handlers_() {
   e.on("QISTATE", [this](AtEngine &e, const AtCommand &) {
     for (auto &kv : this->sockets_) {
       const SocketSpec &sp = kv.second.spec;
-      e.send_line("+QISTATE: " + std::to_string(sp.id) + ",\"" + sp.kind + "\",\"" + sp.host + "\"," +
-                  std::to_string(sp.port) + "," + std::to_string(sp.local_port) + ",2," + std::to_string(sp.mode));
+      // Stock module: '+QISTATE: 1,"UDP SERVICE","<own ip>",0,12345,2'.
+      std::string host = sp.kind == "UDP SERVICE" ? this->backend_->wifi_status().ip : sp.host;
+      e.send_line("+QISTATE: " + std::to_string(sp.id) + ",\"" + sp.kind + "\",\"" + host + "\"," +
+                  std::to_string(sp.port) + "," + std::to_string(sp.local_port) + ",2");
     }
     e.ok();
   });

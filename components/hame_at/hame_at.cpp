@@ -71,6 +71,7 @@ void HameAtComponent::setup() {
         chr->add_on_write_callback([this, uuid](const std::vector<uint8_t> &v) { this->emulator_.ble_write(uuid, v); });
     }
     this->ble_->add_on_connection_callback([this](bool connected) { this->emulator_.ble_connected(connected); });
+    this->ble_->add_on_mtu_callback([this](uint16_t mtu) { this->emulator_.ble_mtu(mtu); });
   }
 #endif
 

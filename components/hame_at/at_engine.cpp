@@ -117,6 +117,12 @@ void AtEngine::send_line(const std::string &text) {
   this->send_raw(framed);
 }
 
+void AtEngine::send_bare_line(const std::string &text) {
+  if (this->logger_)
+    this->logger_(false, text);
+  this->send_raw(text + "\r\n");
+}
+
 static bool starts_with_ci(const std::string &s, const std::string &prefix) {
   if (s.size() < prefix.size())
     return false;

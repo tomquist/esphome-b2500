@@ -117,6 +117,8 @@ class BK72xxBLEServer final : public Component {
   BLECharacteristic *get_characteristic(uint16_t uuid);
   /// C++ listeners for connect (true) / disconnect (false), main task.
   void add_on_connection_callback(std::function<void(bool)> &&cb) { this->connection_callbacks_.add(std::move(cb)); }
+  /// Called with the ATT MTU the central negotiated.
+  void add_on_mtu_callback(std::function<void(uint16_t)> &&cb) { this->mtu_callbacks_.add(std::move(cb)); }
 
   Trigger<> *get_on_connect_trigger() { return &this->on_connect_; }
   Trigger<> *get_on_disconnect_trigger() { return &this->on_disconnect_; }
@@ -158,6 +160,7 @@ class BK72xxBLEServer final : public Component {
   Trigger<> on_connect_;
   Trigger<> on_disconnect_;
   CallbackManager<void(bool)> connection_callbacks_;
+  CallbackManager<void(uint16_t)> mtu_callbacks_;
 
   uint32_t last_attempt_ms_{0};
   uint16_t mtu_{23};
