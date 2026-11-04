@@ -4,13 +4,16 @@
 
 #include <Arduino.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
 
 #include <lwip/sockets.h>
 #include <mbedtls/pk.h>
+#include <mbedtls/platform.h>
 #include <mbedtls/ssl.h>
+#include <mbedtls/ssl_internal.h>
 #include <mbedtls/x509_crt.h>
 
 namespace esphome::hame_at {
@@ -48,6 +51,14 @@ static int sock_recv(void *ctx, unsigned char *buf, size_t len) {
     return MBEDTLS_ERR_SSL_CONN_EOF;
   return (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR) ? MBEDTLS_ERR_SSL_WANT_READ : -0x004C;
 }
+
+// The BDK's mbedTLS sizes its record buffers on demand (Beken's
+// MBEDTLS_SSL_DYNAMIC_CONTENT_LEN) in steps of 512/4096/8192/... and never
+// shrinks them. Reads always ask for 4096 (it adds 1 KB of slack), but writes
+// of at most SEND_CHUNK keep the send buffer at 512.
+static constexpr size_t IN_BUF_KEEP = 4096;
+static constexpr size_t OUT_BUF_KEEP = 512;
+static constexpr size_t SEND_CHUNK = 480;  // + 5 header bytes must fit OUT_BUF_KEEP
 
 static std::string code(const char *where, int ret) {
   char buf[64];
@@ -139,8 +150,36 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
     }
     delay(5);
   }
+  this->trim_after_handshake_();
   this->error_.clear();
   return true;
+}
+
+void TlsSession::trim_after_handshake_() {
+  Impl &s = *this->impl_;
+  // Only the handshake needs the certificates; no renegotiation follows.
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+  if (s.ssl.session != nullptr && s.ssl.session->peer_cert != nullptr) {
+    mbedtls_x509_crt_free(s.ssl.session->peer_cert);
+    mbedtls_free(s.ssl.session->peer_cert);
+    s.ssl.session->peer_cert = nullptr;
+  }
+#endif
+  mbedtls_ssl_conf_ca_chain(&s.conf, nullptr, nullptr);
+  mbedtls_x509_crt_free(&s.ca);
+  this->shrink_buffers_();
+}
+
+void TlsSession::shrink_buffers_() {
+#if defined(MBEDTLS_SSL_DYNAMIC_CONTENT_LEN)
+  Impl &s = *this->impl_;
+  // Smaller copies of idle buffers (the copy keeps the first bytes and the
+  // record pointers). On failure the old buffer stays.
+  if (s.ssl.in_max_content_len > IN_BUF_KEEP && s.ssl.in_left == 0 && mbedtls_ssl_get_bytes_avail(&s.ssl) == 0)
+    mbedtls_ssl_alloc_record_buf(&s.ssl, 1, IN_BUF_KEEP);
+  if (s.ssl.out_max_content_len > OUT_BUF_KEEP && s.ssl.out_left == 0)
+    mbedtls_ssl_alloc_record_buf(&s.ssl, 0, OUT_BUF_KEEP);
+#endif
 }
 
 int TlsSession::recv_some(uint8_t *buf, size_t len) {
@@ -148,8 +187,10 @@ int TlsSession::recv_some(uint8_t *buf, size_t len) {
   if (!s.started)
     return -1;
   const int ret = mbedtls_ssl_read(&s.ssl, buf, len);
-  if (ret > 0)
+  if (ret > 0) {
+    this->shrink_buffers_();  // after a large record from the server
     return ret;
+  }
   if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE)
     return 0;
   if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
@@ -174,7 +215,7 @@ bool TlsSession::send_all(const uint8_t *data, size_t len, uint32_t timeout_ms) 
   const uint32_t start = millis();
   size_t done = 0;
   while (done < len) {
-    const int ret = mbedtls_ssl_write(&s.ssl, data + done, len - done);
+    const int ret = mbedtls_ssl_write(&s.ssl, data + done, std::min(len - done, SEND_CHUNK));
     if (ret > 0) {
       done += static_cast<size_t>(ret);
       continue;
