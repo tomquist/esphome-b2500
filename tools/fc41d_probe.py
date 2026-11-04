@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""Record how a real FC41D answers the commands the B2500 MCU sends.
+
+Run against the module's main UART (FC41D-TE-B: the M_UART_USB port) while
+the module still has its stock Quectel firmware. It sends the B2500 MCU's
+command set (hm2500 research repo, doc/esphome-fc41d-plan.md §4) one at a
+time and records every byte the module sends back, with timestamps, so the
+response formats and timing of hame_at's emulator (components/hame_at) can
+be checked against a real module.
+
+    pip install pyserial
+    python3 tools/fc41d_probe.py /dev/ttyUSB1 --ssid MyWifi --password secret
+
+Optional steps:
+  --ble-wait 60   advertise as HMA-1_TEST for 60 s: connect with nRF Connect,
+                  enable notifications on ff02, write a few bytes to ff01
+  --udp-port N    open a UDP service on port N and wait 20 s for a datagram
+                  (send one with: echo -n hello | nc -u <module-ip> N)
+
+Output: fc41d-probe-<timestamp>.log (readable) and .jsonl (exact bytes).
+The Wi-Fi password is masked in both. The probe joins Wi-Fi with
+AT+QSTAAPINFO, which (unlike AT+QSTAAPINFODEF) does not save the credentials
+in the module's flash.
+"""
+
+import argparse
+import json
+import sys
+import threading
+import time
+
+try:
+    import serial  # pyserial
+except ImportError:  # pragma: no cover
+    sys.exit("pip install pyserial")
+
+
+class Probe:
+    def __init__(self, port, baud, out, secret):
+        self.ser = serial.Serial(port, baud, timeout=0.02)
+        self.t0 = time.monotonic()
+        self.rx = bytearray()
+        self.lock = threading.Condition()
+        self.stop = False
+        self.secret = secret
+        self.log = open(out + ".log", "w", encoding="utf-8")
+        self.jsonl = open(out + ".jsonl", "w", encoding="utf-8")
+        threading.Thread(target=self._reader, daemon=True).start()
+
+    def now(self):
+        return time.monotonic() - self.t0
+
+    def _record(self, direction, data):
+        t = self.now()
+        if self.secret:
+            data = data.replace(self.secret.encode("latin1"), b"***")
+        text = data.decode("latin1")
+        self.jsonl.write(json.dumps({"t": round(t, 4), "dir": direction, "hex": data.hex(), "text": text}) + "\n")
+        shown = text.replace("\r", "\\r").replace("\n", "\\n")
+        self.log.write(f"{t:9.3f} {direction} {shown}\n")
+        self.log.flush()
+        self.jsonl.flush()
+        print(f"{t:9.3f} {direction} {shown}")
+
+    def _reader(self):
+        while not self.stop:
+            chunk = self.ser.read(512)
+            if chunk:
+                self._record("<", chunk)
+                with self.lock:
+                    self.rx.extend(chunk)
+                    self.lock.notify_all()
+
+    def note(self, text):
+        self.log.write(f"# {text}\n")
+        print(f"# {text}")
+
+    def send(self, data):
+        if isinstance(data, str):
+            data = data.encode("latin1")
+        with self.lock:
+            self.rx.clear()
+        self._record(">", data)
+        self.ser.write(data)
+
+    def wait_for(self, tokens, timeout):
+        deadline = time.monotonic() + timeout
+        with self.lock:
+            while time.monotonic() < deadline:
+                text = self.rx.decode("latin1")
+                for tok in tokens:
+                    if tok in text:
+                        return tok
+                self.lock.wait(0.05)
+        return None
+
+    def cmd(self, line, wait=("\r\nOK\r\n", "ERROR"), timeout=5.0, settle=0.5):
+        """Send a command, wait for its final result, then keep listening a bit
+        for URCs that follow (their delay after OK is part of what we measure)."""
+        self.send(line + "\r\n")
+        result = self.wait_for(wait, timeout)
+        if result is None:
+            self.note(f"no {wait} within {timeout}s")
+        time.sleep(settle)
+        return result
+
+    def quiet(self, seconds):
+        time.sleep(seconds)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("port", help="module main UART (FC41D-TE-B: M_UART_USB)")
+    ap.add_argument("--baud", type=int, default=115200)
+    ap.add_argument("--ssid", help="Wi-Fi to join (needed for the network steps)")
+    ap.add_argument("--password", default="")
+    ap.add_argument("--ble-wait", type=int, default=0, help="seconds to wait for a phone on BLE")
+    ap.add_argument("--udp-port", type=int, default=0, help="open a UDP service on this port")
+    args = ap.parse_args()
+
+    out = time.strftime("fc41d-probe-%Y%m%d-%H%M%S")
+    p = Probe(args.port, args.baud, out, args.password)
+
+    p.note("press the module's RESET button now to record the boot banner (waiting 8 s)")
+    p.wait_for(("ready",), 8)
+    p.quiet(2)
+
+    p.note("system")
+    p.cmd("AT")
+    p.cmd("ATE0")
+    p.cmd("AT+QVERSION")
+    p.cmd("AT+QWLMAC")
+    p.cmd("AT+QBLEADDR?")
+    p.cmd("AT+QSSLCERT?")
+    p.cmd("AT+QSTAST")
+    p.cmd("AT+QGETWIFISTATE")
+    p.cmd("AT+QGETIP=station")
+
+    p.note("BLE setup as the B2500 MCU does it")
+    p.cmd("AT+QBLEINIT=2")
+    p.cmd("AT+QBLENAME=HMA-1_TEST")
+    p.cmd("AT+QBLEGATTSSRV=FF00")
+    for c in ("ff01", "ff02", "ff06"):
+        p.cmd(f"AT+QBLEGATTSCHAR={c}")
+    p.cmd("AT+QBLEADVPARAM=150,150")
+    p.cmd("AT+QBLEADVSTART")
+    p.cmd("AT+QBLETRANMODE=ff02")
+    p.cmd("AT+QBLESTAT")
+
+    if args.ble_wait:
+        p.note(f"BLE: connect to HMA-1_TEST with nRF Connect, enable notifications on ff02, write a few bytes to ff01 ({args.ble_wait} s)")
+        p.wait_for(("CONNECTED",), args.ble_wait)
+        p.quiet(max(5, args.ble_wait // 2))
+        p.note("notifications from the MCU side: hex, then text")
+        p.cmd("AT+QBLEGATTSNTFY=ff02,6,730623030154")
+        p.cmd("AT+QBLEGATTSNTFY=ff02,10_24_25_3162_3160_3161")
+        p.quiet(5)
+
+    if args.ssid:
+        p.note("Wi-Fi join (not saved)")
+        p.cmd(f"AT+QSTAAPINFO={args.ssid},{args.password}", timeout=20, settle=0.2)
+        got = p.wait_for(("GOT_IP",), 30)
+        p.note(f"join result: {got}")
+        p.quiet(3)
+        p.cmd("AT+QSTAST")
+        p.cmd("AT+QGETWIFISTATE")
+        p.cmd("AT+QGETIP=station")
+
+        p.note("HTTP: time request (measures the +QHTTPGET delay after OK)")
+        p.cmd('AT+QHTTPCFG="url","http://eu.hamedata.com/app/neng/getDateInfoeu.php?uid=000000000000&fcv=0&aid=HMA-1&sv=0"')
+        p.cmd("AT+QHTTPGET=60", settle=0.1)
+        p.wait_for(("+QHTTPGET",), 65)
+        p.quiet(1)
+        p.cmd("AT+QHTTPREAD=60", wait=("+QHTTPREAD",), timeout=65)
+
+        p.note("MQTT against a public test broker, no TLS")
+        p.cmd('AT+QMTCFG="version",0,4')
+        p.cmd('AT+QMTCFG="keepalive",0,60')
+        p.cmd('AT+QMTOPEN=0,"test.mosquitto.org",1883', settle=0.1)
+        p.wait_for(("+QMTOPEN",), 30)
+        p.cmd('AT+QMTCONN=0,"fc41d-probe"', settle=0.1)
+        p.wait_for(("+QMTCONN",), 30)
+        topic = "fc41d-probe/" + out
+        p.cmd(f'AT+QMTSUB=0,1,"{topic}/#",0', settle=0.1)
+        p.wait_for(("+QMTSUB",), 30)
+        payload = "p1=1,p2=0,w1=24"
+        p.note("publish to a topic we subscribed to: does the broker's echo arrive as +QMTRECV?")
+        p.cmd(f'AT+QMTPUB=0,0,0,0,"{topic}/ctrl",{len(payload)},"{payload}"', settle=0.1)
+        p.wait_for(("+QMTRECV",), 10)
+        p.quiet(2)
+        p.cmd("AT+QMTDISC=0", settle=1)
+        p.cmd("AT+QMTCLOSE=0", settle=1)
+
+        if args.udp_port:
+            p.note(f"UDP service on port {args.udp_port}: send a datagram to the module now (20 s)")
+            p.cmd(f'AT+QIOPEN=1,"UDP SERVICE","127.0.0.1",0,{args.udp_port},0', settle=0.1)
+            p.wait_for(("+QIOPEN",), 10)
+            p.wait_for(('+QIURC: "recv"',), 20)
+            p.quiet(1)
+            p.cmd("AT+QIRD=1,0")
+            p.cmd("AT+QIRD=1,1500")
+            p.cmd("AT+QICLOSE=1")
+
+    p.note("done")
+    p.stop = True
+    time.sleep(0.2)
+    print(f"\nWrote {out}.log and {out}.jsonl")
+
+
+if __name__ == "__main__":
+    main()
