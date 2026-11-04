@@ -76,7 +76,7 @@ class LtTransport : public Transport {
     const int r = socket_alive(fd);
     if (r > 0)
       return true;
-    this->last_error_ = r == 0 ? "closed by the server" : "socket error " + std::to_string(-r);
+    this->last_error_ = r == 0 ? "server closed TCP" : "socket error " + std::to_string(-r);
     return false;
   }
   int read(uint8_t *buf, size_t len) override {

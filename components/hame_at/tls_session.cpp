@@ -152,8 +152,15 @@ int TlsSession::recv_some(uint8_t *buf, size_t len) {
     return ret;
   if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE)
     return 0;
-  if (ret == 0 || ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || ret == MBEDTLS_ERR_SSL_CONN_EOF) {
-    this->error_ = "closed by the server";
+  if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+    this->error_ = "server ended TLS (close_notify)";
+  } else if (ret == 0 || ret == MBEDTLS_ERR_SSL_CONN_EOF) {
+    this->error_ = "server closed TCP without close_notify";
+  } else if (ret == MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE && s.ssl.in_msg != nullptr) {
+    // e.g. 20 bad_record_mac (it could not decrypt us), 40 handshake_failure
+    char buf[48];
+    snprintf(buf, sizeof(buf), "server sent TLS alert %u", static_cast<unsigned>(s.ssl.in_msg[1]));
+    this->error_ = buf;
   } else {
     this->error_ = code("read", ret);
   }
