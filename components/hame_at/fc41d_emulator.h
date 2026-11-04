@@ -125,13 +125,15 @@ class Fc41dBackend {
 class Fc41dEmulator {
  public:
   // Timing seen in the firmware emulator.
-  static constexpr uint32_t BOOT_MS = 300;             // "ready" after power-up / AT+QRST
+  static constexpr uint32_t BOOT_MS = 1000;            // "ready" after power-up / AT+QRST (stock: ~1.1 s)
   static constexpr uint32_t WIFI_IDLE_MS = 2500;       // announce Wi-Fi only once the MCU is quiet...
   static constexpr uint32_t WIFI_MAX_MS = 20000;       // ...but no later than this after boot
   static constexpr uint32_t DHCP_MS = 300;             // GOT_IP after WLAN_CONNECTED
   static constexpr uint32_t WIFI_JOIN_MS = 1500;       // after AT+QSTAAPINFO[DEF]
   static constexpr uint32_t REANNOUNCE_MS = 8000;      // re-announce if the MCU ignored GOT_IP
   static constexpr uint8_t REANNOUNCE_MAX = 3;
+  static constexpr size_t TRAN_CHUNK = 244;            // notification size in transparent mode (MTU 247)
+  static constexpr uint32_t TRAN_GAP_MS = 20;          // send a partial chunk after this pause
   static constexpr uint32_t HTTP_RESULT_MIN_MS = 300;  // +QHTTPGET/POST at least this long after OK
 
   explicit Fc41dEmulator(Fc41dBackend *backend) : backend_(backend) { this->register_handlers_(); }
@@ -205,6 +207,7 @@ class Fc41dEmulator {
   /// Whether AT+QSSLCERT? appends checksums: not for module builds
   /// 202406141323 and 202409090159, yes for later ones.
   bool cert_checksums_() const;
+  void flush_tran_(bool all);
 
   Fc41dBackend *backend_;
   AtEngine engine_;
@@ -233,6 +236,8 @@ class Fc41dEmulator {
   std::vector<uint16_t> ble_chars_;
   uint16_t ble_tran_uuid_{0};
   bool ble_tran_auto_{false};
+  std::vector<uint8_t> tran_buf_;  // MCU bytes in BLE transparent mode, not yet notified
+  uint32_t tran_last_ms_{0};
   bool ble_init_{false};
   bool ble_advertising_{false};
   bool ble_session_{false};

@@ -128,7 +128,7 @@ struct Harness {
 static void test_boot_and_wifi() {
   Harness h(false);
   h.emu.power_on(h.now);
-  h.tick(200);
+  h.tick(Fc41dEmulator::BOOT_MS - 100);
   EXPECT_STR(h.out, "");
   h.tick(200);
   EXPECT_STR(h.out, "\r\nready\r\n");
@@ -158,7 +158,7 @@ static void test_boot_and_wifi() {
              "\r\n+QGETWIFISTATE: ssid=home,bssid=11:22:33:44:55:66,rssi=-61,channel=6\r\n\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QGETIP=station"),
              "\r\n+QGETIP:ip:192.168.1.50,gate:192.168.1.1,mask:255.255.255.0,dns:192.168.1.1\r\n\r\nOK\r\n");
-  EXPECT_STR(h.cmd("AT+QWLMAC"), "\r\n+QWLMAC: c8:47:8c:00:00:01\r\n\r\nOK\r\n");
+  EXPECT_STR(h.cmd("AT+QWLMAC"), "\r\n+QWLMAC:c8:47:8c:00:00:01\r\n\r\nOK\r\n");
 
   // Station lost and back.
   h.out.clear();
@@ -179,7 +179,7 @@ static void test_wifi_asked_and_reannounce() {
   // Asking for the station state announces it without waiting for quiet.
   Harness h(false);
   h.emu.power_on(h.now);
-  h.tick(300);
+  h.tick(Fc41dEmulator::BOOT_MS);
   h.out.clear();
   EXPECT_STR(h.cmd("AT+QSTAST", 0), "\r\n+QSTAST:STATION_DOWN\r\n\r\nOK\r\n");
   h.tick(10);
@@ -218,7 +218,7 @@ static void test_system() {
   Harness h;
   EXPECT_STR(h.cmd("AT"), "\r\nOK\r\n");
   // The MCU reports the part after "_" to the cloud (fcv=202409090159).
-  EXPECT_STR(h.cmd("AT+QVERSION"), "\r\n+QVERSION: FC41DAAR18A04M02_HM.bin_202409090159\r\n\r\nOK\r\n");
+  EXPECT_STR(h.cmd("AT+QVERSION"), "\r\n+QVERSION:FC41DAAR18A04M02_HM.bin_202409090159\r\n\r\nOK\r\n");
   EXPECT_STR(h.cmd("AT+QWLANOTA=http://x/fc41d.rbl"), "\r\nERROR\r\n");
   // AT+QRST: OK, pending output dropped, "ready" ~350 ms later, Wi-Fi again.
   h.send("AT+QMTOPEN=0,\"eu.hamedata.com\",8883\r\nAT+QRST\r\n");
@@ -227,7 +227,7 @@ static void test_system() {
   h.tick(200);
   EXPECT(h.out.find("+QMTOPEN") == std::string::npos);
   EXPECT(h.emu.booting());
-  h.tick(200);
+  h.tick(Fc41dEmulator::BOOT_MS);
   EXPECT_STR(h.out, "\r\nready\r\n");
   EXPECT(!h.emu.wifi_announced());
 }
@@ -235,7 +235,8 @@ static void test_system() {
 static void test_ble() {
   Harness h;
   EXPECT_STR(h.cmd("AT+QBLEINIT=2"), "\r\nOK\r\n");
-  EXPECT_STR(h.cmd("AT+QBLEADDR?"), "\r\n+QBLEADDR:AA:BB:CC:DD:EE:FF\r\n\r\nOK\r\n");
+  // Lower case, like the stock module (the configured MAC is upper case).
+  EXPECT_STR(h.cmd("AT+QBLEADDR?"), "\r\n+QBLEADDR:aa:bb:cc:dd:ee:ff\r\n\r\nOK\r\n");
   h.cmd("AT+QBLENAME=HMA-1_EEFF");
   h.cmd("AT+QBLEGATTSSRV=FF00");
   h.cmd("AT+QBLEGATTSCHAR=ff01");
@@ -247,7 +248,6 @@ static void test_ble() {
   EXPECT_EQ(h.backend.adv_service, 0xFF00);
   EXPECT_EQ(h.backend.adv_chars.size(), 3u);
   EXPECT_STR(h.cmd("AT+QBLESTAT"), "\r\n+QBLESTAT:ADVERTISING\r\n\r\nOK\r\n");
-  EXPECT_STR(h.cmd("AT+QBLETRANMODE=ff02"), "\r\nOK\r\n");
 
   // A write without a session opens one first.
   h.out.clear();
@@ -281,6 +281,28 @@ static void test_ble() {
   EXPECT_STR(h.cmd("AT+QBLEGATTSNTFY=ff02,10_24_25_3162_3160_3161"), "\r\nOK\r\n");
   auto &cells = h.backend.notifications.back().second;
   EXPECT_STR(std::string(cells.begin(), cells.end()), "10_24_25_3162_3160_3161");
+
+  // QBLETRANMODE: transparent at once. MCU bytes become notifications on
+  // ff02 (an AT line too), phone writes stay raw, "+++" goes back to AT.
+  EXPECT_STR(h.cmd("AT+QBLETRANMODE=ff02"), "\r\nOK\r\n");
+  size_t before = h.backend.notifications.size();
+  h.out.clear();
+  h.send("hello\r\nAT\r\n");
+  h.tick(50);
+  EXPECT_STR(h.out, "");
+  EXPECT_EQ(h.backend.notifications.size(), before + 1);
+  EXPECT_EQ(h.backend.notifications.back().first, 0xFF02);
+  auto &tran = h.backend.notifications.back().second;
+  EXPECT_STR(std::string(tran.begin(), tran.end()), "hello\r\nAT\r\n");
+  h.emu.ble_write(0xFF01, {0x01, 0x02});
+  EXPECT_STR(h.out, std::string("\x01\x02", 2));
+  h.out.clear();
+  h.tick(1000);
+  h.send("+++");
+  h.tick(1000);
+  EXPECT_STR(h.out, "\r\nOK\r\n");
+  EXPECT_EQ(h.backend.notifications.size(), before + 1);
+  EXPECT_STR(h.cmd("AT+QBLESTAT"), "\r\n+QBLESTAT:CONNECTED\r\n\r\nOK\r\n");
 
   h.out.clear();
   h.emu.ble_connected(false);

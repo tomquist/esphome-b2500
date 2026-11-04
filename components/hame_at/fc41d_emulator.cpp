@@ -1,5 +1,6 @@
 #include "fc41d_emulator.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -21,6 +22,14 @@ uint16_t Fc41dEmulator::cert_checksum(const std::string &data) {
       crc = (crc & 0x8000) ? static_cast<uint16_t>((crc << 1) ^ 0x1021) : static_cast<uint16_t>(crc << 1);
   }
   return crc;
+}
+
+// The stock module prints MACs in lower case; the MCU builds its device id
+// (topics, cloud identity) from the BLE one.
+static std::string lower_mac(std::string mac) {
+  for (auto &c : mac)
+    c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+  return mac;
 }
 
 bool Fc41dEmulator::cert_checksums_() const {
@@ -74,6 +83,9 @@ void Fc41dEmulator::reset_state_() {
   this->reannounced_ = 0;
   this->net_used_ms_ = 0;
   this->ble_init_ = this->ble_advertising_ = false;
+  if (this->engine_.get_mode() == AtEngine::Mode::TRANSPARENT)
+    this->engine_.exit_transparent();
+  this->tran_buf_.clear();
   this->ble_tran_uuid_ = 0;
   this->ble_chars_.clear();
   if (this->ble_session_) {
@@ -118,7 +130,23 @@ void Fc41dEmulator::loop(uint32_t now_ms) {
       t.fn();
     i = 0;  // the list may have changed
   }
+  this->flush_tran_(false);
   this->wifi_tick_();
+}
+
+void Fc41dEmulator::flush_tran_(bool all) {
+  // Bytes written in transparent mode go out in notification-sized chunks,
+  // once the MCU pauses (or a chunk is full).
+  while (!this->tran_buf_.empty()) {
+    bool full = this->tran_buf_.size() >= TRAN_CHUNK;
+    if (!all && !full && this->now_ - this->tran_last_ms_ < TRAN_GAP_MS)
+      return;
+    size_t n = std::min(this->tran_buf_.size(), TRAN_CHUNK);
+    std::vector<uint8_t> chunk(this->tran_buf_.begin(), this->tran_buf_.begin() + n);
+    this->tran_buf_.erase(this->tran_buf_.begin(), this->tran_buf_.begin() + n);
+    if (this->ble_session_)
+      this->backend_->ble_notify(this->ble_tran_uuid_, chunk);
+  }
 }
 
 void Fc41dEmulator::wifi_tick_() {
@@ -286,7 +314,7 @@ void Fc41dEmulator::register_handlers_() {
   });
   e.on("QVERSION", [this](AtEngine &e, const AtCommand &) {
     // The MCU reports the part after "_" to the cloud as fcv (e.g. 202409090159).
-    e.send_line("+QVERSION: " + this->version_);
+    e.send_line("+QVERSION:" + this->version_);
     e.ok();
   });
   e.on("QRST", [this](AtEngine &e, const AtCommand &) {
@@ -304,7 +332,7 @@ void Fc41dEmulator::register_handlers_() {
                            "QSOFTAPSTOP", "QICFG", "QSSLCFG"})
     e.on(name, [](AtEngine &e, const AtCommand &) { e.ok(); });
   e.on("QWLMAC", [this](AtEngine &e, const AtCommand &) {
-    e.send_line("+QWLMAC: " + this->backend_->wifi_status().mac);
+    e.send_line("+QWLMAC:" + lower_mac(this->backend_->wifi_status().mac));
     e.ok();
   });
   // Hame's TCP tunnel extension: not supported (no B2500 image uses it).
@@ -390,7 +418,7 @@ void Fc41dEmulator::register_handlers_() {
     e.ok();
   });
   e.on("QBLEADDR", [this](AtEngine &e, const AtCommand &) {
-    e.send_line("+QBLEADDR:" + this->ble_mac_);
+    e.send_line("+QBLEADDR:" + lower_mac(this->ble_mac_));
     e.ok();
   });
   e.on("QBLENAME", [this](AtEngine &e, const AtCommand &cmd) {
@@ -426,10 +454,23 @@ void Fc41dEmulator::register_handlers_() {
     this->ble_advertising_ = false;
     this->backend_->ble_stop_advertising();
   });
+  // The stock module enters transparent mode at once, connected or not: it
+  // stops answering AT, sends what the MCU writes as notifications on <uuid>
+  // and leaves on "+++". The B2500 uses it for bulk transfers from the app
+  // and sends "+++" after 30 s without data.
   e.on("QBLETRANMODE", [this](AtEngine &e, const AtCommand &cmd) {
     this->ble_tran_uuid_ = parse_uuid16_(cmd.arg(0));
     this->ble_tran_auto_ = cmd.arg_int(1, 0) != 0;
     e.ok();
+    if (this->ble_tran_uuid_ == 0)
+      return;
+    this->tran_buf_.clear();
+    e.enter_transparent(
+        [this](const uint8_t *data, size_t len) {
+          this->tran_buf_.insert(this->tran_buf_.end(), data, data + len);
+          this->tran_last_ms_ = this->now_;
+        },
+        [this]() { this->flush_tran_(true); });
   });
   // AT+QBLEGATTSNTFY=<uuid>,<n>,<payload>: n raw bytes or 2n hex digits (the
   // Hame build converts hex to binary). Without a length (plain line) the
