@@ -383,6 +383,16 @@ static void test_mqtt() {
   echo = h.cmd("AT+QMTPUB=0,0,0,0,\"hame_energy/HMA-1/device/aabbccddeeff/ctrl\",3,\"x=1\"");
   EXPECT(echo.find("+QMTRECV") == std::string::npos);
 
+  // A new connect (here without QMTDISC/QMTCLOSE before it, as when the MCU
+  // restarts) starts without subscriptions: commands go to the new topic.
+  h.cmd("AT+QMTOPEN=0,\"eu.hamedata.com\",8883");
+  h.cmd("AT+QMTCONN=0,\"mst_aabbccddeeff\"");
+  EXPECT(h.emu.mqtt_topics().empty());
+  EXPECT(!h.emu.mqtt_receive("hame_energy/HMA-1/App/aabbccddeeff/ctrl", "cd=1"));
+  h.cmd("AT+QMTSUB=0,1,\"marstek_energy/HMA-1/App/newid/ctrl\",0");
+  EXPECT_EQ(h.emu.mqtt_topics().size(), 1u);
+  EXPECT_STR(h.emu.mqtt_topics().front(), "marstek_energy/HMA-1/App/newid/ctrl");
+
   // Losing Wi-Fi drops the session with a URC.
   h.out.clear();
   h.backend.wifi.connected = false;

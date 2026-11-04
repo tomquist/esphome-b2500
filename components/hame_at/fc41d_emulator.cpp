@@ -586,6 +586,10 @@ void Fc41dEmulator::register_handlers_() {
     e.ok();
     std::string idx = cmd.arg(0, "0");
     this->mqtt_conn_ = true;
+    // A new (clean) session has no subscriptions; the MCU subscribes again.
+    // Otherwise commands kept going to a previous session's topic (e.g. the
+    // simulator's, or the one before the app gave the device a new id).
+    this->mqtt_topics_.clear();
     this->mqtt_session_.client_id = cmd.arg(1);
     this->mqtt_session_.username = cmd.arg(2);
     this->mqtt_session_.password = cmd.arg(3);

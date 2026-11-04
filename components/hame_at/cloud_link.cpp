@@ -45,6 +45,8 @@ void CloudLink::set_session(const MqttSession &session, uint32_t now_ms) {
                  session.password != this->session_.password || session.ssl != this->session_.ssl;
   this->session_ = session;
   this->have_session_ = !session.host.empty() && session.port > 0;
+  // The MCU subscribes again after every connect; don't carry old topics.
+  this->topics_.clear();
   if (changed && (this->state_ == State::CONNECTED || this->state_ == State::WAIT_CONNACK)) {
     this->transport_->close();
     this->state_ = State::BACKOFF;
