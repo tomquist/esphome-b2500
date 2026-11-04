@@ -499,7 +499,8 @@ static void test_sockets() {
   h.cmd("AT+QIOPEN=2,\"UDP SERVICE\",\"127.0.0.1\",0,22222,1");
   h.out.clear();
   h.emu.socket_received(2, "abc", "192.168.1.30", 22222);
-  EXPECT_STR(h.out, "\r\n+QIURC: \"recv\",2,3,\"192.168.1.30\",22222,\r\nabc\r\n");  // stock: trailing comma
+  // Hame's build: no comma after the port (the generic build has one).
+  EXPECT_STR(h.out, "\r\n+QIURC: \"recv\",2,3,\"192.168.1.30\",22222\r\nabc\r\n");
   h.out.clear();
   h.emu.socket_closed(2);
   EXPECT_STR(h.out, "\r\n+QIURC: \"closed\",2\r\n");

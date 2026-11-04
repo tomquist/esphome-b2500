@@ -281,7 +281,9 @@ void Fc41dEmulator::socket_received(int id, const std::string &data, const std::
   if (s.spec.mode == 1) {
     std::string hdr = "+QIURC: \"recv\"," + std::to_string(id) + "," + std::to_string(data.size());
     if (s.spec.kind == "UDP SERVICE" && !ip.empty())
-      hdr += ",\"" + ip + "\"," + std::to_string(port) + ",";  // stock: trailing comma
+      // Hame's build: '%s+QIURC: "recv",%d,%d,"%s",%d%s' (Quectel's generic
+      // build puts a comma after the port).
+      hdr += ",\"" + ip + "\"," + std::to_string(port);
     this->engine_.send_raw("\r\n" + hdr + "\r\n" + data + "\r\n");
   } else if (s.spec.mode == 2) {
     this->engine_.send_raw(data);
