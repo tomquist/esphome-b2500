@@ -52,8 +52,13 @@ does.
 
 ## Bench testing on the eval kit
 
-On the FC41D-TE-B, J201 is the module's main UART (the battery MCU's side)
-and J202 is the debug UART (ESPHome logs).
+On the FC41D-TE-B, J201 (M_UART_USB) is the module's main UART (the battery
+MCU's side, also used for flashing) and J202 (DEBUG_USB) is the debug UART
+(ESPHome logs). On macOS the ports are `/dev/cu.usbserial-…`, on Linux
+`/dev/ttyUSB<n>`; `python3 tools/fc41d_probe.py --list` shows them.
+`ltchiptool` flashes only the app partition from the UF2, so the module's
+bootloader stays; `ltchiptool flash write fc41d-stock.bin` restores the full
+backup.
 
 1. Back up the stock firmware. Start the command, then press SW301 when it
    waits for the chip:
@@ -76,7 +81,7 @@ and J202 is the debug UART (ESPHome logs).
 3. Play the battery on J201:
 
    ```bash
-   python3 ../../tools/fc41d_mcu_sim.py /dev/ttyUSB0
+   python3 ../../tools/fc41d_mcu_sim.py /dev/cu.usbserial-XXXX
    ```
 
    Add `--broker host:8883 --ca ca.pem --cert client.pem --key client.key` to
