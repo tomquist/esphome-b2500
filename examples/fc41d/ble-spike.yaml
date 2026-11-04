@@ -108,8 +108,10 @@ sensor:
   - platform: debug
     free:
       name: Heap free
-    block:
-      name: Heap max block
+    # "block" (largest free block) is always 0 on BK72xx: LibreTiny does
+    # not implement it. The lowest free heap since boot shows the headroom.
+    min_free:
+      name: Heap min free
     loop_time:
       name: Loop time
   - platform: wifi_signal
