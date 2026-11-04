@@ -36,7 +36,7 @@ FF01, FF02, FF06 = UUID.format(0xFF01), UUID.format(0xFF02), UUID.format(0xFF06)
 class Stats:
     def __init__(self):
         self.sessions = self.session_fail = 0
-        self.ok = self.lost = self.mismatch = self.write_fail = 0
+        self.ok = self.lost = self.mismatch = self.write_fail = self.extra = 0
         self.rtt = []
 
 
@@ -67,18 +67,28 @@ class Check:
             self.stats.write_fail += 1
             self.say(f"  write {len(payload)} bytes failed: {e!r}")
             return
-        try:
-            when, data = await asyncio.wait_for(self.queue.get(), self.args.timeout)
-        except asyncio.TimeoutError:
+        # Wait for the echo; other notifications (a battery, or
+        # fc41d_mcu_sim.py, also sends its cell info) are counted, not failed.
+        deadline = t + self.args.timeout
+        others = []
+        while True:
+            left = deadline - time.monotonic()
+            try:
+                when, data = await asyncio.wait_for(self.queue.get(), max(left, 0.001))
+            except asyncio.TimeoutError:
+                break
+            if data == payload:
+                self.stats.ok += 1
+                self.stats.extra += len(others)
+                self.stats.rtt.append((when - t) * 1000)
+                return
+            others.append(data)
+        if others:
+            self.stats.mismatch += 1
+            self.say(f"  {len(payload)} bytes: echo differs: sent {payload.hex()} got {[d.hex() for d in others]}")
+        else:
             self.stats.lost += 1
             self.say(f"  {len(payload)} bytes: no echo within {self.args.timeout} s")
-            return
-        if data != payload:
-            self.stats.mismatch += 1
-            self.say(f"  {len(payload)} bytes: echo differs: sent {payload.hex()} got {data.hex()}")
-            return
-        self.stats.ok += 1
-        self.stats.rtt.append((when - t) * 1000)
 
     async def session(self, first):
         self.stats.sessions += 1
@@ -104,7 +114,10 @@ class Check:
             before = self.stats.ok
             for i in range(self.args.rounds):
                 size = sizes[i % len(sizes)]
-                await self.echo(client, os.urandom(size), response=True)
+                payload = bytearray(os.urandom(size))
+                if payload[0] == 0x73:  # not an app frame: a battery would answer it
+                    payload[0] = 0x74
+                await self.echo(client, bytes(payload), response=True)
             if "write-without-response" in client.services.get_characteristic(FF01).properties:
                 await self.echo(client, b"no-response", response=False)
             try:
@@ -132,6 +145,8 @@ class Check:
         self.say("---")
         self.say(f"sessions {s.sessions}, failed {s.session_fail}")
         self.say(f"echoes ok {s.ok}, lost {s.lost}, wrong {s.mismatch}, writes failed {s.write_fail}")
+        if s.extra:
+            self.say(f"other notifications in between: {s.extra}")
         if s.rtt:
             self.say(
                 f"round trip ms: min {min(s.rtt):.0f}, median {statistics.median(s.rtt):.0f}, max {max(s.rtt):.0f}"
