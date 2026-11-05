@@ -216,12 +216,18 @@ static void test_wifi_asked_and_reannounce() {
   g.tick(Fc41dEmulator::REANNOUNCE_MS * 2);
   EXPECT(g.out.find("QSTASTAT") == std::string::npos);
 
-  // Credentials from the app: OK, then a "rejoin" of ESPHome's station.
+  // Credentials from the app: OK, the station stays up (a B2500 asks
+  // QGETWIFISTATE right away, and repeats the command every 1.5 s), and the
+  // join URCs follow.
   EXPECT_STR(g.cmd("AT+QSTAAPINFODEF=myssid,secret"), "\r\nOK\r\n");
   EXPECT_STR(g.backend.creds, "myssid/secret");
-  g.tick(Fc41dEmulator::WIFI_JOIN_MS + Fc41dEmulator::DHCP_MS);
+  EXPECT(g.cmd("AT+QGETWIFISTATE").find("+QGETWIFISTATE:ssid=") != std::string::npos);
+  g.out.clear();
+  g.tick(Fc41dEmulator::REJOIN_URC_MS + Fc41dEmulator::DHCP_MS + 10);
   EXPECT(g.out.find("+QSTASTAT:WLAN_CONNECTED") != std::string::npos);
   EXPECT(g.out.find("+QSTASTAT:GOT_IP") != std::string::npos);
+  g.cmd("AT+QSTAAPINFODEF=myssid,secret");  // repeated: still up
+  EXPECT(g.cmd("AT+QGETWIFISTATE").find("+QGETWIFISTATE:ssid=") != std::string::npos);
 }
 
 static void test_system() {

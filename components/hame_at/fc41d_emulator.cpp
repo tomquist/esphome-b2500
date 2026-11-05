@@ -373,7 +373,24 @@ void Fc41dEmulator::register_handlers_() {
     }
     this->backend_->wifi_credentials(cmd.arg(0), cmd.arg(1));
     e.ok();
-    // ESPHome owns the radio: "rejoin" the station it already holds.
+    if (this->wifi_up_) {
+      // ESPHome owns the radio and keeps its station, so stay up. A "rejoin"
+      // with the station down made Wi-Fi setup from the app fail: the B2500
+      // asks QGETWIFISTATE 0.1 s after OK (ERROR while down) and repeats the
+      // command every 1.5 s, which restarted the rejoin each time. Only the
+      // join URCs are repeated, for firmwares that wait for them.
+      this->later_(REJOIN_URC_MS, [this]() {
+        if (!this->wifi_up_)
+          return;
+        this->engine_.send_bare_line("+QSTASTAT:WLAN_CONNECTED");
+        this->later_(DHCP_MS, [this]() {
+          if (this->got_ip_)
+            this->engine_.send_bare_line("+QSTASTAT:GOT_IP");
+        });
+      });
+      return;
+    }
+    // Not up yet: announce once ESPHome's station is.
     this->wifi_up_ = this->got_ip_ = false;
     this->join_pending_ = true;
     this->later_(WIFI_JOIN_MS, [this]() {

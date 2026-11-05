@@ -135,6 +135,7 @@ class Fc41dEmulator {
   static constexpr uint32_t WIFI_MAX_MS = 20000;       // ...but no later than this after boot
   static constexpr uint32_t DHCP_MS = 100;             // GOT_IP after WLAN_CONNECTED (stock: 100 ms)
   static constexpr uint32_t WIFI_JOIN_MS = 3000;       // after AT+QSTAAPINFO[DEF] (stock: 3.2 s)
+  static constexpr uint32_t REJOIN_URC_MS = 300;       // join URCs when already up
   static constexpr uint32_t REANNOUNCE_MS = 8000;      // re-announce if the MCU ignored GOT_IP
   static constexpr uint8_t REANNOUNCE_MAX = 3;
   static constexpr uint32_t TRAN_GAP_MS = 20;          // send a partial chunk after this pause

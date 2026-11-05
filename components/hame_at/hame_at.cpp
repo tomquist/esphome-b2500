@@ -282,7 +282,13 @@ WifiStatus HameAtComponent::wifi_status() {
 
 void HameAtComponent::wifi_credentials(const std::string &ssid, const std::string & /*password*/) {
   // ESPHome owns the station; app provisioning does not change it.
-  ESP_LOGI(TAG, "MCU stored Wi-Fi credentials for '%s' (ignored; ESPHome manages Wi-Fi)", ssid.c_str());
+  const std::string current = this->wifi_status().ssid;
+  if (ssid == current) {
+    ESP_LOGI(TAG, "App set up Wi-Fi '%s' (the network ESPHome is on)", ssid.c_str());
+  } else {
+    ESP_LOGW(TAG, "App set up Wi-Fi '%s', ignored: ESPHome manages Wi-Fi (on '%s'); change it in the YAML",
+             ssid.c_str(), current.c_str());
+  }
 }
 
 void HameAtComponent::ble_advertise(const std::string &name, uint16_t service,
