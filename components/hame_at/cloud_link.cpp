@@ -157,6 +157,7 @@ void CloudLink::send_(const std::vector<uint8_t> &pkt) {
 }
 
 void CloudLink::subscribe_now_(const std::string &topic) {
+  this->log_line_("cloud: subscribing to " + topic);
   uint16_t id = this->next_packet_id_++;
   if (this->next_packet_id_ == 0)
     this->next_packet_id_ = 1;
