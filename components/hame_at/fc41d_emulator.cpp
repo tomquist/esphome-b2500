@@ -730,6 +730,17 @@ void Fc41dEmulator::register_handlers_() {
     }
     std::string kind = cmd.arg(0);
     long op = cmd.arg_int(1, 1);
+    if (op == 0 || op == 2) {
+      // Certificates are set up at MCU start: the MCU rebooted (without the
+      // module). Its old MQTT session is gone on its side; until it connects
+      // and subscribes again, nothing may be delivered to it (a +QMTRECV in
+      // the middle of its uploads makes it start them over).
+      if (this->mqtt_conn_ || !this->mqtt_topics_.empty()) {
+        this->mqtt_conn_ = false;
+        this->mqtt_open_ = false;
+        this->mqtt_topics_.clear();
+      }
+    }
     if (op == 0) {  // delete
       this->certs_.erase(kind);
       e.ok();

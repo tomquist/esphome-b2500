@@ -413,6 +413,26 @@ static void test_mqtt() {
   EXPECT_STR(h.cmd("AT+QMTOPEN=0,\"eu.hamedata.com\",8883", 200), "\r\nOK\r\n\r\n+QMTOPEN: 0,-1\r\n");
 }
 
+// The MCU reboots, the module does not: the MCU sets up its certificates
+// again while the module still has its old MQTT session. Nothing may be
+// delivered to it until it subscribes again.
+static void test_mcu_restart() {
+  Harness h;
+  h.cmd("AT+QMTOPEN=0,\"eu.hamedata.com\",8883");
+  h.cmd("AT+QMTCONN=0,\"mst_aabbccddeeff\"");
+  h.cmd("AT+QMTSUB=0,1,\"hame_energy/HMA-1/App/aabbccddeeff/ctrl\",0");
+  EXPECT(h.emu.mqtt_receive("hame_energy/HMA-1/App/aabbccddeeff/ctrl", "cd=1"));
+  EXPECT_STR(h.cmd("AT+QSSLCERT=\"CA\",0"), "\r\nOK\r\n");
+  EXPECT(!h.emu.mqtt_connected());
+  EXPECT(h.emu.mqtt_topics().empty());
+  EXPECT(!h.emu.mqtt_receive("hame_energy/HMA-1/App/aabbccddeeff/ctrl", "cd=1"));
+  // It connects and subscribes again as at a cold start.
+  EXPECT_STR(h.cmd("AT+QMTOPEN=0,\"eu.hamedata.com\",8883"), "\r\nOK\r\n\r\n+QMTOPEN: 0,0\r\n");
+  h.cmd("AT+QMTCONN=0,\"mst_aabbccddeeff\"");
+  h.cmd("AT+QMTSUB=0,1,\"hame_energy/HMA-1/App/aabbccddeeff/ctrl\",0");
+  EXPECT(h.emu.mqtt_receive("hame_energy/HMA-1/App/aabbccddeeff/ctrl", "cd=1"));
+}
+
 static void test_ssl() {
   Harness h;
   // Nothing stored: every kind reported missing, so the MCU uploads. One
@@ -547,6 +567,7 @@ int main() {
   test_system();
   test_ble();
   test_mqtt();
+  test_mcu_restart();
   test_ssl();
   test_http();
   test_sockets();

@@ -87,7 +87,7 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   /// for ~3 s after subscribing and while its HTTP request is in flight.
   bool mcu_ready() {
     return !this->emulator_.mqtt_topics().empty() && millis() - this->mcu_subscribed_ms_ >= MCU_SETTLE_MS &&
-           !this->emulator_.http_busy();
+           !this->emulator_.http_busy() && this->emulator_.engine().get_mode() == AtEngine::Mode::LINE;
   }
   Trigger<std::vector<uint8_t>> *get_ble_notify_trigger() { return &this->on_ble_notify_; }
   /// C++ consumers (e.g. a B2500 decoder) of MCU notifications.
