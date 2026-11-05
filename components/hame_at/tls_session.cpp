@@ -296,8 +296,10 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
   mbedtls_ssl_set_bio(&s.ssl, &s, sock_send, sock_recv, nullptr);
 
   const uint32_t start = millis();
-  // Step by step (what mbedtls_ssl_handshake() does), to free memory midway.
+  // Step by step (what mbedtls_ssl_handshake() does), to free memory midway
+  // and to time the steps: computing (RSA, ECDHE) vs waiting for the server.
   bool certs_freed = false;
+  uint32_t step_ms[MBEDTLS_SSL_HANDSHAKE_OVER + 1] = {};
   while (s.ssl.state != MBEDTLS_SSL_HANDSHAKE_OVER) {
     // From CertificateVerify on (the RSA private-key operation with a client
     // certificate, the peak), the server's certificates are no longer used:
@@ -310,7 +312,18 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
       }
       this->shrink_buffers_();  // once nothing is pending in them
     }
+    const int step = s.ssl.state;
+    const uint32_t t_step = millis();
     ret = mbedtls_ssl_handshake_step(&s.ssl);
+    const uint32_t spent = millis() - t_step;
+    this->stats_.compute_ms += spent;
+    if (step >= 0 && step <= MBEDTLS_SSL_HANDSHAKE_OVER) {
+      step_ms[step] += spent;
+      if (step_ms[step] > this->stats_.slowest_ms) {
+        this->stats_.slowest_ms = step_ms[step];
+        this->stats_.slowest_step = step;
+      }
+    }
     if (ret == 0)
       continue;
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
@@ -334,7 +347,13 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
       return false;
     }
     if (millis() - start > timeout_ms) {
-      err = "handshake: timeout";
+      char buf[160];
+      snprintf(buf, sizeof(buf),
+               "handshake: timeout at step %d, %s (%u ms computing, the most in step %d: %u ms; the rest waiting for "
+               "the server)",
+               s.ssl.state, this->suite_name_(), static_cast<unsigned>(this->stats_.compute_ms),
+               this->stats_.slowest_step, static_cast<unsigned>(this->stats_.slowest_ms));
+      err = buf;
       return false;
     }
     delay(5);

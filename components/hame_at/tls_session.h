@@ -41,6 +41,9 @@ class TlsSession {
     uint32_t largest_alloc{0};
     uint32_t allocs{0};
     bool default_suites{false};  ///< the SDK's suite list was offered
+    uint32_t compute_ms{0};      ///< in mbedTLS (the rest: waiting for the server)
+    int slowest_step{-1};        ///< mbedTLS handshake state that took longest
+    uint32_t slowest_ms{0};
     const char *suite{""};       ///< negotiated (static string)
   };
   const HandshakeStats &handshake_stats() const { return this->stats_; }

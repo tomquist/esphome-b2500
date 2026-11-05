@@ -17,6 +17,8 @@ namespace esphome::hame_at {
 // TLS handshakes with an RSA client certificate need a deep stack.
 static constexpr uint32_t TASK_STACK_BYTES = 10 * 1024;
 static constexpr uint32_t CONNECT_TIMEOUT_MS = 10000;
+// TLS handshake: an RSA client key (Hame's AWS endpoint) takes seconds here.
+static constexpr uint32_t HANDSHAKE_TIMEOUT_MS = 30000;
 static constexpr uint32_t HTTP_TIMEOUT_MS = 10000;
 static constexpr size_t HTTP_MAX_BODY = 8 * 1024;
 static constexpr size_t MAX_MESSAGES = 16;
@@ -49,7 +51,7 @@ class LtTransport : public Transport {
       // TLS on the same socket, straight on mbedTLS (see tls_session.h).
       const uint32_t heap_before = lt_heap_get_free();
       std::string err;
-      if (!this->tls_.start(this->tcp_->fd(), host, tls->ca, tls->client_cert, tls->client_key, CONNECT_TIMEOUT_MS,
+      if (!this->tls_.start(this->tcp_->fd(), host, tls->ca, tls->client_cert, tls->client_key, HANDSHAKE_TIMEOUT_MS,
                             err)) {
         char heap[80];
         snprintf(heap, sizeof(heap), "; heap %u B free before, %u B at the lowest", static_cast<unsigned>(heap_before),
@@ -60,11 +62,12 @@ class LtTransport : public Transport {
       }
       this->secure_ = true;
       const auto &st = this->tls_.handshake_stats();
-      char info[224];
+      char info[256];
       snprintf(info, sizeof(info),
-               "%s (%s suites), handshake %u ms; heap %u B free before, %u B at the lowest (largest block %u B), "
-               "%u B after",
+               "%s (%s suites), handshake %u ms (%u computing, the most in step %d); heap %u B free before, %u B "
+               "at the lowest (largest block %u B), %u B after",
                st.suite, st.default_suites ? "SDK default" : "our", static_cast<unsigned>(st.ms),
+               static_cast<unsigned>(st.compute_ms), st.slowest_step,
                static_cast<unsigned>(heap_before), static_cast<unsigned>(st.lowest_free),
                static_cast<unsigned>(st.largest_alloc), static_cast<unsigned>(lt_heap_get_free()));
       this->info_ = info;
