@@ -131,14 +131,6 @@ static MqttSession tls_session() {
   return s;
 }
 
-static TlsCredentials creds() {
-  TlsCredentials c;
-  c.ca = "CA";
-  c.client_cert = "CERT";
-  c.client_key = "KEY";
-  return c;
-}
-
 static void test_link_flow() {
   FakeTransport t;
   CloudLink link(&t);
@@ -158,15 +150,14 @@ static void test_link_flow() {
   EXPECT_EQ(t.connects, 0);
   EXPECT(link.state() == CloudLink::State::NO_SESSION);
 
-  // A client certificate without its key (upload in progress): still waiting.
-  TlsCredentials half;
-  half.ca = "CA";
-  half.client_cert = "CERT";
-  link.set_credentials(half, now);
+  // Uploaded one at a time, as the MCU does. A client certificate without
+  // its key (upload in progress): still waiting.
+  link.set_credential("CA", std::string("CA"), now);
+  link.set_credential("User Cert", std::string("CERT"), now);
   link.service(now);
   EXPECT_EQ(t.connects, 0);
 
-  link.set_credentials(creds(), now);
+  link.set_credential("User Key", std::string("KEY"), now);
   link.publish("hame_energy/HMA-1/device/aabbccddeeff/ctrl", "queued");
   link.service(now);
   EXPECT_EQ(t.connects, 1);

@@ -140,7 +140,6 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   CloudMode reports_mode_{CloudMode::FORWARD};
   bool worker_started_{false};
   bool network_up_{false};
-  TlsCredentials creds_;
   uint32_t next_http_id_{1};
   std::map<uint32_t, std::function<void(HttpResult)>> http_pending_;
   std::map<int, LiveSocket> sockets_;

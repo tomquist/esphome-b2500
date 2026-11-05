@@ -43,7 +43,8 @@ class NetWorker {
   void set_cloud_enabled(bool enabled);
   void set_network(bool up);
   void set_session(const MqttSession &session);
-  void set_credentials(const TlsCredentials &creds);
+  /// A certificate or key the MCU uploaded (moved: the worker keeps the only copy).
+  void set_credential(const std::string &kind, std::string pem);
   void clear_session();
   void subscribe(const std::string &topic);
   void publish(const std::string &topic, const std::string &payload, bool retain);
@@ -63,7 +64,6 @@ class NetWorker {
     CmdType type;
     bool flag{false};
     MqttSession session;
-    TlsCredentials creds;
     std::string a;
     std::string b;
   };

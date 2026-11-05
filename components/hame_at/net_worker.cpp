@@ -171,9 +171,10 @@ void NetWorker::set_session(const MqttSession &session) {
   c.session = session;
   this->push_cmd_(std::move(c));
 }
-void NetWorker::set_credentials(const TlsCredentials &creds) {
+void NetWorker::set_credential(const std::string &kind, std::string pem) {
   Cmd c{CmdType::CREDENTIALS};
-  c.creds = creds;
+  c.a = kind;
+  c.b = std::move(pem);
   this->push_cmd_(std::move(c));
 }
 void NetWorker::clear_session() { this->push_cmd_(Cmd{CmdType::CLEAR}); }
@@ -289,7 +290,7 @@ void NetWorker::run_() {
           link.set_session(c.session, now);
           break;
         case CmdType::CREDENTIALS:
-          link.set_credentials(c.creds, now);
+          link.set_credential(c.a, std::move(c.b), now);
           break;
         case CmdType::CLEAR:
           link.clear_session();

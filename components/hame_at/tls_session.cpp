@@ -43,6 +43,9 @@ static constexpr uintptr_t TRNG_CTRL = 0x00802480;
 static constexpr uintptr_t TRNG_DATA = 0x00802484;
 static constexpr uint32_t TRNG_EN = 1;
 
+#if defined(HAME_AT_TRNG_WORD)
+static uint32_t trng_word() { return HAME_AT_TRNG_WORD(); }  // host tests
+#else
 static uint32_t trng_word() {
   volatile uint32_t *ctrl = reinterpret_cast<volatile uint32_t *>(TRNG_CTRL);
   volatile uint32_t *data = reinterpret_cast<volatile uint32_t *>(TRNG_DATA);
@@ -51,6 +54,7 @@ static uint32_t trng_word() {
   *ctrl = *ctrl & ~TRNG_EN;
   return v;
 }
+#endif
 
 static int trng_entropy(void *, unsigned char *out, size_t len) {
   while (len > 0) {
@@ -292,7 +296,23 @@ bool TlsSession::start(int fd, const std::string &host, const std::string &ca, c
   mbedtls_ssl_set_bio(&s.ssl, &s, sock_send, sock_recv, nullptr);
 
   const uint32_t start = millis();
-  while ((ret = mbedtls_ssl_handshake(&s.ssl)) != 0) {
+  // Step by step (what mbedtls_ssl_handshake() does), to free memory midway.
+  bool certs_freed = false;
+  while (s.ssl.state != MBEDTLS_SSL_HANDSHAKE_OVER) {
+    // From CertificateVerify on (the RSA private-key operation with a client
+    // certificate, the peak), the server's certificates are no longer used:
+    // its key served the ServerKeyExchange (ECDHE) or the premaster (RSA key
+    // exchange, one step earlier). Free them and the oversized buffers.
+    if (s.ssl.state >= MBEDTLS_SSL_CERTIFICATE_VERIFY) {
+      if (!certs_freed) {
+        this->free_certificates_();
+        certs_freed = true;
+      }
+      this->shrink_buffers_();  // once nothing is pending in them
+    }
+    ret = mbedtls_ssl_handshake_step(&s.ssl);
+    if (ret == 0)
+      continue;
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
       const uint32_t flags_v = mbedtls_ssl_get_verify_result(&s.ssl);
       err = code("handshake", ret, s.sock_errno);
@@ -337,18 +357,31 @@ const char *TlsSession::suite_name_() const {
 }
 
 void TlsSession::trim_after_handshake_() {
+  this->free_certificates_();  // done midway already; no renegotiation follows
+  // Our own certificate and key served the CertificateVerify; nothing uses
+  // them after the handshake (finish() frees the emptied structs again, which
+  // mbedTLS allows).
   Impl &s = *this->impl_;
-  // Only the handshake needs the certificates; no renegotiation follows.
+  if (s.have_cert) {
+    mbedtls_x509_crt_free(&s.cert);
+    mbedtls_pk_free(&s.key);
+  }
+  this->shrink_buffers_();
+}
+
+void TlsSession::free_certificates_() {
+  Impl &s = *this->impl_;
 #if defined(MBEDTLS_X509_CRT_PARSE_C)
-  if (s.ssl.session != nullptr && s.ssl.session->peer_cert != nullptr) {
-    mbedtls_x509_crt_free(s.ssl.session->peer_cert);
-    mbedtls_free(s.ssl.session->peer_cert);
-    s.ssl.session->peer_cert = nullptr;
+  for (mbedtls_ssl_session *sess : {s.ssl.session_negotiate, s.ssl.session}) {
+    if (sess != nullptr && sess->peer_cert != nullptr) {
+      mbedtls_x509_crt_free(sess->peer_cert);
+      mbedtls_free(sess->peer_cert);
+      sess->peer_cert = nullptr;
+    }
   }
 #endif
   mbedtls_ssl_conf_ca_chain(&s.conf, nullptr, nullptr);
   mbedtls_x509_crt_free(&s.ca);
-  this->shrink_buffers_();
 }
 
 void TlsSession::shrink_buffers_() {

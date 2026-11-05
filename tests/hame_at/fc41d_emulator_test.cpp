@@ -73,7 +73,16 @@ struct FakeBackend : Fc41dBackend {
     sent.push_back(std::to_string(id) + ":" + data + "@" + ip + ":" + std::to_string(port));
   }
   void socket_close(int id) override { socket_closes.push_back(id); }
+  std::map<std::string, std::string> pems;
+  bool ssl_cert_read(const std::string &kind, std::string &out) override {
+    auto it = pems.find(kind);
+    if (it == pems.end())
+      return false;
+    out = it->second;
+    return true;
+  }
   void ssl_cert(const std::string &kind, const std::vector<uint8_t> &data) override {
+    pems[kind] = std::string(data.begin(), data.end());
     certs.push_back({kind, data.size()});
   }
   void module_restart() override { restarts++; }

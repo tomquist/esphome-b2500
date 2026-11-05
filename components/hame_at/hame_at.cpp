@@ -318,10 +318,8 @@ void HameAtComponent::ble_notify(uint16_t uuid, const std::vector<uint8_t> &data
 void HameAtComponent::mqtt_connected(const MqttSession &session) {
   ESP_LOGI(TAG, "MCU MQTT session: %s:%d client '%s'%s", session.host.c_str(), session.port,
            session.client_id.c_str(), session.ssl ? " (TLS)" : "");
-  if (this->worker_started_) {
-    this->worker_.set_credentials(this->creds_);
+  if (this->worker_started_)
     this->worker_.set_session(session);
-  }
 }
 
 void HameAtComponent::mqtt_closed() {
@@ -591,18 +589,15 @@ void HameAtComponent::service_sockets_() {
 }
 
 void HameAtComponent::ssl_cert(const std::string &kind, const std::vector<uint8_t> &data) {
-  std::string pem(data.begin(), data.end());
-  if (kind == "CA")
-    this->creds_.ca = pem;
-  else if (kind == "User Cert")
-    this->creds_.client_cert = pem;
-  else if (kind == "User Key")
-    this->creds_.client_key = pem;
-  else
-    ESP_LOGW(TAG, "Unknown certificate kind '%s'", kind.c_str());
   ESP_LOGD(TAG, "MCU uploaded %s (%u bytes)", kind.c_str(), (unsigned) data.size());
+  if (kind != "CA" && kind != "User Cert" && kind != "User Key") {
+    ESP_LOGW(TAG, "Unknown certificate kind '%s'", kind.c_str());
+    return;
+  }
+  // Only the net worker keeps them (for the cloud link): RAM is short, and
+  // the TLS handshake with a client certificate needs every KB.
   if (this->worker_started_)
-    this->worker_.set_credentials(this->creds_);
+    this->worker_.set_credential(kind, std::string(data.begin(), data.end()));
 }
 
 void HameAtComponent::module_restart() {

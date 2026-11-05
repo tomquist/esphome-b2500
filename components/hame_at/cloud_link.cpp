@@ -61,6 +61,19 @@ void CloudLink::set_credentials(const TlsCredentials &creds, uint32_t now_ms) {
   this->evaluate_(now_ms);
 }
 
+void CloudLink::set_credential(const std::string &kind, std::string &&pem, uint32_t now_ms) {
+  if (kind == "CA") {
+    this->creds_.ca = std::move(pem);
+  } else if (kind == "User Cert") {
+    this->creds_.client_cert = std::move(pem);
+  } else if (kind == "User Key") {
+    this->creds_.client_key = std::move(pem);
+  } else {
+    return;
+  }
+  this->evaluate_(now_ms);
+}
+
 void CloudLink::clear_session() {
   if (this->state_ == State::CONNECTED)
     this->send_(mqtt::encode_disconnect());

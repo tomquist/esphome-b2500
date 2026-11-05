@@ -49,6 +49,7 @@ class TlsSession {
 
  protected:
   void trim_after_handshake_();
+  void free_certificates_();
   void shrink_buffers_();
   const char *suite_name_() const;
   bool fallback_next_{false};

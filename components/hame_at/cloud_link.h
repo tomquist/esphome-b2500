@@ -80,6 +80,9 @@ class CloudLink {
   /// complete (TLS sessions need the client certificate and key).
   void set_session(const MqttSession &session, uint32_t now_ms);
   void set_credentials(const TlsCredentials &creds, uint32_t now_ms);
+  /// One of them ("CA", "User Cert", "User Key"), moved in: the link holds
+  /// the only copy.
+  void set_credential(const std::string &kind, std::string &&pem, uint32_t now_ms);
   /// The MCU closed its session: drop ours too.
   void clear_session();
   /// The station lost or regained Wi-Fi.

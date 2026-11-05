@@ -116,7 +116,12 @@ class Fc41dBackend {
   virtual void socket_close(int /*id*/) {}
 
   /// A certificate/key the MCU uploaded with AT+QSSLCERT. Default: discard.
+  /// The emulator keeps only its size and checksum (RAM is short on the
+  /// module); the backend holds the one copy.
   virtual void ssl_cert(const std::string & /*kind*/, const std::vector<uint8_t> & /*data*/) {}
+  /// For AT+QSSLCERT=<kind>,1 (read back, which no firmware seen uses).
+  /// Default: not available, the module answers ERROR.
+  virtual bool ssl_cert_read(const std::string & /*kind*/, std::string & /*out*/) { return false; }
 
   /// The MCU asked the module to restart.
   virtual void module_restart() {}
@@ -261,8 +266,13 @@ class Fc41dEmulator {
   std::string http_body_;
   bool http_busy_{false};
 
-  // TLS certificates as the "module" stores them (RAM only).
-  std::map<std::string, std::string> certs_;
+  // TLS certificates the "module" has (RAM only): size and checksum; the
+  // content is the backend's.
+  struct CertInfo {
+    size_t size;
+    uint16_t checksum;
+  };
+  std::map<std::string, CertInfo> certs_;
 
   // Sockets by id.
   std::map<int, Socket> sockets_;

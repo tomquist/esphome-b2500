@@ -719,7 +719,7 @@ void Fc41dEmulator::register_handlers_() {
         if (with_checksum) {
           char ck[8] = "0";
           if (have)
-            snprintf(ck, sizeof(ck), "%x", cert_checksum(it->second));
+            snprintf(ck, sizeof(ck), "%x", it->second.checksum);
           block += std::string(",") + ck;
         }
         block += "\r\n";
@@ -734,19 +734,19 @@ void Fc41dEmulator::register_handlers_() {
       this->certs_.erase(kind);
       e.ok();
     } else if (op == 1) {  // read back
-      auto it = this->certs_.find(kind);
-      if (it == this->certs_.end()) {
+      std::string pem;
+      if (this->certs_.count(kind) == 0 || !this->backend_->ssl_cert_read(kind, pem)) {
         e.error();
         return;
       }
       e.send_line("CONNECT");
-      e.send_raw(it->second);
+      e.send_raw(pem);
       e.ok();
     } else if (op == 2) {  // upload: CONNECT, <len> raw bytes, OK
       long len = cmd.arg_int(2, 0);
       e.send_line("CONNECT");
       e.expect_text_data(static_cast<size_t>(len), [this, kind](AtEngine &e, std::vector<uint8_t> data) {
-        this->certs_[kind] = std::string(data.begin(), data.end());
+        this->certs_[kind] = CertInfo{data.size(), cert_checksum(std::string(data.begin(), data.end()))};
         this->backend_->ssl_cert(kind, data);
         e.ok();
       });
