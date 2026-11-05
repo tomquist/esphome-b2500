@@ -329,6 +329,7 @@ void HameAtComponent::mqtt_closed() {
 
 void HameAtComponent::mqtt_subscribed(const std::string &topic) {
   ESP_LOGD(TAG, "MCU subscribed to %s", topic.c_str());
+  this->mcu_subscribed_ms_ = millis();
   if (this->worker_started_)
     this->worker_.subscribe(topic);
 }

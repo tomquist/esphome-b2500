@@ -82,7 +82,11 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
     this->publish_callbacks_.add(std::move(cb));
   }
   /// The MCU has an MQTT session with a subscription, so send_to_mcu() works.
-  bool mcu_ready() { return !this->emulator_.mqtt_topics().empty(); }
+  /// The MCU listens for commands: it has subscribed, a few seconds ago. A
+  /// B2500 (HMA V232) ignores commands for ~3 s after subscribing.
+  bool mcu_ready() {
+    return !this->emulator_.mqtt_topics().empty() && millis() - this->mcu_subscribed_ms_ >= MCU_SETTLE_MS;
+  }
   Trigger<std::vector<uint8_t>> *get_ble_notify_trigger() { return &this->on_ble_notify_; }
   /// C++ consumers (e.g. a B2500 decoder) of MCU notifications.
   void add_on_ble_notify_callback(std::function<void(uint16_t, const std::vector<uint8_t> &)> &&cb) {
@@ -108,6 +112,8 @@ class HameAtComponent : public Component, public uart::UARTDevice, public Fc41dB
   void module_restart() override;
 
  protected:
+  static constexpr uint32_t MCU_SETTLE_MS = 5000;
+  uint32_t mcu_subscribed_ms_{0};
   struct LiveSocket {
     SocketSpec spec;
     int fd{-1};

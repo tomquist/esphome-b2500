@@ -54,7 +54,17 @@ void HameDevice::loop() {
   const uint32_t now = millis();
   if (static_cast<int32_t>(now - this->next_send_ms_) < 0)
     return;
-  // At most one request at a time, spaced out, so the replies do not collide.
+  if (this->awaiting_ != nullptr) {
+    // Unanswered: ask once more later, then leave it to the interval.
+    MessageType *t = this->awaiting_;
+    this->awaiting_ = nullptr;
+    if (!t->retried) {
+      t->retried = true;
+      t->due = true;
+    }
+    ESP_LOGD(TAG, "No answer to '%s'", t->poll.c_str());
+  }
+  // One request at a time: the next waits for the answer (or ANSWER_WAIT_MS).
   for (auto &t : this->types_) {
     if (t.poll.empty())
       continue;
@@ -64,7 +74,8 @@ void HameDevice::loop() {
     if (this->sender_ && this->sender_(t.poll)) {
       t.due = false;
       t.last_ms = now;
-      this->next_send_ms_ = now + POLL_SPACING_MS;
+      this->awaiting_ = &t;
+      this->next_send_ms_ = now + ANSWER_WAIT_MS;
     } else {
       t.due = true;  // transport not ready: try again shortly
       this->next_send_ms_ = now + RETRY_MS;
@@ -101,6 +112,16 @@ void HameDevice::feed(const std::string &payload, const std::string &topic) {
     return;
   }
   this->messages_++;
+  if (type == this->awaiting_) {
+    // Answered: the next request may follow shortly.
+    this->awaiting_ = nullptr;
+    type->retried = false;
+    const uint32_t soon = millis() + POLL_SPACING_MS;
+    if (static_cast<int32_t>(this->next_send_ms_ - soon) > 0)
+      this->next_send_ms_ = soon;
+  } else {
+    type->retried = false;
+  }
   for (const auto &kv : msg) {
     if (this->kept_(kv.first))
       type->values[kv.first] = kv.second;
