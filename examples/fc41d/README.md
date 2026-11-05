@@ -210,8 +210,10 @@ See the plan in the hm2500 research repository.
   config still limits it to RSA keys up to 3072 bits (no ECDSA): enough for
   Hame's AWS endpoint (Amazon Root CA 1, RSA 2048), not for chains such as
   Let's Encrypt's ISRG Root X1 (RSA 4096). Tested against
-  broker.emqx.io:8883. The handshake briefly takes the free heap down to
-  about 10 KB.
+  broker.emqx.io:8883 and, with the HMA V232 firmware's client certificate,
+  Hame's AWS endpoint. With a client certificate the handshake takes about
+  11 s, nearly all of it the RSA signature, and needs about 30 KB of heap
+  (16 KB was left at the lowest point).
 - **Battery firmware updates.** These are blocked unless `allow_mcu_ota: true`.
 - **Wi-Fi provisioning.** Setting Wi-Fi from the Marstek app is ignored.
   ESPHome manages Wi-Fi instead.
