@@ -242,10 +242,15 @@ static void test_link_failures_and_switch() {
   link.service(now += 10);
   EXPECT(link.state() == CloudLink::State::BACKOFF);
 
-  // No CONNACK at all.
+  // No CONNACK at all. The wait starts after connect() returned, which
+  // blocks for the TLS handshake (~12 s with a client key on the module).
   link.service(now += 40000);
   EXPECT(link.state() == CloudLink::State::WAIT_CONNACK);
-  link.service(now += CloudLink::CONNACK_TIMEOUT_MS + 1);
+  link.service(now += 12000);  // the first service after the long connect
+  EXPECT(link.state() == CloudLink::State::WAIT_CONNACK);
+  link.service(now += CloudLink::CONNACK_TIMEOUT_MS - 100);
+  EXPECT(link.state() == CloudLink::State::WAIT_CONNACK);
+  link.service(now += 200);
   EXPECT(link.state() == CloudLink::State::BACKOFF);
 
   // Switch off: disconnect, nothing goes out; switch on: reconnect at once.

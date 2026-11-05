@@ -178,6 +178,8 @@ class Fc41dEmulator {
   bool ble_session() const { return this->ble_session_; }
   bool mqtt_connected() const { return this->mqtt_conn_; }
   const std::vector<std::string> &mqtt_topics() const { return this->mqtt_topics_; }
+  /// An HTTP request of the MCU is in flight (QHTTPGET/POST sent, not read).
+  bool http_busy() const { return this->http_busy_; }
   const MqttSession &mqtt_session() const { return this->mqtt_session_; }
   bool booting() const { return !this->booted_; }
   bool wifi_announced() const { return this->got_ip_; }

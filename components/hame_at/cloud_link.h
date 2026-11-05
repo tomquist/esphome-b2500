@@ -133,6 +133,7 @@ class CloudLink {
   uint32_t next_attempt_ms_{0};
   uint32_t backoff_ms_{BACKOFF_MIN_MS};
   uint32_t state_since_ms_{0};
+  bool connack_clock_started_{false};
   uint32_t now_ms_{0};
   uint32_t last_tx_ms_{0};
   uint32_t last_rx_ms_{0};

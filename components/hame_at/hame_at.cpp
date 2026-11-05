@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 
 #include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/hal.h"
@@ -423,9 +424,22 @@ void HameAtComponent::http_request(const HttpRequest &request, std::function<voi
     this->forward_http_(request, std::move(done));
     return;
   }
-  // AUTO: the real cloud, and the local answer when that fails.
+  // AUTO: the real cloud, and the local answer when that fails or is slow.
+  // Slow happens: the net worker may be in a TLS handshake (~12 s with a
+  // client key), and the MCU ignores commands while it waits for HTTP.
   HttpRequest copy = request;
-  this->forward_http_(request, [this, copy, done](HttpResult r) {
+  auto answered = std::make_shared<bool>(false);  // main loop only
+  this->set_timeout(AUTO_HTTP_WAIT_MS, [this, copy, done, answered]() {
+    if (*answered)
+      return;
+    *answered = true;
+    ESP_LOGI(TAG, "Cloud slow for %s; answering locally", hame_endpoint_name(classify_hame_url(copy.url)));
+    this->answer_locally_(copy, done);
+  });
+  this->forward_http_(request, [this, copy, done, answered](HttpResult r) {
+    if (*answered)
+      return;  // answered locally meanwhile
+    *answered = true;
     if (r.error == 0 && r.status >= 200 && r.status < 500) {
       done(std::move(r));
       return;

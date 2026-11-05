@@ -55,14 +55,14 @@ void HameDevice::loop() {
   if (static_cast<int32_t>(now - this->next_send_ms_) < 0)
     return;
   if (this->awaiting_ != nullptr) {
-    // Unanswered: ask once more later, then leave it to the interval.
+    // Unanswered: ask again (a few times), then leave it to the interval.
     MessageType *t = this->awaiting_;
     this->awaiting_ = nullptr;
-    if (!t->retried) {
-      t->retried = true;
+    if (t->unanswered < MAX_REPEATS) {
+      t->unanswered++;
       t->due = true;
     }
-    ESP_LOGD(TAG, "No answer to '%s'", t->poll.c_str());
+    ESP_LOGD(TAG, "No answer to '%s' (%u)", t->poll.c_str(), static_cast<unsigned>(t->unanswered));
   }
   // One request at a time: the next waits for the answer (or ANSWER_WAIT_MS).
   for (auto &t : this->types_) {
@@ -115,12 +115,12 @@ void HameDevice::feed(const std::string &payload, const std::string &topic) {
   if (type == this->awaiting_) {
     // Answered: the next request may follow shortly.
     this->awaiting_ = nullptr;
-    type->retried = false;
+    type->unanswered = 0;
     const uint32_t soon = millis() + POLL_SPACING_MS;
     if (static_cast<int32_t>(this->next_send_ms_ - soon) > 0)
       this->next_send_ms_ = soon;
   } else {
-    type->retried = false;
+    type->unanswered = 0;
   }
   for (const auto &kv : msg) {
     if (this->kept_(kv.first))

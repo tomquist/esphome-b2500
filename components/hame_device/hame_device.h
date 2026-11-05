@@ -114,7 +114,7 @@ class HameDevice : public Component {
     uint32_t last_ms;
     bool due;      ///< request it at the next chance
     KvMap values;  ///< latest value of each kept key of this type
-    bool retried{false};  ///< the last poll went unanswered and was repeated
+    uint8_t unanswered{0};  ///< polls in a row without an answer
   };
 
   MessageType *type_(const std::string &name);
@@ -129,6 +129,9 @@ class HameDevice : public Component {
   /// B2500 (HMA V232) drops a command that arrives before it answered the
   /// previous one.
   static constexpr uint32_t ANSWER_WAIT_MS = 2500;
+  /// Unanswered polls are repeated this often before the type is left to its
+  /// interval (a device may not know a request at all).
+  static constexpr uint8_t MAX_REPEATS = 5;
   MessageType *awaiting_{nullptr};
   static constexpr uint32_t RETRY_MS = 3000;
   uint32_t poll_after_command_ms_{1500};

@@ -178,7 +178,10 @@ void CloudLink::attempt_(uint32_t now_ms) {
   this->send_(mqtt::encode_connect(this->session_.client_id, this->session_.username, this->session_.password,
                                    keepalive, static_cast<uint8_t>(this->session_.version)));
   this->state_ = State::WAIT_CONNACK;
-  this->state_since_ms_ = now_ms;
+  // connect() blocks (a TLS handshake with a client key takes ~12 s on the
+  // BK7231N), so `now_ms` is stale: the CONNACK wait starts at the next
+  // service().
+  this->connack_clock_started_ = false;
   this->last_tx_ms_ = now_ms;
   this->last_rx_ms_ = now_ms;
   this->ping_outstanding_ = false;
@@ -268,6 +271,10 @@ void CloudLink::service(uint32_t now_ms) {
   }
 
   if (this->state_ == State::WAIT_CONNACK) {
+    if (!this->connack_clock_started_) {
+      this->connack_clock_started_ = true;
+      this->state_since_ms_ = now_ms;
+    }
     if (now_ms - this->state_since_ms_ > CONNACK_TIMEOUT_MS)
       this->fail_("no CONNACK", now_ms);
     return;
