@@ -23,6 +23,7 @@ CONF_MODULE_VERSION = "module_version"
 CONF_BLE_MAC = "ble_mac"
 CONF_CLOUD = "cloud"
 CONF_ALLOW_MCU_OTA = "allow_mcu_ota"
+CONF_FAST_TLS = "fast_tls"
 CONF_CLOUD_ACCESS = "cloud_access"
 CONF_MQTT = "mqtt"
 CONF_TIME = "time"
@@ -98,6 +99,9 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_CLOUD_ACCESS, default={}): CLOUD_ACCESS_SCHEMA,
             # Let the MCU download its own firmware updates from the cloud.
             cv.Optional(CONF_ALLOW_MCU_OTA, default=False): cv.boolean,
+            # mbedTLS's bignum code in ARM mode: TLS handshakes ~2x faster
+            # (Hame's AWS endpoint ~11 s -> ~5 s), ~3 KB more flash.
+            cv.Optional(CONF_FAST_TLS, default=True): cv.boolean,
             cv.Optional(CONF_TIME_ID): cv.use_id(time_.RealTimeClock),
             cv.Optional(CONF_BLE_SERVER_ID): cv.use_id(BK72xxBLEServer),
             cv.Optional(CONF_ON_MCU_PUBLISH): automation.validate_automation(
@@ -141,9 +145,11 @@ async def to_code(config):
     # wrapper in tls_session.cpp lets our sessions start at 512 B.
     cg.add_build_flag("-DHAME_AT_WRAP_CONFIRM_CONTENT_LEN")
     cg.add_build_flag("-Wl,--wrap=mbedtls_ssl_confirm_content_len")
-    # mbedTLS's bignum code in ARM mode (UMLAL) instead of the SDK's Thumb-1:
-    # the RSA signature of a TLS handshake with a client key gets faster.
-    cg.add_platformio_option("extra_scripts", [f"pre:{Path(__file__).parent / 'pio_bignum_arm.py'}"])
+    if config[CONF_FAST_TLS]:
+        # mbedTLS's bignum code in ARM mode (UMLAL) instead of the SDK's
+        # Thumb-1: the RSA signature of a TLS handshake with a client key gets
+        # faster.
+        cg.add_platformio_option("extra_scripts", [f"pre:{Path(__file__).parent / 'pio_bignum_arm.py'}"])
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)

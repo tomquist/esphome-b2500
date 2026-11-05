@@ -66,6 +66,8 @@ wifi:
   ap:
     ssid: ${name}
 
+# Wi-Fi setup page on the fallback access point; 36 KB of flash with the web
+# server it needs. Without it the access point still takes ESPHome OTA.
 captive_portal:
 
 time:
@@ -119,6 +121,7 @@ hame_at:
     device_config: auto    # output limits, SOC, schedules
     reports: forward       # statistics and error uploads
   allow_mcu_ota: false     # let the cloud update the battery's firmware
+  fast_tls: true           # faster TLS handshakes for ~3 KB of flash
   on_mcu_publish:
     - lambda: |-
         // Device status replies ("p1=..,p2=..,w1=..") arrive on the device topic.

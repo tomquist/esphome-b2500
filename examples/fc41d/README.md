@@ -196,11 +196,15 @@ See the plan in the hm2500 research repository.
 
 ## Known limits
 
-- **Flash.** `b2500-module.yaml` uses about 88% of the app partition (90%
-  with both add-on profiles).
+- **Flash.** `b2500-module.yaml` uses about 90% of the app partition
+  (1058 KB). Two things to drop when room is needed: `captive_portal:`
+  (36 KB, with the web server it pulls in; without it the fallback access
+  point still takes OTA updates from ESPHome) and `fast_tls: false` on
+  `hame_at` (3 KB; TLS handshakes then take about twice as long, ~11 s to
+  Hame's AWS endpoint).
 - **RAM.** On the eval kit about 50 KB of heap stay free with BLE and the
-  API; the B2500 profile takes roughly 9 KB of that. RAM use with the cloud's
-  TLS session open still has to be measured on hardware.
+  API; with the battery's cloud session open over TLS about 33 KB, and 13 to
+  16 KB at the lowest during its handshake.
 - **B2500 profile gaps.** Not ported from hm2mqtt yet: meter type/MAC
   setting, time zone, the "use flash commands" switch (the non-flash command
   codes are used), hiding the pass-through sensors on the HMJ, and the
