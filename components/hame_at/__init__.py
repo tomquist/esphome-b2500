@@ -7,6 +7,8 @@ cloud using the broker, credentials and certificates the MCU itself provides.
 """
 
 from esphome import automation
+from pathlib import Path
+
 import esphome.codegen as cg
 from esphome.components import time as time_, uart
 import esphome.config_validation as cv
@@ -139,6 +141,9 @@ async def to_code(config):
     # wrapper in tls_session.cpp lets our sessions start at 512 B.
     cg.add_build_flag("-DHAME_AT_WRAP_CONFIRM_CONTENT_LEN")
     cg.add_build_flag("-Wl,--wrap=mbedtls_ssl_confirm_content_len")
+    # mbedTLS's bignum code in ARM mode (UMLAL) instead of the SDK's Thumb-1:
+    # the RSA signature of a TLS handshake with a client key gets faster.
+    cg.add_platformio_option("extra_scripts", [f"pre:{Path(__file__).parent / 'pio_bignum_arm.py'}"])
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)
