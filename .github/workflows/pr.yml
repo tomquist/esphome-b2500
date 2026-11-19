@@ -82,7 +82,11 @@ jobs:
           cat examples/${{ matrix.example }}.json | jq --arg template_version ${{ matrix.template }} --arg mqtt_enabled ${{ matrix.mqtt_enabled }} '.template_version = $template_version | .mqtt.enabled = ($mqtt_enabled == "true")' > config.json
           node scripts/encryptExampleConfig.js config.json "$RUNNER_TEMP"
 
+      # Each matrix version gets the YAML it accepts: the templates emit keys
+      # by ESPHome version (sub-device `relation` from 2026.11.0).
       - name: Render configuration
+        env:
+          ESPHOME_VERSION: ${{ matrix.esphome_version }}
         run: |
           BUILD_PRIVATE_KEY="$(cat "$RUNNER_TEMP/private_key.pem")" \
           CLIENT_PUBLIC_KEY="$(cat "$RUNNER_TEMP/client_public_key.txt")" \

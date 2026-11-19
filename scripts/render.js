@@ -17,6 +17,10 @@ const buildRenderContext = (config, env) => ({
   ...config,
   git_sha: env.GITHUB_SHA,
   automated_build: env.AUTOMATED_BUILD === 'true',
+  // The version the firmware is compiled with, which decides the YAML ESPHome
+  // accepts (2026.11.0 requires `relation` on sub-devices, older versions reject
+  // it). Without one the templates assume the latest release, as in the browser.
+  ...(env.ESPHOME_VERSION ? { esphome_version: env.ESPHOME_VERSION } : {}),
 });
 
 const MAX_SECRETS = 64;

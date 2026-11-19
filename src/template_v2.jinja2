@@ -41,6 +41,12 @@
 {%- set ota_enable_unprotected_writes = ota.enable_unprotected_writes or False %}
 {%- set esphome_version = esphome_version or 'latest' %}
 {%- set use_modern_ota = (esphome_version == 'latest' or esphome_version >= '2024.6.0') %}
+{#- ESPHome 2026.11.0 requires `relation` on every sub-device, and older versions
+    reject it. Compared numerically: as strings, 2026.8 sorts after 2026.11. #}
+{%- set esphome_version_parts = (esphome_version ~ '').split('.') %}
+{%- set esphome_has_device_relation = esphome_version_parts | length < 2
+    or (esphome_version_parts[0] | int) > 2026
+    or ((esphome_version_parts[0] | int) == 2026 and (esphome_version_parts[1] | int) >= 11) %}
 {%- set fallback_hotspot = fallback_hotspot or {} %}
 {%- set fallback_hotspot_ssid = fallback_hotspot.ssid or '' %}
 {%- set fallback_hotspot_enable_captive_portal = fallback_hotspot.enable_captive_portal or False %}
@@ -76,6 +82,9 @@ esphome:
 {%- for storage in storages %}
     - id: b2500_device_{{ loop.index }}
       name: "{{ yaml_string(storage.name) }}"
+{%- if esphome_has_device_relation %}
+      relation: via
+{%- endif %}
 {%- endfor %}
 {%- endif %}
 {%- if enable_dio_flash_mode %}

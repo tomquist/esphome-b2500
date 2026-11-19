@@ -218,7 +218,7 @@ bool B2500Codec::parse_fc41d_info(uint8_t *data, uint16_t data_len, FC41DInfoPac
   }
   if (data_len < sizeof(B2500PacketHeader) + 1) {
     ESP_LOGW(TAG, "Packet too short for CMD_FC41D_INFO, expected %d, got %d", sizeof(B2500PacketHeader) + 1, data_len);
-    ESP_LOGW(TAG, "data: %s", format_hex_pretty(data, data_len).c_str());
+    ESP_LOGW(TAG, "data: %s", hex_dump(data, data_len).c_str());
     return false;
   }
   const char *start = reinterpret_cast<const char *>(data + sizeof(B2500PacketHeader));
@@ -240,7 +240,7 @@ bool B2500Codec::parse_timer_info_base(uint8_t *data, uint16_t data_len, void* p
 
   if (data_len < header_size + payload_size) {
     ESP_LOGW(TAG, "Packet too short for CMD_TIMER_INFO, expected %d, got %d", header_size + payload_size, data_len);
-    ESP_LOGW(TAG, "data: %s", format_hex_pretty(data, data_len).c_str());
+    ESP_LOGW(TAG, "data: %s", hex_dump(data, data_len).c_str());
     return false;
   }
 
@@ -266,7 +266,7 @@ bool B2500Codec::parse_timer_info(uint8_t *data, uint16_t data_len, TimerInfoPac
 
   if (data_len < sizeof(B2500PacketHeader) + size_timer_info_packet3) {
     ESP_LOGW(TAG, "Packet too short to be a valid TimerInfoPacket");
-    ESP_LOGW(TAG, "data: %s", format_hex_pretty(data, data_len).c_str());
+    ESP_LOGW(TAG, "data: %s", hex_dump(data, data_len).c_str());
     return false;
   }
 

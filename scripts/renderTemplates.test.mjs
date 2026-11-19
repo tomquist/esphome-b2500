@@ -39,12 +39,13 @@ const baseConfig = () => ({
   storages: [{ name: 'Battery', version: 2, mac_address: '00:11:22:33:44:55' }],
 });
 
-const render = (version, config) =>
+const render = (version, config, env = {}) =>
   nunjucks.configure({ autoescape: false }).renderString(
     fs.readFileSync(TEMPLATES[version], 'utf-8'),
     buildRenderContext(config, {
       GITHUB_SHA: 'trusted-sha',
       AUTOMATED_BUILD: 'true',
+      ...env,
     })
   );
 
@@ -85,6 +86,39 @@ for (const version of ['v2', 'v2-minimal']) {
 
     assert.match(yaml, /^ {6}ref: "trusted-sha"$/m);
     assert.doesNotMatch(yaml, /attacker-branch/);
+  });
+}
+
+// ESPHome 2026.11.0 made `relation` required on every sub-device, and earlier
+// versions reject the key, so it follows the version the firmware is built with.
+// v1 declares no sub-devices.
+const RELATION = /^ {6}relation: via$/m;
+for (const version of ['v2', 'v2-minimal']) {
+  for (const esphome of ['2026.11.0', '2026.12.1', '2027.1.0']) {
+    test(`${version}: sub-devices carry a relation for ESPHome ${esphome}`, () => {
+      const yaml = render(version, baseConfig(), { ESPHOME_VERSION: esphome });
+      assert.match(yaml, RELATION);
+    });
+  }
+
+  // 2026.8.1 sorts after 2026.11.0 as a string; the gate must compare numbers.
+  for (const esphome of ['2026.7.0', '2026.8.1', '2026.10.2']) {
+    test(`${version}: no relation for ESPHome ${esphome}`, () => {
+      const yaml = render(version, baseConfig(), { ESPHOME_VERSION: esphome });
+      assert.match(yaml, /^ {4}- id: b2500_device_1$/m);
+      assert.doesNotMatch(yaml, /relation:/);
+    });
+  }
+
+  test(`${version}: without a version, sub-devices carry a relation (latest)`, () => {
+    assert.match(render(version, baseConfig()), RELATION);
+  });
+
+  test(`${version}: the runner's ESPHome version wins over one from the config`, () => {
+    const config = baseConfig();
+    config.esphome_version = '2026.11.0';
+    const yaml = render(version, config, { ESPHOME_VERSION: '2026.8.1' });
+    assert.doesNotMatch(yaml, /relation:/);
   });
 }
 
