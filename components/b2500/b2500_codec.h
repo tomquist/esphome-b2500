@@ -9,6 +9,22 @@
 namespace esphome {
 namespace b2500 {
 
+// Packet bytes for a log line, as "73.0A.23.03 (4)". ESPHome 2026.11.0 moved the
+// std::string format_hex_pretty() this used to call out of helpers.h into
+// alloc_helpers.h, which nothing includes for us and which ESPHome asks new code
+// to avoid; format_hex_pretty_to() is in helpers.h on every supported version.
+// Heap-allocated as before, because a full BLE packet is too large for a stack
+// buffer in the BLE event task.
+inline std::string hex_dump(const uint8_t *data, size_t length) {
+  if (length == 0)
+    return "";
+  std::string out(format_hex_pretty_size(length), '\0');
+  format_hex_pretty_to(&out[0], out.size(), data, length, '.');
+  out.resize(length * 3 - 1);
+  out += " (" + std::to_string(length) + ")";
+  return out;
+}
+
 struct B2500PacketHeader {
   uint8_t head;  // 0x73
   uint8_t data_length;

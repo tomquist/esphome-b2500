@@ -320,11 +320,11 @@ void B2500ComponentBase::send_command(std::vector<uint8_t> payload) {
     return;
   }
 
-  ESP_LOGD(TAG, "Command sent: %s", format_hex_pretty(payload.data(), payload.size()).c_str());
+  ESP_LOGD(TAG, "Command sent: %s", hex_dump(payload.data(), payload.size()).c_str());
 }
 
 void B2500ComponentBase::process_message_(uint8_t *data, uint16_t data_len) {
-  ESP_LOGD(TAG, "Received data: %s", format_hex_pretty(data, data_len).c_str());
+  ESP_LOGD(TAG, "Received data: %s", hex_dump(data, data_len).c_str());
   auto now = this->time_->now().timestamp;
   if (!this->state_->receive_packet(data, data_len, now)) {
     ESP_LOGW(TAG, "Failed to receive packet");
