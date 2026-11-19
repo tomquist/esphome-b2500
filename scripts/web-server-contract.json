@@ -96,6 +96,12 @@
       "recorded": "2026-10-22",
       "idBuilder": "578e5d468a63d4ba6ea53750a3ed392bdce4a83a2c8d66d2dc434c933f54356d",
       "note": "The entity name is no longer memcpy'd from get_name() but written into id_buf by obj->write_name_to(), which copies the same name_ bytes (the entity's own name, or the device/friendly-name fallback as before) and null-terminates them; it only bounds the copy to the room left in id_buf, which a name within the 120-char limit never reaches (esphome/esphome#20423, names kept in flash on ESP8266). icon now goes through linked(get_icon_progmem()), the same string read in place (esphome/esphome#21111). The id assignment is unchanged -- static_cast<const char *>(id_buf) holding {domain}/{device}/{name}, or {domain}/{name} without USE_DEVICES -- which parseStorageEntity() splits on '/' as before (issue #326)."
+    },
+    {
+      "ref": "2026.11.0",
+      "recorded": "2026-11-19",
+      "idBuilder": "e19cfa60b17bb48362764fad7f2b7484968121737ddae3ad10e4aec62ca01a6c",
+      "note": "The domain prefix is now a ProgmemStr (ESPHOME_F(\"sensor\") etc., the same literals as before) read into id_buf with ESPHOME_strlen_P/progmem_memcpy, which are strlen/memcpy off ESP8266; the entity name is still written by obj->write_name_to(), copying the same name_ bytes and null-terminating them. The DETAIL_ALL name now comes from get_name_progmem().ram_ref() (or, on ESP8266, the copy in id_buf), the same string. The id assignment is unchanged -- static_cast<const char *>(id_buf) holding {domain}/{device}/{name}, or {domain}/{name} without USE_DEVICES -- which parseStorageEntity() splits on '/' as before. The same body ships in the 2026.11.0 release and is on beta and dev (issues #328, #332)."
     }
   ]
 }
